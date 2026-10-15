@@ -42,6 +42,8 @@ struct Image {
 pub struct AtlasBuilder {
     names: Vec<String>,
     ids: HashMap<String, u32>,
+    /// Images made in code (composited banners), by location.
+    generated: HashMap<String, Image>,
 }
 
 pub struct Atlas {
@@ -99,6 +101,19 @@ fn missing_image() -> Image {
     Image { w: 16, h: 16, px }
 }
 
+/// Decodes a texture as RGBA8 texels (red in the low byte), full height.
+pub fn load_texture(store: &ResourceStore, loc: &str) -> Option<(u32, u32, Vec<u32>)> {
+    let (ns, path) = split_loc(loc);
+    let bytes = store.get(&format!("assets/{ns}/textures/{path}.png"))?;
+    let img = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)
+        .map_err(|e| log::warn!("texture {loc}: {e}"))
+        .ok()?
+        .to_rgba8();
+    let (w, h) = img.dimensions();
+    let px = img.pixels().map(|p| u32::from_le_bytes(p.0)).collect();
+    Some((w, h, px))
+}
+
 fn load_png(store: &ResourceStore, loc: &str) -> Option<Image> {
     let (ns, path) = split_loc(loc);
     let bytes = store.get(&format!("assets/{ns}/textures/{path}.png"))?;
@@ -134,6 +149,13 @@ impl AtlasBuilder {
         b
     }
 
+    /// Registers an image made in code under `loc` (RGBA8, red in the low byte).
+    pub fn add_generated(&mut self, loc: &str, w: u32, h: u32, px: Vec<u32>) -> u32 {
+        assert_eq!(px.len(), (w * h) as usize, "generated texture {loc}");
+        self.generated.insert(loc.to_string(), Image { w, h, px });
+        self.add(loc)
+    }
+
     pub fn add(&mut self, loc: &str) -> u32 {
         if let Some(&id) = self.ids.get(loc) {
             return id;
@@ -144,13 +166,16 @@ impl AtlasBuilder {
         id
     }
 
-    pub fn build(self, store: &ResourceStore) -> Atlas {
+    pub fn build(mut self, store: &ResourceStore) -> Atlas {
         let mut images: Vec<Image> = self
             .names
             .iter()
             .map(|n| {
                 if n == MISSING_TEXTURE {
                     return missing_image();
+                }
+                if let Some(img) = self.generated.remove(n) {
+                    return img;
                 }
                 if n == WHITE_TEXTURE {
                     return Image {

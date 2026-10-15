@@ -8,10 +8,9 @@ use anyhow::{Context, Result};
 
 /// Asset sub-paths we need, in any namespace. Everything else (sounds, lang,
 /// shaders, GUI...) is skipped.
-const WANTED: &[&str] = &["blockstates/", "models/", "items/", "textures/"];
+const WANTED: &[&str] = &["blockstates/", "models/", "items/", "textures/", "font/"];
 const SKIPPED: &[&str] = &[
     "textures/gui/",
-    "textures/font/",
     "textures/particle/",
     "textures/mob_effect/",
     "textures/trims/",

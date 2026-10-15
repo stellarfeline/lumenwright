@@ -28,10 +28,15 @@ pub struct FixtureEntity {
     pub extra: Vec<(String, Value)>,
 }
 
-/// An in-memory world: sparse blocks (default air) plus entities.
+/// A block entity's id and extra fields.
+pub type FixtureBlockEntity = (String, Vec<(String, Value)>);
+
+/// An in-memory world: sparse blocks (default air) plus entities and block entities.
 pub struct FixtureWorld {
     blocks: HashMap<[i32; 3], BlockState>,
     pub entities: Vec<FixtureEntity>,
+    /// Block entity compounds by position (`id`, `x`, `y`, `z` are added on write).
+    pub block_entities: BTreeMap<[i32; 3], FixtureBlockEntity>,
     pub biome: String,
     pub spawn: [i32; 3],
     pub player: Option<([f64; 3], f32, f32)>,
@@ -53,6 +58,7 @@ impl FixtureWorld {
         FixtureWorld {
             blocks: HashMap::new(),
             entities: Vec::new(),
+            block_entities: BTreeMap::new(),
             biome: "minecraft:plains".into(),
             spawn: [0, 64, 0],
             player: None,
@@ -81,6 +87,17 @@ impl FixtureWorld {
         });
     }
 
+    /// Adds a block entity (`id` without namespace) at a block position.
+    pub fn block_entity(&mut self, pos: [i32; 3], id: &str, extra: Vec<(&str, Value)>) {
+        self.block_entities.insert(
+            pos,
+            (
+                format!("minecraft:{id}"),
+                extra.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+            ),
+        );
+    }
+
     fn is_opaque(&self, p: [i32; 3]) -> bool {
         match self.blocks.get(&p) {
             None => false,
@@ -94,6 +111,15 @@ impl FixtureWorld {
                     || n.contains("slab")
                     || n.contains("fence")
                     || n.contains("door")
+                    || n.contains("sign")
+                    || n.contains("banner")
+                    || n.contains("chest")
+                    || n.contains("skull")
+                    || n.ends_with("_head")
+                    || matches!(
+                        n,
+                        "bell" | "lectern" | "enchanting_table" | "decorated_pot" | "barrel"
+                    )
                     || matches!(
                         n,
                         "water"
@@ -207,7 +233,22 @@ impl FixtureWorld {
                     status: "minecraft:full".into(),
                     is_light_on: 1,
                     sections,
-                    block_entities: Vec::new(),
+                    block_entities: self
+                        .block_entities
+                        .iter()
+                        .filter(|(p, _)| p[0] >> 4 == cx && p[2] >> 4 == cz)
+                        .map(|(p, (id, extra))| {
+                            let mut c: HashMap<String, Value> = HashMap::new();
+                            c.insert("id".into(), Value::String(id.clone()));
+                            c.insert("x".into(), Value::Int(p[0]));
+                            c.insert("y".into(), Value::Int(p[1]));
+                            c.insert("z".into(), Value::Int(p[2]));
+                            for (k, v) in extra {
+                                c.insert(k.clone(), v.clone());
+                            }
+                            Value::Compound(c)
+                        })
+                        .collect(),
                 };
                 let bytes = fastnbt::to_bytes(&chunk)?;
                 regions.entry((cx >> 5, cz >> 5)).or_default().push((
@@ -828,6 +869,492 @@ pub fn lineup(ids: &[String], per_row: usize) -> FixtureWorld {
     }
     let cx = per_row as f64 * 1.5;
     w.player = Some(([cx, 72.0, rows as f64 * 5.0 + 8.0], 180.0, 30.0));
+    w
+}
+
+fn text_side(lines: [Value; 4], color: &str, glowing: bool) -> Value {
+    // NBT lists hold one tag type; vanilla wraps the elements of a mixed list as
+    // `{"": element}`.
+    let mixed = lines.iter().any(|l| matches!(l, Value::Compound(_)));
+    let lines: Vec<Value> = lines
+        .into_iter()
+        .map(|l| match l {
+            Value::String(_) if mixed => compound(vec![("", l)]),
+            l => l,
+        })
+        .collect();
+    let mut c: HashMap<String, Value> = HashMap::new();
+    c.insert("messages".into(), Value::List(lines));
+    c.insert("color".into(), Value::String(color.into()));
+    c.insert("has_glowing_text".into(), Value::Byte(glowing as i8));
+    Value::Compound(c)
+}
+
+fn s(t: &str) -> Value {
+    Value::String(t.into())
+}
+
+fn styled(t: &str, color: &str) -> Value {
+    let mut c: HashMap<String, Value> = HashMap::new();
+    c.insert("text".into(), s(t));
+    c.insert("color".into(), s(color));
+    Value::Compound(c)
+}
+
+fn compound(kv: Vec<(&str, Value)>) -> Value {
+    Value::Compound(kv.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
+}
+
+/// One of every block entity Lumenwright draws, on a platform in three rows facing
+/// south (+Z), with the walls and ceilings they hang from.
+pub fn block_entity_gallery() -> FixtureWorld {
+    let mut w = FixtureWorld::new();
+    for x in -2..30 {
+        for z in -12..6 {
+            w.set(x, 63, z, bs("stone"));
+            w.set(x, 64, z, bs("smooth_stone"));
+        }
+    }
+    let wall = |w: &mut FixtureWorld, x: i32, y: i32, z: i32| w.set(x, y, z, bs("stone_bricks"));
+    let y = 65;
+
+    // Row 1 (z = 2): signs.
+    let z = 2;
+    w.set(
+        0,
+        y,
+        z,
+        props("oak_sign", &[("rotation", "0"), ("waterlogged", "false")]),
+    );
+    w.block_entity(
+        [0, y, z],
+        "sign",
+        vec![
+            (
+                "front_text",
+                text_side(
+                    [
+                        s("Lumenwright"),
+                        styled("red span", "red"),
+                        s(""),
+                        s("oak, front"),
+                    ],
+                    "black",
+                    false,
+                ),
+            ),
+            (
+                "back_text",
+                text_side([s(""), s(""), s(""), s("")], "black", false),
+            ),
+            ("is_waxed", Value::Byte(0)),
+        ],
+    );
+    // Facing north: the camera in the south reads its back text.
+    w.set(
+        3,
+        y,
+        z,
+        props(
+            "spruce_sign",
+            &[("rotation", "8"), ("waterlogged", "false")],
+        ),
+    );
+    w.block_entity(
+        [3, y, z],
+        "sign",
+        vec![
+            (
+                "front_text",
+                text_side([s("front"), s(""), s(""), s("")], "black", false),
+            ),
+            (
+                "back_text",
+                text_side(
+                    [s(""), s("the back"), s("of a sign"), s("")],
+                    "white",
+                    false,
+                ),
+            ),
+        ],
+    );
+    wall(&mut w, 6, y, z - 1);
+    w.set(
+        6,
+        y,
+        z,
+        props(
+            "dark_oak_wall_sign",
+            &[("facing", "south"), ("waterlogged", "false")],
+        ),
+    );
+    w.block_entity(
+        [6, y, z],
+        "sign",
+        vec![(
+            "front_text",
+            text_side([s("glowing"), s("cyan text"), s(""), s("")], "cyan", true),
+        )],
+    );
+    wall(&mut w, 9, y, z - 1);
+    w.set(
+        9,
+        y,
+        z,
+        props(
+            "birch_wall_sign",
+            &[("facing", "south"), ("waterlogged", "false")],
+        ),
+    );
+    w.block_entity(
+        [9, y, z],
+        "sign",
+        vec![(
+            "front_text",
+            text_side([s(""), s("glowing black"), s(""), s("")], "black", true),
+        )],
+    );
+    for dx in -1..=1 {
+        wall(&mut w, 12 + dx, y + 2, z);
+    }
+    w.set(
+        12,
+        y + 1,
+        z,
+        props(
+            "spruce_hanging_sign",
+            &[
+                ("attached", "false"),
+                ("rotation", "0"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.block_entity(
+        [12, y + 1, z],
+        "hanging_sign",
+        vec![(
+            "front_text",
+            text_side([s("hanging"), s("ceiling"), s(""), s("")], "black", false),
+        )],
+    );
+    w.set(
+        15,
+        y + 1,
+        z,
+        props(
+            "cherry_hanging_sign",
+            &[
+                ("attached", "true"),
+                ("rotation", "0"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    wall(&mut w, 15, y + 2, z);
+    w.block_entity(
+        [15, y + 1, z],
+        "hanging_sign",
+        vec![(
+            "front_text",
+            text_side([s("attached"), s(""), s(""), s("")], "black", false),
+        )],
+    );
+    wall(&mut w, 17, y + 1, z);
+    wall(&mut w, 19, y + 1, z);
+    w.set(
+        18,
+        y + 1,
+        z,
+        props(
+            "oak_wall_hanging_sign",
+            &[("facing", "south"), ("waterlogged", "false")],
+        ),
+    );
+    w.block_entity(
+        [18, y + 1, z],
+        "hanging_sign",
+        vec![(
+            "front_text",
+            text_side([s("wall"), s("hanging"), s(""), s("")], "black", false),
+        )],
+    );
+
+    // Row 2 (z = -3): bells, books, chests, barrel.
+    let z = -3;
+    w.set(
+        0,
+        y,
+        z,
+        props(
+            "bell",
+            &[
+                ("attachment", "floor"),
+                ("facing", "south"),
+                ("powered", "false"),
+            ],
+        ),
+    );
+    w.block_entity([0, y, z], "bell", vec![]);
+    wall(&mut w, 2, y + 1, z);
+    w.set(
+        2,
+        y,
+        z,
+        props(
+            "bell",
+            &[
+                ("attachment", "ceiling"),
+                ("facing", "south"),
+                ("powered", "false"),
+            ],
+        ),
+    );
+    w.block_entity([2, y, z], "bell", vec![]);
+    wall(&mut w, 4, y, z - 1);
+    w.set(
+        4,
+        y,
+        z,
+        props(
+            "bell",
+            &[
+                ("attachment", "single_wall"),
+                ("facing", "north"),
+                ("powered", "false"),
+            ],
+        ),
+    );
+    w.block_entity([4, y, z], "bell", vec![]);
+    wall(&mut w, 6, y, z);
+    wall(&mut w, 8, y, z);
+    w.set(
+        7,
+        y,
+        z,
+        props(
+            "bell",
+            &[
+                ("attachment", "double_wall"),
+                ("facing", "east"),
+                ("powered", "false"),
+            ],
+        ),
+    );
+    w.block_entity([7, y, z], "bell", vec![]);
+    w.set(
+        10,
+        y,
+        z,
+        props(
+            "lectern",
+            &[
+                ("facing", "south"),
+                ("has_book", "true"),
+                ("powered", "false"),
+            ],
+        ),
+    );
+    w.block_entity([10, y, z], "lectern", vec![]);
+    w.set(12, y, z, bs("enchanting_table"));
+    w.block_entity([12, y, z], "enchanting_table", vec![]);
+    w.set(
+        14,
+        y,
+        z,
+        props(
+            "chest",
+            &[
+                ("facing", "south"),
+                ("type", "single"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.block_entity([14, y, z], "chest", vec![]);
+    // A double chest facing south: the right half is west of the left half.
+    w.set(
+        16,
+        y,
+        z,
+        props(
+            "chest",
+            &[
+                ("facing", "south"),
+                ("type", "right"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.set(
+        17,
+        y,
+        z,
+        props(
+            "chest",
+            &[
+                ("facing", "south"),
+                ("type", "left"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.block_entity([16, y, z], "chest", vec![]);
+    w.block_entity([17, y, z], "chest", vec![]);
+    w.set(
+        19,
+        y,
+        z,
+        props(
+            "trapped_chest",
+            &[
+                ("facing", "south"),
+                ("type", "single"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.block_entity([19, y, z], "trapped_chest", vec![]);
+    w.set(
+        21,
+        y,
+        z,
+        props(
+            "ender_chest",
+            &[("facing", "south"), ("waterlogged", "false")],
+        ),
+    );
+    w.block_entity([21, y, z], "ender_chest", vec![]);
+    w.set(
+        23,
+        y,
+        z,
+        props("barrel", &[("facing", "up"), ("open", "false")]),
+    );
+    w.block_entity([23, y, z], "barrel", vec![]);
+    w.set(
+        25,
+        y,
+        z,
+        props(
+            "copper_chest",
+            &[
+                ("facing", "south"),
+                ("type", "single"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.block_entity([25, y, z], "copper_chest", vec![]);
+
+    // Row 3 (z = -8): banners, pot, skulls and heads.
+    let z = -8;
+    let layer = |p: &str, c: &str| compound(vec![("pattern", s(p)), ("color", s(c))]);
+    w.set(0, y, z, props("white_banner", &[("rotation", "0")]));
+    w.block_entity(
+        [0, y, z],
+        "banner",
+        vec![(
+            "patterns",
+            Value::List(vec![
+                layer("minecraft:stripe_bottom", "red"),
+                layer("minecraft:cross", "blue"),
+                layer("minecraft:border", "black"),
+            ]),
+        )],
+    );
+    for dy in 0..3 {
+        wall(&mut w, 3, y + dy, z - 1);
+    }
+    w.set(
+        3,
+        y + 1,
+        z,
+        props("purple_wall_banner", &[("facing", "south")]),
+    );
+    w.block_entity(
+        [3, y + 1, z],
+        "banner",
+        vec![(
+            "patterns",
+            Value::List(vec![
+                layer("minecraft:curly_border", "yellow"),
+                layer("minecraft:skull", "white"),
+            ]),
+        )],
+    );
+    // A pot's front faces away from its `facing` (the placer looks along it).
+    w.set(
+        6,
+        y,
+        z,
+        props(
+            "decorated_pot",
+            &[
+                ("cracked", "false"),
+                ("facing", "north"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.block_entity(
+        [6, y, z],
+        "decorated_pot",
+        vec![(
+            "sherds",
+            Value::List(vec![
+                s("minecraft:brick"),
+                s("minecraft:heart_pottery_sherd"),
+                s("minecraft:brick"),
+                s("minecraft:skull_pottery_sherd"),
+            ]),
+        )],
+    );
+    let heads = [
+        "skeleton_skull",
+        "wither_skeleton_skull",
+        "zombie_head",
+        "creeper_head",
+        "player_head",
+        "dragon_head",
+        "piglin_head",
+    ];
+    for (i, h) in heads.iter().enumerate() {
+        let x = 8 + i as i32 * 2;
+        // Skull rotation 8 faces south (a skull's rotation 0 looks north).
+        w.set(
+            x,
+            y,
+            z,
+            props(h, &[("powered", "false"), ("rotation", "8")]),
+        );
+        let extra = if *h == "player_head" {
+            vec![(
+                "profile",
+                compound(vec![
+                    ("name", s("lineup")),
+                    ("id", Value::IntArray(IntArray::new(vec![1, 2, 3, 4]))),
+                ]),
+            )]
+        } else {
+            vec![]
+        };
+        w.block_entity([x, y, z], "skull", extra);
+    }
+    wall(&mut w, 23, y + 1, z - 1);
+    w.set(
+        23,
+        y + 1,
+        z,
+        props(
+            "zombie_wall_head",
+            &[("facing", "south"), ("powered", "false")],
+        ),
+    );
+    w.block_entity([23, y + 1, z], "skull", vec![]);
+
+    w.spawn = [12, 66, 8];
+    w.player = Some(([13.5, 72.0, 12.0], 180.0, 25.0));
     w
 }
 
