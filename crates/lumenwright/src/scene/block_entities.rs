@@ -1134,6 +1134,98 @@ mod tests {
         assert_eq!(blend(dst, 0x00FF_FFFF, 0xFF0000), dst);
     }
 
+    /// Corners of a planned model draw, posed, with a dummy sprite.
+    fn draw_corners(d: &Draw, part: &str) -> Vec<Vec3> {
+        let Draw::Model {
+            model, m, poses, ..
+        } = d
+        else {
+            panic!("not a model draw");
+        };
+        let models = BlockEntityModels::load_builtin();
+        let def = &models.models[*model];
+        let sprite = crate::assets::atlas::Sprite {
+            x: 0,
+            y: 0,
+            w: 64,
+            h: 64,
+            transparent: false,
+            translucent: false,
+        };
+        let pose = |name: &str, pp: &mut PartPose| {
+            for (n, e) in poses {
+                if *n == name {
+                    for i in 0..3 {
+                        if let Some(r) = e.rotation[i] {
+                            pp.rotation[i] = r;
+                        }
+                    }
+                }
+            }
+        };
+        let mut out = Vec::new();
+        for p in def.parts.iter().filter(|p| p.name == part) {
+            part_quads(p, m, &sprite, def.texture_size, &pose, &mut out);
+        }
+        out.iter().flat_map(|q| q.corners()).collect()
+    }
+
+    #[test]
+    fn chest_lock_faces_the_facing_direction() {
+        for (facing, axis, sign) in [("south", 2, 1.0), ("north", 2, -1.0), ("east", 0, 1.0)] {
+            let st = BlockState::new("minecraft:chest")
+                .with("facing", facing)
+                .with("type", "single");
+            let mut draws = Vec::new();
+            plan_chest(&st, Mat4::IDENTITY, &mut draws).unwrap();
+            let c = draw_corners(&draws[0], "lock");
+            let mean = c.iter().map(|v| v[axis]).sum::<f32>() / c.len() as f32;
+            assert!((mean - 0.5) * sign > 0.4, "{facing}: lock at {mean}");
+        }
+    }
+
+    #[test]
+    fn skull_rotation_8_faces_south() {
+        // The face is the head's north cube face; rotation 8 turns it to +Z, and a
+        // wall skull facing south looks south too.
+        for (name, props) in [
+            ("minecraft:zombie_head", ("rotation", "8")),
+            ("minecraft:zombie_wall_head", ("facing", "south")),
+        ] {
+            let st = BlockState::new(name).with(props.0, props.1);
+            let be = BlockEntity {
+                id: "minecraft:skull".into(),
+                pos: [0, 0, 0],
+                nbt: Compound::new(),
+            };
+            let store = ResourceStore::new();
+            let registry = Registry::new();
+            let volume = BlockVolume {
+                min_chunk: [0, 0],
+                chunks: [1, 1],
+                min_section: 0,
+                sections_y: 1,
+                sections: vec![None],
+            };
+            let ctx = PlanContext {
+                store: &store,
+                registry: &registry,
+                volume: &volume,
+                origin: [0, 0, 0],
+                eye: None,
+            };
+            let mut draws = Vec::new();
+            plan_skull(&ctx, &be, &st, Mat4::IDENTITY, &mut draws).unwrap();
+            let Draw::Model { m, poses, .. } = &draws[0] else {
+                panic!()
+            };
+            let yrot = poses[0].1.rotation[1].unwrap();
+            // Model-space -Z (the face), through the head's yaw and the block transform.
+            let face = m.transform_vector3(Mat4::from_rotation_y(yrot).transform_vector3(-Vec3::Z));
+            assert!(face.z > 0.99, "{name}: face points {face}");
+        }
+    }
+
     #[test]
     fn sign_woods() {
         assert_eq!(sign_wood("dark_oak_wall_hanging_sign"), Some("dark_oak"));

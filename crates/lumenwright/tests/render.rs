@@ -72,6 +72,25 @@ fn lineup() -> &'static Path {
     })
 }
 
+fn gallery() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = tmp("block-entities");
+        fixture::block_entity_gallery().write(&d).unwrap();
+        d
+    })
+}
+
+/// Looks north over the three rows of the block-entity gallery.
+const GALLERY_VIEW: [&str; 6] = [
+    "--camera",
+    "12.5,69.5,8.5",
+    "--look-at",
+    "12.5,65.5,-3",
+    "--fov",
+    "60",
+];
+
 fn render(
     world: &Path,
     jar: &Path,
@@ -251,21 +270,34 @@ fn gpu_matches_cpu_in_quick_mode() {
         return;
     }
     let dir = tmp("parity-quick");
-    let args = |b: &'static str| vec!["--backend", b, "--width", "320", "--height", "180"];
-    render(showcase(), &jar, &dir.join("cpu.png"), &args("cpu")).unwrap();
-    render(showcase(), &jar, &dir.join("gpu.png"), &args("gpu")).unwrap();
-    let (a, b) = (load(&dir.join("cpu.png")), load(&dir.join("gpu.png")));
-    let off = a
-        .pixels()
-        .zip(b.pixels())
-        .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 8))
-        .count() as f32
-        / (a.width() * a.height()) as f32;
-    assert!(
-        off < 0.01,
-        "{:.3}% of pixels differ between CPU and GPU",
-        off * 100.0
-    );
+    for (name, world, view) in [
+        ("showcase", showcase(), &[][..]),
+        ("block-entities", gallery(), &GALLERY_VIEW[..]),
+    ] {
+        let args = |b: &'static str| {
+            let mut v = vec!["--backend", b, "--width", "320", "--height", "180"];
+            v.extend_from_slice(view);
+            v
+        };
+        let (cpu, gpu) = (
+            dir.join(format!("{name}-cpu.png")),
+            dir.join(format!("{name}-gpu.png")),
+        );
+        render(world, &jar, &cpu, &args("cpu")).unwrap();
+        render(world, &jar, &gpu, &args("gpu")).unwrap();
+        let (a, b) = (load(&cpu), load(&gpu));
+        let off = a
+            .pixels()
+            .zip(b.pixels())
+            .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 8))
+            .count() as f32
+            / (a.width() * a.height()) as f32;
+        assert!(
+            off < 0.01,
+            "{name}: {:.3}% of pixels differ between CPU and GPU",
+            off * 100.0
+        );
+    }
 }
 
 #[test]
@@ -276,41 +308,56 @@ fn gpu_matches_cpu_in_hq_mode() {
         return;
     }
     let dir = tmp("parity-hq");
-    let args = |b: &'static str| {
-        vec![
-            "--mode",
-            "hq",
-            "--backend",
-            b,
-            "--spp",
-            "16",
-            "--width",
-            "160",
-            "--height",
-            "90",
-            "--sun-altitude",
-            "40",
-        ]
-    };
-    render(showcase(), &jar, &dir.join("cpu.png"), &args("cpu")).unwrap();
-    render(showcase(), &jar, &dir.join("gpu.png"), &args("gpu")).unwrap();
-    let (a, b) = (load(&dir.join("cpu.png")), load(&dir.join("gpu.png")));
-    let lum = |img: &image::RgbaImage| {
-        img.pixels()
-            .map(|p| p.0[0] as f64 * 0.2126 + p.0[1] as f64 * 0.7152 + p.0[2] as f64 * 0.0722)
-            .sum::<f64>()
-    };
-    let (la, lb) = (lum(&a), lum(&b));
-    let rel = (la - lb).abs() / la.max(1.0);
-    assert!(rel < 0.03, "mean luminance differs by {:.2}%", rel * 100.0);
-    // Same RNG streams on both backends: almost every pixel should agree.
-    let off = a
-        .pixels()
-        .zip(b.pixels())
-        .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 16))
-        .count() as f32
-        / (a.width() * a.height()) as f32;
-    assert!(off < 0.02, "{:.2}% of pixels differ", off * 100.0);
+    for (name, world, view) in [
+        ("showcase", showcase(), &[][..]),
+        ("block-entities", gallery(), &GALLERY_VIEW[..]),
+    ] {
+        let args = |b: &'static str| {
+            let mut v = vec![
+                "--mode",
+                "hq",
+                "--backend",
+                b,
+                "--spp",
+                "16",
+                "--width",
+                "160",
+                "--height",
+                "90",
+                "--sun-altitude",
+                "40",
+            ];
+            v.extend_from_slice(view);
+            v
+        };
+        let (cpu, gpu) = (
+            dir.join(format!("{name}-cpu.png")),
+            dir.join(format!("{name}-gpu.png")),
+        );
+        render(world, &jar, &cpu, &args("cpu")).unwrap();
+        render(world, &jar, &gpu, &args("gpu")).unwrap();
+        let (a, b) = (load(&cpu), load(&gpu));
+        let lum = |img: &image::RgbaImage| {
+            img.pixels()
+                .map(|p| p.0[0] as f64 * 0.2126 + p.0[1] as f64 * 0.7152 + p.0[2] as f64 * 0.0722)
+                .sum::<f64>()
+        };
+        let (la, lb) = (lum(&a), lum(&b));
+        let rel = (la - lb).abs() / la.max(1.0);
+        assert!(
+            rel < 0.03,
+            "{name}: mean luminance differs by {:.2}%",
+            rel * 100.0
+        );
+        // Same RNG streams on both backends: almost every pixel should agree.
+        let off = a
+            .pixels()
+            .zip(b.pixels())
+            .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 16))
+            .count() as f32
+            / (a.width() * a.height()) as f32;
+        assert!(off < 0.02, "{name}: {:.2}% of pixels differ", off * 100.0);
+    }
 }
 
 #[test]
@@ -388,5 +435,114 @@ fn renders_are_deterministic() {
             load(&dir.join(format!("{mode}-b.png"))).into_raw(),
             "{mode} render changed between identical runs"
         );
+    }
+}
+
+#[test]
+fn block_entities_render_in_both_modes() {
+    let jar = require_jar!();
+    let dir = tmp("block-entity-modes");
+    let expected = [
+        ("sign", 4),
+        ("hanging_sign", 3),
+        ("bell", 4),
+        ("lectern_book", 1),
+        ("enchanting_table_book", 1),
+        ("chest", 5),
+        ("ender_chest", 1),
+        ("banner", 2),
+        ("decorated_pot", 1),
+        ("skull", 7),
+        ("player_head", 1),
+    ];
+    for mode in ["quick", "hq"] {
+        let mut args = vec![
+            "--mode",
+            mode,
+            "--backend",
+            "cpu",
+            "--spp",
+            "4",
+            "--width",
+            "240",
+            "--height",
+            "135",
+            "--sun-altitude",
+            "45",
+        ];
+        args.extend_from_slice(&GALLERY_VIEW);
+        let with = dir.join(format!("{mode}-with.png"));
+        let rep = render(gallery(), &jar, &with, &args).unwrap();
+        let st = &rep.block_entity_stats;
+        for (kind, n) in expected {
+            assert_eq!(st.rendered.get(kind), Some(&n), "{mode} {kind}: {st:?}");
+        }
+        // A barrel is a JSON model: nothing for the block-entity pass to draw.
+        assert_eq!(st.skipped.get("barrel"), Some(&1), "{st:?}");
+        assert_eq!(st.text_lines, 14, "{st:?}");
+        assert!(st.glyphs > 100, "{st:?}");
+        args.push("--no-block-entities");
+        let without = dir.join(format!("{mode}-without.png"));
+        let rep = render(gallery(), &jar, &without, &args).unwrap();
+        assert!(rep.block_entity_stats.rendered.is_empty());
+        let (a, b) = (load(&with), load(&without));
+        let changed = a
+            .pixels()
+            .zip(b.pixels())
+            .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 24))
+            .count() as f32
+            / (a.width() * a.height()) as f32;
+        assert!(
+            changed > 0.02,
+            "{mode}: block entities should cover part of the frame, changed {changed:.3}"
+        );
+    }
+}
+
+#[test]
+fn sign_text_reads_in_both_modes() {
+    let jar = require_jar!();
+    let dir = tmp("sign-text");
+    // Close up on the oak sign's front: black text on light oak.
+    for mode in ["quick", "hq"] {
+        let args = [
+            "--mode",
+            mode,
+            "--backend",
+            "cpu",
+            "--spp",
+            "8",
+            "--width",
+            "200",
+            "--height",
+            "120",
+            "--sun-altitude",
+            "45",
+            "--camera",
+            "0.5,66.1,3.6",
+            "--look-at",
+            "0.5,65.95,2.5",
+            "--fov",
+            "50",
+        ];
+        let dark = |r: f32, g: f32, b: f32| r < 70.0 && g < 70.0 && b < 70.0;
+        let red = |r: f32, g: f32, b: f32| r > g + 70.0 && r > b + 70.0;
+        let out = dir.join(format!("{mode}.png"));
+        render(gallery(), &jar, &out, &args).unwrap();
+        let img = load(&out);
+        // The board fills the middle of the frame; text strokes are its darkest pixels.
+        let (d, r) = (fraction(&img, dark), fraction(&img, red));
+        // The same frame without block entities.
+        let mut bare = args.to_vec();
+        bare.push("--no-block-entities");
+        let out = dir.join(format!("{mode}-bare.png"));
+        render(gallery(), &jar, &out, &bare).unwrap();
+        let img = load(&out);
+        let (d0, r0) = (fraction(&img, dark), fraction(&img, red));
+        assert!(
+            d > d0 + 0.006,
+            "{mode}: text pixels {d:.4}, {d0:.4} without"
+        );
+        assert!(r > r0 + 0.002, "{mode}: red pixels {r:.4}, {r0:.4} without");
     }
 }
