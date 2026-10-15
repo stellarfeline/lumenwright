@@ -39,7 +39,8 @@ a given camera.
   and item frames (through their vanilla block models) are built in code. Players from `level.dat` are optional (`--players`). An unknown entity is
   drawn as a box the size of its hitbox (`--unknown-entities box|skip`).
 * **Block entities.** Signs and hanging signs with their text (vanilla bitmap font from the
-  jar, dye colour, glowing text and outline), bells, lectern and enchanting-table books,
+  jar, dye colour, glowing text and outline, `translate` keys from the `en_us` language
+  files of the jar and resource packs), bells, lectern and enchanting-table books,
   chests (single, double, trapped, ender, copper), banners with pattern layers, decorated
   pots with sherds, skulls and heads. Geometry is `assets/block_entity_models.json`;
   placement and per-block data come from the chunk's `block_entities`. The quads join the

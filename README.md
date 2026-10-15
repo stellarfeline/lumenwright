@@ -132,7 +132,8 @@ each model naming the 1.21.11 client class it is transcribed from. Their data co
 chunk's `block_entities`:
 
 * signs and hanging signs, with front and back text in the vanilla bitmap font
-  (`assets/minecraft/font`), dye colour, glowing text and its outline;
+  (`assets/minecraft/font`), dye colour, glowing text and its outline. A `translate` line
+  resolves through the `en_us` language files of the jar and the resource packs;
 * bells, the lectern's book and the enchanting table's book;
 * chests: single, double, trapped, ender and copper;
 * banners, with their pattern layers composited in their dye colours;

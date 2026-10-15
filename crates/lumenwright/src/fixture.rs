@@ -1064,7 +1064,8 @@ pub fn block_entity_gallery() -> FixtureWorld {
                     [
                         s("Lumenwright"),
                         styled("red span", "red"),
-                        s(""),
+                        // A translated line, resolved from the jar's en_us.json: "Bell".
+                        compound(vec![("translate", s("block.minecraft.bell"))]),
                         s("oak, front"),
                     ],
                     "black",

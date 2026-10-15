@@ -224,7 +224,7 @@ fn info(
                 b.pos[1],
                 b.pos[2]
             );
-            if let Some([front, back]) = b.sign_lines() {
+            if let Some([front, back]) = b.sign_lines(&lumenwright::assets::lang::Lang::default()) {
                 for (side, lines) in [("front", front), ("back", back)] {
                     if lines.iter().any(|l| !l.is_empty()) {
                         println!("    {side}: {:?}", lines);

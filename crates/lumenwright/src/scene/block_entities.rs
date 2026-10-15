@@ -19,6 +19,7 @@ use super::{Alpha, EntityLight, Quad, Scene};
 use crate::assets::ResourceStore;
 use crate::assets::atlas::{AtlasBuilder, load_texture};
 use crate::assets::font::Font;
+use crate::assets::lang::{DEFAULT_LANGUAGE, Lang};
 use crate::assets::source::{norm_loc, split_loc};
 use crate::world::nbt::{self, Compound};
 use crate::world::{BlockState, BlockVolume, Registry};
@@ -63,11 +64,11 @@ impl BlockEntity {
     }
 
     /// The front and back text of a sign, one string per line (for `info`).
-    pub fn sign_lines(&self) -> Option<[Vec<String>; 2]> {
+    pub fn sign_lines(&self, lang: &Lang) -> Option<[Vec<String>; 2]> {
         let side = |k: &str| -> Vec<String> {
             nbt::get(&self.nbt, &format!("{k}.messages"))
                 .and_then(|m| match m {
-                    Value::List(l) => Some(l.iter().map(text::plain).collect()),
+                    Value::List(l) => Some(l.iter().map(|m| text::plain(m, lang)).collect()),
                     _ => None,
                 })
                 .unwrap_or_default()
@@ -174,7 +175,7 @@ pub struct PlanContext<'a> {
 }
 
 pub fn plan(ctx: &PlanContext, list: &[BlockEntity]) -> BlockEntityPlan {
-    let mut font: Option<Font> = None;
+    let mut font: Option<(Font, Lang)> = None;
     let mut out = BlockEntityPlan {
         planned: Vec::new(),
         textures: Vec::new(),
@@ -198,8 +199,13 @@ pub fn plan(ctx: &PlanContext, list: &[BlockEntity]) -> BlockEntityPlan {
         let mut draws = Vec::new();
         let kind = match be.short_id() {
             "sign" | "hanging_sign" => {
-                let font = font.get_or_insert_with(|| Font::load(ctx.store));
-                plan_sign(ctx, be, state, t, font, &mut out.stats, &mut draws)
+                let (font, lang) = font.get_or_insert_with(|| {
+                    (
+                        Font::load(ctx.store),
+                        Lang::load(ctx.store, DEFAULT_LANGUAGE),
+                    )
+                });
+                plan_sign(ctx, be, state, t, font, lang, &mut out.stats, &mut draws)
             }
             "bell" => plan_bell(state, t, &mut draws),
             "chest" | "trapped_chest" | "ender_chest" | "copper_chest" => {
@@ -355,12 +361,14 @@ fn scale_rgb(c: u32, f: f32) -> u32 {
     ch(16) | ch(8) | ch(0)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn plan_sign(
     ctx: &PlanContext,
     be: &BlockEntity,
     state: &BlockState,
     t: Mat4,
     font: &Font,
+    lang: &Lang,
     stats: &mut BlockEntityStats,
     draws: &mut Vec<Draw>,
 ) -> Option<&'static str> {
@@ -459,7 +467,7 @@ fn plan_sign(
             * Mat4::from_scale(Vec3::new(text_scale, -text_scale, text_scale));
         let half = (4.0 * line_h / 2.0_f32).floor();
         for (i, msg) in messages.iter().take(4).enumerate() {
-            let spans: Vec<Span> = text::flatten(msg);
+            let spans: Vec<Span> = text::flatten(msg, lang);
             let (placed, width) = text::layout_line(font, &spans, max_w);
             if placed.iter().all(|p| p.c == ' ') {
                 continue;

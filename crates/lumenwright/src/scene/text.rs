@@ -4,6 +4,7 @@
 use fastnbt::Value;
 
 use crate::assets::font::Font;
+use crate::assets::lang::Lang;
 use crate::world::nbt;
 
 /// A run of characters with one style.
@@ -49,7 +50,7 @@ pub fn named_color(name: &str) -> Option<u32> {
 
 /// Flattens a component stored as NBT (1.21.5+: a string, a compound or a list) or
 /// as a JSON string (older saves).
-pub fn flatten(v: &Value) -> Vec<Span> {
+pub fn flatten(v: &Value, lang: &Lang) -> Vec<Span> {
     let mut out = Vec::new();
     match v {
         Value::String(s) => {
@@ -57,19 +58,19 @@ pub fn flatten(v: &Value) -> Vec<Span> {
             if (t.starts_with('{') || t.starts_with('[') || t.starts_with('"'))
                 && let Ok(j) = serde_json::from_str::<serde_json::Value>(s)
             {
-                flatten_json(&j, Style::default(), &mut out);
+                flatten_json(&j, Style::default(), lang, &mut out);
             } else {
                 push(&mut out, s, Style::default());
             }
         }
-        _ => flatten_nbt(v, Style::default(), &mut out),
+        _ => flatten_nbt(v, Style::default(), lang, &mut out),
     }
     out
 }
 
 /// The plain text of a component.
-pub fn plain(v: &Value) -> String {
-    flatten(v).into_iter().map(|s| s.text).collect()
+pub fn plain(v: &Value, lang: &Lang) -> String {
+    flatten(v, lang).into_iter().map(|s| s.text).collect()
 }
 
 fn push(out: &mut Vec<Span>, text: &str, st: Style) {
@@ -90,19 +91,19 @@ fn push(out: &mut Vec<Span>, text: &str, st: Style) {
     });
 }
 
-fn flatten_nbt(v: &Value, parent: Style, out: &mut Vec<Span>) {
+fn flatten_nbt(v: &Value, parent: Style, lang: &Lang, out: &mut Vec<Span>) {
     match v {
         Value::String(s) => push(out, s, parent),
         Value::List(l) => {
             // A list is its first element with the rest as siblings inheriting its style.
             let mut it = l.iter();
             if let Some(first) = it.next() {
-                flatten_nbt(first, parent, out);
+                flatten_nbt(first, parent, lang, out);
                 let st = nbt::compound(first)
                     .map(|c| nbt_style(c, parent))
                     .unwrap_or(parent);
                 for v in it {
-                    flatten_nbt(v, st, out);
+                    flatten_nbt(v, st, lang, out);
                 }
             }
         }
@@ -111,15 +112,19 @@ fn flatten_nbt(v: &Value, parent: Style, out: &mut Vec<Span>) {
             if let Some(t) = nbt::get_str(c, "text") {
                 push(out, t, st);
             } else if let Some(k) = nbt::get_str(c, "translate") {
-                push(out, nbt::get_str(c, "fallback").unwrap_or(k), st);
+                let args: Vec<String> = match c.get("with") {
+                    Some(Value::List(l)) => l.iter().map(|a| plain(a, lang)).collect(),
+                    _ => Vec::new(),
+                };
+                push(out, &lang.format(k, nbt::get_str(c, "fallback"), &args), st);
             } else if let Some(k) = nbt::get_str(c, "keybind") {
                 push(out, k, st);
             } else if let Some(v) = c.get("") {
-                flatten_nbt(v, st, out);
+                flatten_nbt(v, st, lang, out);
             }
             if let Some(Value::List(extra)) = c.get("extra") {
                 for e in extra {
-                    flatten_nbt(e, st, out);
+                    flatten_nbt(e, st, lang, out);
                 }
             }
         }
@@ -144,7 +149,7 @@ fn nbt_style(c: &nbt::Compound, parent: Style) -> Style {
     }
 }
 
-fn flatten_json(v: &serde_json::Value, parent: Style, out: &mut Vec<Span>) {
+fn flatten_json(v: &serde_json::Value, parent: Style, lang: &Lang, out: &mut Vec<Span>) {
     use serde_json::Value as J;
     match v {
         J::String(s) => push(out, s, parent),
@@ -153,29 +158,40 @@ fn flatten_json(v: &serde_json::Value, parent: Style, out: &mut Vec<Span>) {
         J::Array(l) => {
             let mut it = l.iter();
             if let Some(first) = it.next() {
-                flatten_json(first, parent, out);
+                flatten_json(first, parent, lang, out);
                 let st = first
                     .as_object()
                     .map(|o| json_style(o, parent))
                     .unwrap_or(parent);
                 for v in it {
-                    flatten_json(v, st, out);
+                    flatten_json(v, st, lang, out);
                 }
             }
         }
         J::Object(o) => {
             let st = json_style(o, parent);
             if let Some(t) = o.get("text") {
-                flatten_json(t, st, out);
+                flatten_json(t, st, lang, out);
             } else if let Some(k) = o.get("translate").and_then(|k| k.as_str()) {
-                let f = o.get("fallback").and_then(|f| f.as_str()).unwrap_or(k);
-                push(out, f, st);
+                let args: Vec<String> = match o.get("with") {
+                    Some(J::Array(l)) => l
+                        .iter()
+                        .map(|a| {
+                            let mut v = Vec::new();
+                            flatten_json(a, Style::default(), lang, &mut v);
+                            v.into_iter().map(|s| s.text).collect()
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                let f = o.get("fallback").and_then(|f| f.as_str());
+                push(out, &lang.format(k, f, &args), st);
             } else if let Some(k) = o.get("keybind").and_then(|k| k.as_str()) {
                 push(out, k, st);
             }
             if let Some(J::Array(extra)) = o.get("extra") {
                 for e in extra {
-                    flatten_json(e, st, out);
+                    flatten_json(e, st, lang, out);
                 }
             }
         }
@@ -256,9 +272,18 @@ mod tests {
 
     #[test]
     fn flattens_every_stored_form() {
-        assert_eq!(plain(&Value::String("Ferry".into())), "Ferry");
-        assert_eq!(plain(&Value::String(r#"{"text":"Old"}"#.into())), "Old");
-        assert_eq!(plain(&Value::String(r#""json""#.into())), "json");
+        assert_eq!(
+            plain(&Value::String("Ferry".into()), &Lang::default()),
+            "Ferry"
+        );
+        assert_eq!(
+            plain(&Value::String(r#"{"text":"Old"}"#.into()), &Lang::default()),
+            "Old"
+        );
+        assert_eq!(
+            plain(&Value::String(r#""json""#.into()), &Lang::default()),
+            "json"
+        );
         let c = compound(&[
             ("text", Value::String("A".into())),
             ("color", Value::String("red".into())),
@@ -273,7 +298,7 @@ mod tests {
                 ]),
             ),
         ]);
-        let spans = flatten(&c);
+        let spans = flatten(&c, &Lang::default());
         assert_eq!(
             spans,
             vec![
@@ -290,7 +315,18 @@ mod tests {
             ]
         );
         let l = Value::List(vec![Value::String("x".into()), Value::String("y".into())]);
-        assert_eq!(plain(&l), "xy");
+        assert_eq!(plain(&l, &Lang::default()), "xy");
+        // A translated line resolves through the resource packs' language files.
+        let mut lang = Lang::default();
+        lang.insert("delve.slate", "FERRY, %s");
+        let t = compound(&[
+            ("translate", Value::String("delve.slate".into())),
+            ("with", Value::List(vec![Value::String("in chalk".into())])),
+        ]);
+        assert_eq!(plain(&t, &lang), "FERRY, in chalk");
+        assert_eq!(plain(&t, &Lang::default()), "delve.slate");
+        let j = Value::String(r#"{"translate":"delve.slate","with":["ok"]}"#.into());
+        assert_eq!(plain(&j, &lang), "FERRY, ok");
     }
 
     #[test]

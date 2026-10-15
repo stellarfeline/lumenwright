@@ -6,6 +6,7 @@ pub mod blockinfo;
 pub mod blockstate;
 pub mod font;
 pub mod jar;
+pub mod lang;
 pub mod model;
 pub mod source;
 

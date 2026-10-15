@@ -479,7 +479,7 @@ fn block_entities_render_in_both_modes() {
         }
         // A barrel is a JSON model: nothing for the block-entity pass to draw.
         assert_eq!(st.skipped.get("barrel"), Some(&1), "{st:?}");
-        assert_eq!(st.text_lines, 14, "{st:?}");
+        assert_eq!(st.text_lines, 15, "{st:?}");
         assert!(st.glyphs > 100, "{st:?}");
         args.push("--no-block-entities");
         let without = dir.join(format!("{mode}-without.png"));
