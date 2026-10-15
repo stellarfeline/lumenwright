@@ -376,14 +376,23 @@ pub fn build_mesh(scene: &Scene, p: &MeshParams) -> Mesh {
 
     // Entities.
     let mut ent = Chunk::default();
-    for (q, lp) in scene.entity_quads.iter().zip(&scene.entity_quad_light) {
+    for (q, el) in scene.entity_quads.iter().zip(&scene.entity_quad_light) {
+        let lp = el.pos;
         let w = [
             lp[0] + scene.origin[0],
             lp[1] + scene.origin[1],
             lp[2] + scene.origin[2],
         ];
-        let (sky, block) = scene.volume.light(w[0], w[1], w[2]);
-        let shade = entity_shade(q.normal());
+        let (sky, block) = if el.full_bright {
+            (15, 15)
+        } else {
+            scene.volume.light(w[0], w[1], w[2])
+        };
+        let shade = if el.shade {
+            entity_shade(q.normal())
+        } else {
+            1.0
+        };
         let tint = Vec3::new(q.tint[0] as f32, q.tint[1] as f32, q.tint[2] as f32) / 255.0;
         let c = tint * shade * lightmap(sky as f32, block as f32, &p.lighting);
         let col = [

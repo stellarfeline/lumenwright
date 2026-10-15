@@ -1,9 +1,11 @@
 //! Scene assembly shared by both render modes: per-state block info, tinted and
 //! material-resolved quads, fluids and entities.
 
+pub mod block_entities;
 pub mod camera;
 pub mod entities;
 pub mod mesh;
+pub mod text;
 pub mod voxel;
 
 use glam::Vec3;
@@ -135,9 +137,34 @@ fn translucent_layer(s: &BlockState) -> bool {
         || n.ends_with("_stained_glass_pane")
 }
 
+/// Quick-mode lighting of one entity or block-entity quad.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EntityLight {
+    /// Block light / sky light sample position (scene coords).
+    pub pos: [i32; 3],
+    /// Vanilla entity diffuse shading (two directional lights); text has none.
+    pub shade: bool,
+    /// Lit at full block and sky light whatever the cell holds (glowing sign text).
+    pub full_bright: bool,
+}
+
+impl EntityLight {
+    pub fn shaded(pos: [i32; 3]) -> EntityLight {
+        EntityLight {
+            pos,
+            shade: true,
+            full_bright: false,
+        }
+    }
+}
+
 pub struct BuildOptions {
     pub entities: bool,
     pub unknown_entities_as_boxes: bool,
+    /// Draw block entities whose look is Java code (signs, chests, banners...).
+    pub block_entities: bool,
+    /// Camera position in world coordinates, when known.
+    pub eye: Option<[f64; 3]>,
 }
 
 /// The world baked against a resource set.
@@ -152,9 +179,10 @@ pub struct Scene {
     pub biomes: BiomeColors,
     /// Entity geometry in scene coordinates.
     pub entity_quads: Vec<Quad>,
-    /// Block light / sky light sample position for each entity quad (scene coords).
-    pub entity_quad_light: Vec<[i32; 3]>,
+    /// How each entity quad is lit in quick mode.
+    pub entity_quad_light: Vec<EntityLight>,
     pub entity_stats: entities::EntityStats,
+    pub block_entity_stats: block_entities::BlockEntityStats,
 }
 
 /// Textures used by generated geometry and the sky, beyond those of block models.
@@ -175,6 +203,7 @@ impl Scene {
         mut registry: Registry,
         volume: BlockVolume,
         entity_list: &[Entity],
+        block_entity_list: &[block_entities::BlockEntity],
         opts: &BuildOptions,
     ) -> Scene {
         let t = std::time::Instant::now();
@@ -236,6 +265,22 @@ impl Scene {
         }
         let models_json = entities::EntityModels::load_builtin();
         entities::register_textures(&models_json, entity_list, &mut ab);
+        let origin = volume.min_block();
+        let mut be_plan = block_entities::plan(
+            &block_entities::PlanContext {
+                store,
+                registry: &registry,
+                volume: &volume,
+                origin,
+                eye: opts.eye,
+            },
+            if opts.block_entities {
+                block_entity_list
+            } else {
+                &[]
+            },
+        );
+        be_plan.register_textures(&mut ab);
         let atlas = ab.build(store);
 
         // Occlusion needs texture transparency, so it is computed after packing.
@@ -253,7 +298,6 @@ impl Scene {
             }
         }
 
-        let origin = volume.min_block();
         let biomes = BiomeColors::new(store);
         let mut scene = Scene {
             origin,
@@ -266,9 +310,14 @@ impl Scene {
             entity_quads: Vec::new(),
             entity_quad_light: Vec::new(),
             entity_stats: Default::default(),
+            block_entity_stats: be_plan.stats.clone(),
         };
         if opts.entities {
             entities::build_entity_quads(&mut scene, &models_json, entity_list, store, opts);
+        }
+        if !be_plan.is_empty() {
+            let models = block_entities::BlockEntityModels::load_builtin();
+            block_entities::build_quads(&mut scene, &models, &be_plan);
         }
         log::info!(
             "scene: {} block states, {} baked models, {} entity quads ({:.2?})",

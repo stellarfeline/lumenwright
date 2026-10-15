@@ -32,6 +32,10 @@ enum Cmd {
         /// Also count entities per region (slower).
         #[arg(long)]
         entities: bool,
+        /// List block entities (id, position, block, sign text) in the chunk box
+        /// "x1,z1,x2,z2" (block coordinates).
+        #[arg(long, value_name = "X1,Z1,X2,Z2", allow_hyphen_values = true)]
+        block_entities: Option<String>,
     },
     /// Manage the vanilla client jar used for textures and models.
     Assets {
@@ -46,6 +50,9 @@ enum Cmd {
         /// Instead of the showcase, line up every bundled entity model on a platform.
         #[arg(long)]
         lineup: bool,
+        /// Instead of the showcase, one of every block entity Lumenwright draws.
+        #[arg(long, conflicts_with = "lineup")]
+        block_entities: bool,
     },
 }
 
@@ -87,7 +94,8 @@ fn main() -> Result<()> {
             world,
             dimension,
             entities,
-        } => info(&world, &dimension, entities)?,
+            block_entities,
+        } => info(&world, &dimension, entities, block_entities.as_deref())?,
         Cmd::Assets { cmd } => match cmd {
             AssetsCmd::Fetch { version } => {
                 let p = jar::download_client_jar(&version)?;
@@ -107,8 +115,14 @@ fn main() -> Result<()> {
             }
         },
         Cmd::Backends => backends(),
-        Cmd::DemoWorld { dir, lineup } => {
-            let world = if lineup {
+        Cmd::DemoWorld {
+            dir,
+            lineup,
+            block_entities,
+        } => {
+            let world = if block_entities {
+                lumenwright::fixture::block_entity_gallery()
+            } else if lineup {
                 let mut ids: Vec<String> =
                     lumenwright::scene::entities::EntityModels::load_builtin()
                         .models
@@ -148,7 +162,12 @@ fn backends() {
     println!("cuda: not compiled in (build with --features cuda)");
 }
 
-fn info(path: &std::path::Path, dimension: &str, with_entities: bool) -> Result<()> {
+fn info(
+    path: &std::path::Path,
+    dimension: &str,
+    with_entities: bool,
+    block_entities: Option<&str>,
+) -> Result<()> {
     let w = World::open(path, Dimension::parse(dimension)?)?;
     let l = &w.level;
     println!("name:         {}", l.name);
@@ -171,6 +190,49 @@ fn info(path: &std::path::Path, dimension: &str, with_entities: bool) -> Result<
         regions.len(),
         w.region_dir().display()
     );
+    if let Some(rect) = block_entities {
+        let v: Vec<i32> = rect
+            .split(',')
+            .map(|p| p.trim().parse::<i32>())
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|_| anyhow::anyhow!("expected \"x1,z1,x2,z2\", got \"{rect}\""))?;
+        let [x1, z1, x2, z2] = <[i32; 4]>::try_from(v)
+            .map_err(|_| anyhow::anyhow!("expected \"x1,z1,x2,z2\", got \"{rect}\""))?;
+        let (lo, hi) = ([x1.min(x2), z1.min(z2)], [x1.max(x2), z1.max(z2)]);
+        let area = w.load_area([lo[0] >> 4, lo[1] >> 4], [hi[0] >> 4, hi[1] >> 4], false)?;
+        let list = lumenwright::scene::block_entities::parse_all(&area.block_entities);
+        let inside: Vec<_> = list
+            .iter()
+            .filter(|b| (lo[0]..=hi[0]).contains(&b.pos[0]) && (lo[1]..=hi[1]).contains(&b.pos[2]))
+            .collect();
+        println!(
+            "block entities: {} in x {}..{}, z {}..{}",
+            inside.len(),
+            lo[0],
+            hi[0],
+            lo[1],
+            hi[1]
+        );
+        for b in inside {
+            let state = area
+                .registry
+                .state(area.volume.block(b.pos[0], b.pos[1], b.pos[2]));
+            println!(
+                "  {} at {},{},{}  {state}",
+                b.short_id(),
+                b.pos[0],
+                b.pos[1],
+                b.pos[2]
+            );
+            if let Some([front, back]) = b.sign_lines(&lumenwright::assets::lang::Lang::default()) {
+                for (side, lines) in [("front", front), ("back", back)] {
+                    if lines.iter().any(|l| !l.is_empty()) {
+                        println!("    {side}: {:?}", lines);
+                    }
+                }
+            }
+        }
+    }
     if with_entities {
         for (rx, rz) in regions {
             let min = [rx * 32, rz * 32];

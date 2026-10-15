@@ -8,10 +8,16 @@ use anyhow::{Context, Result};
 
 /// Asset sub-paths we need, in any namespace. Everything else (sounds, lang,
 /// shaders, GUI...) is skipped.
-const WANTED: &[&str] = &["blockstates/", "models/", "items/", "textures/"];
+const WANTED: &[&str] = &[
+    "blockstates/",
+    "models/",
+    "items/",
+    "textures/",
+    "font/",
+    "lang/",
+];
 const SKIPPED: &[&str] = &[
     "textures/gui/",
-    "textures/font/",
     "textures/particle/",
     "textures/mob_effect/",
     "textures/trims/",
@@ -89,6 +95,18 @@ impl ResourceStore {
 
     pub fn get(&self, path: &str) -> Option<&[u8]> {
         self.files.get(path).map(|v| v.as_slice())
+    }
+
+    /// Paths of every loaded file ending with `suffix`, sorted.
+    pub fn paths_ending_with(&self, suffix: &str) -> Vec<String> {
+        let mut v: Vec<String> = self
+            .files
+            .keys()
+            .filter(|k| k.ends_with(suffix))
+            .cloned()
+            .collect();
+        v.sort();
+        v
     }
 
     pub fn len(&self) -> usize {

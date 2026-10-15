@@ -30,6 +30,9 @@ cargo build --release
 # Inspect a save
 target/release/lumenwright info ~/path/to/saves/MyWorld --entities
 
+# List the block entities (and sign text) in a box of x,z block coordinates
+target/release/lumenwright info ~/path/to/saves/MyWorld --block-entities=-40,-40,40,40
+
 # Vanilla-look render from the player's own viewpoint (level.dat)
 target/release/lumenwright render -w ~/path/to/saves/MyWorld -o quick.png
 
@@ -40,6 +43,11 @@ target/release/lumenwright render -w ~/path/to/saves/MyWorld --mode hq --spp 256
 # No world handy? Generate one:
 target/release/lumenwright demo-world /tmp/showcase
 target/release/lumenwright render -w /tmp/showcase --mode hq
+
+# One of every block entity Lumenwright draws (the render below):
+target/release/lumenwright demo-world --block-entities /tmp/gallery
+target/release/lumenwright render -w /tmp/gallery \
+    --camera 9.5,70.5,11.5 --look-at 9.5,65.4,-2 --fov 60
 ```
 
 `lumenwright backends` lists the backends available on the current machine.
@@ -83,6 +91,7 @@ resolved in this order:
 | `--brightness`, `--flat-lighting` | 0.5 | vanilla brightness slider, and smooth lighting off |
 | `--hdr-output out.pfm` | | also write the linear HDR image (HQ) |
 | `--no-entities`, `--players`, `--unknown-entities box\|skip` | | entity options |
+| `--no-block-entities` | | leave out block entities drawn by Java code |
 
 ## Architecture
 
@@ -117,6 +126,25 @@ code. Anything else is drawn as a box the size of its hitbox.
 
 ![entities](docs/renders/entity-lineup.png)
 
+Block entities that vanilla draws in Java code use the same format, in
+[`crates/lumenwright/assets/block_entity_models.json`](crates/lumenwright/assets/block_entity_models.json),
+each model naming the 1.21.11 client class it is transcribed from. Their data comes from the
+chunk's `block_entities`:
+
+* signs and hanging signs, with front and back text in the vanilla bitmap font
+  (`assets/minecraft/font`), dye colour, glowing text and its outline. A `translate` line
+  resolves through the `en_us` language files of the jar and the resource packs;
+* bells, the lectern's book and the enchanting table's book;
+* chests: single, double, trapped, ender and copper;
+* banners, with their pattern layers composited in their dye colours;
+* decorated pots with their sherds;
+* skulls and heads. A player head's skin is the profile's `texture` asset when a resource
+  pack provides it, otherwise the default skin for the profile's UUID. Skins are never
+  downloaded.
+
+![block entities](docs/renders/block-entities-quick-metal.png)
+![signs](docs/renders/block-entities-signs.png)
+
 ## Backends
 
 | backend | quick | hq | tested here (Apple M2 Pro) |
@@ -148,8 +176,9 @@ cargo test --workspace --release
 * **Kernel tests** use hand-built buffers to check brick skipping, uniform bricks, entity
   overlay cells, cutout alpha, the sky, and pinned RNG values.
 * **Integration tests** write fixture worlds and render them end to end. They check terrain
-  colours seen from above, entity coverage, HQ sanity, CPU-vs-GPU parity in both modes,
-  determinism, and the CLI. Tests that need the client jar or a GPU skip with a message when
+  colours seen from above, entity coverage, block entities in both modes, sign text, HQ
+  sanity, CPU-vs-GPU parity in both modes (showcase and block-entity gallery), determinism,
+  and the CLI. Tests that need the client jar or a GPU skip with a message when
   it is missing. `LUMENWRIGHT_MC_JAR` points the tests at a jar.
 
 ## Measured on an M2 Pro (10 CPU cores, 16 GPU cores)
@@ -168,7 +197,8 @@ Parity on the same view: quick mode, CPU vs Metal, differs in 0.075% of pixels; 
 ## Known limitations (v0.1)
 
 See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
-* Block entities drawn by Java code are missing: chests, signs, beds, banners, skulls.
+* Beds, shulker boxes and the conduit are not drawn. Chests are drawn closed and bells at
+  rest; sign text is drawn without italic, underline or obfuscation.
 * Items are not rendered: dropped items, item frame contents, item displays.
 * Entity layers that need a second texture are missing (sheep wool, armour, glowing eyes).
 * Smooth fluid surfaces, clouds, weather, biome blending and mipmaps are not implemented.

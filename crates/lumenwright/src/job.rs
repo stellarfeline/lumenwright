@@ -109,6 +109,9 @@ pub struct RenderArgs {
     /// Do not render entities.
     #[arg(long)]
     pub no_entities: bool,
+    /// Do not render block entities drawn by Java code (signs, chests, banners...).
+    #[arg(long)]
+    pub no_block_entities: bool,
     /// How to draw entities without a model.
     #[arg(long, value_enum, default_value_t = UnknownEntities::Box)]
     pub unknown_entities: UnknownEntities,
@@ -142,6 +145,7 @@ pub struct RenderReport {
     pub backend: String,
     pub timings: Vec<(&'static str, f64)>,
     pub entity_stats: crate::scene::entities::EntityStats,
+    pub block_entity_stats: crate::scene::block_entities::BlockEntityStats,
     pub camera: Camera,
 }
 
@@ -264,8 +268,18 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
     let opts = BuildOptions {
         entities: !a.no_entities,
         unknown_entities_as_boxes: a.unknown_entities == UnknownEntities::Box,
+        block_entities: !a.no_block_entities,
+        eye: Some([cam.pos.x, cam.pos.y, cam.pos.z]),
     };
-    let scene = Scene::build(&store, area.registry, area.volume, &entities, &opts);
+    let block_entities = crate::scene::block_entities::parse_all(&area.block_entities);
+    let scene = Scene::build(
+        &store,
+        area.registry,
+        area.volume,
+        &entities,
+        &block_entities,
+        &opts,
+    );
     lap("build scene", &mut t);
 
     let mut backend = render::create_backend(a.backend)?;
@@ -381,6 +395,7 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
         backend: backend.name(),
         timings,
         entity_stats: scene.entity_stats.clone(),
+        block_entity_stats: scene.block_entity_stats.clone(),
         camera: cam,
     })
 }

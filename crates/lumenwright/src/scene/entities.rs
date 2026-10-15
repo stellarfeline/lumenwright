@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use glam::{Mat4, Quat, Vec3};
 use serde::Deserialize;
 
-use super::{Alpha, Quad, Scene};
+use super::{Alpha, EntityLight, Quad, Scene};
 use crate::assets::atlas::{AtlasBuilder, WHITE_TEXTURE};
 use crate::assets::blockstate::pos_hash;
 use crate::assets::source::{ResourceStore, norm_loc};
@@ -24,6 +24,10 @@ pub struct CubeDef {
     pub inflate: f32,
     #[serde(default)]
     pub mirror: bool,
+    /// Faces to emit (vanilla `addBox(..., Set<Direction>)`), by direction name in
+    /// model space; all six when absent.
+    #[serde(default)]
+    pub faces: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -33,6 +37,9 @@ pub struct PartDef {
     pub pivot: [f32; 3],
     #[serde(default)]
     pub rotation: [f32; 3],
+    /// Part scale (vanilla `PartPose.scaled`), applied after the rotation.
+    #[serde(default = "unit_scale")]
+    pub scale: [f32; 3],
     #[serde(default)]
     pub cubes: Vec<CubeDef>,
     #[serde(default)]
@@ -47,6 +54,11 @@ pub struct TextureVariants {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct ModelDef {
+    /// Vanilla class and method the geometry is transcribed from.
+    #[serde(default)]
+    pub source: Option<String>,
+    /// Default texture; block-entity models pick theirs in code and leave it empty.
+    #[serde(default)]
     pub texture: String,
     pub texture_variants: Option<TextureVariants>,
     pub texture_size: [f32; 2],
@@ -59,6 +71,9 @@ pub struct ModelDef {
 
 fn one() -> f32 {
     1.0
+}
+fn unit_scale() -> [f32; 3] {
+    [1.0; 3]
 }
 fn default_hitbox() -> [f32; 2] {
     [0.6, 1.8]
@@ -254,20 +269,31 @@ pub fn register_textures(models: &EntityModels, entities: &[Entity], ab: &mut At
     }
 }
 
+/// Half-gap, in model pixels, between the two faces of a zero-thickness cube.
+const FLAT_EPSILON: f32 = 0.01;
+
 /// Emits the 6 faces of a box-UV cube (vanilla `ModelPart.Cube`) transformed by `m`.
-fn cube_quads(
+pub(crate) fn cube_quads(
     c: &CubeDef,
     m: &Mat4,
     sprite: &crate::assets::atlas::Sprite,
     tex_size: [f32; 2],
     out: &mut Vec<Quad>,
 ) {
-    let g = c.inflate;
-    let (mut x0, y0, z0) = (c.origin[0] - g, c.origin[1] - g, c.origin[2] - g);
+    // A zero-thickness box (a flat plane) has two coplanar faces; they are pushed
+    // apart by a hair so a ray always meets the outward one first.
+    let g = |i: usize| {
+        if c.size[i] == 0.0 {
+            c.inflate + FLAT_EPSILON
+        } else {
+            c.inflate
+        }
+    };
+    let (mut x0, y0, z0) = (c.origin[0] - g(0), c.origin[1] - g(1), c.origin[2] - g(2));
     let (mut x1, y1, z1) = (
-        c.origin[0] + c.size[0] + g,
-        c.origin[1] + c.size[1] + g,
-        c.origin[2] + c.size[2] + g,
+        c.origin[0] + c.size[0] + g(0),
+        c.origin[1] + c.size[1] + g(1),
+        c.origin[2] + c.size[2] + g(2),
     );
     if c.mirror {
         std::mem::swap(&mut x0, &mut x1);
@@ -293,17 +319,23 @@ fn cube_quads(
         u + d + w + d + w,
     );
     let (f13, f14, f15) = (vv, vv + d, vv + d + h);
-    // (vertices, u1, v1, u2, v2) per vanilla polygon.
-    let faces: [([usize; 4], f32, f32, f32, f32); 6] = [
-        ([5, 4, 0, 1], f8, f13, f9, f14),
-        ([2, 3, 7, 6], f9, f14, f10, f13),
-        ([0, 4, 7, 3], f7, f14, f8, f15),
-        ([1, 0, 3, 2], f8, f14, f9, f15),
-        ([5, 1, 2, 6], f9, f14, f11, f15),
-        ([4, 5, 6, 7], f11, f14, f12, f15),
+    // (direction, vertices, u1, v1, u2, v2) per vanilla polygon.
+    type Face<'a> = (&'a str, [usize; 4], f32, f32, f32, f32);
+    let faces: [Face; 6] = [
+        ("down", [5, 4, 0, 1], f8, f13, f9, f14),
+        ("up", [2, 3, 7, 6], f9, f14, f10, f13),
+        ("west", [0, 4, 7, 3], f7, f14, f8, f15),
+        ("north", [1, 0, 3, 2], f8, f14, f9, f15),
+        ("east", [5, 1, 2, 6], f9, f14, f11, f15),
+        ("south", [4, 5, 6, 7], f11, f14, f12, f15),
     ];
     let center = m.transform_point3((v[0] + v[6]) * 0.5);
-    for (idx, u1, v1, u2, v2) in faces {
+    for (dir, idx, u1, v1, u2, v2) in faces {
+        if let Some(only) = &c.faces
+            && !only.iter().any(|f| f == dir)
+        {
+            continue;
+        }
         let p = idx.map(|i| m.transform_point3(v[i]));
         // Vanilla polygon: vertex0 = (u2, v1), vertex1 = (u1, v1), vertex2 = (u1, v2).
         let p0 = p[1];
@@ -346,35 +378,53 @@ fn orient_outward(q: &mut Quad, center: Vec3) {
     }
 }
 
-fn part_quads(
+/// A part's animated pose: what vanilla's `setupAnim` writes into a `ModelPart`.
+#[derive(Clone, Copy, Debug)]
+pub struct PartPose {
+    pub pivot: [f32; 3],
+    pub rotation: [f32; 3],
+    pub visible: bool,
+}
+
+/// Sets a part's pose by name; the identity leaves the pose of the model file.
+pub type PoseFn<'a> = &'a dyn Fn(&str, &mut PartPose);
+
+pub fn rest_pose(_: &str, _: &mut PartPose) {}
+
+pub(crate) fn part_quads(
     part: &PartDef,
     parent: &Mat4,
     sprite: &crate::assets::atlas::Sprite,
     tex_size: [f32; 2],
-    extra_yaw: Option<(&str, f32)>,
+    pose: PoseFn,
     out: &mut Vec<Quad>,
 ) {
-    let mut rot = part.rotation;
-    if let Some((name, yaw)) = extra_yaw
-        && part.name == name
-    {
-        rot[1] += yaw;
+    let mut p = PartPose {
+        pivot: part.pivot,
+        rotation: part.rotation,
+        visible: true,
+    };
+    pose(&part.name, &mut p);
+    if !p.visible {
+        return;
     }
-    // PoseStack: translate(pivot / 16), rotate ZYX; cube vertices in pixels / 16.
-    let local = Mat4::from_translation(Vec3::from(part.pivot) / 16.0)
+    let rot = p.rotation;
+    // PoseStack: translate(pivot / 16), rotate ZYX, scale; cube vertices in pixels / 16.
+    let local = Mat4::from_translation(Vec3::from(p.pivot) / 16.0)
         * Mat4::from_quat(Quat::from_euler(
             glam::EulerRot::ZYX,
             rot[2],
             rot[1],
             rot[0],
-        ));
+        ))
+        * Mat4::from_scale(Vec3::from(part.scale));
     let m = *parent * local;
     let to_px = m * Mat4::from_scale(Vec3::splat(1.0 / 16.0));
     for c in &part.cubes {
         cube_quads(c, &to_px, sprite, tex_size, out);
     }
     for child in &part.children {
-        part_quads(child, &m, sprite, tex_size, extra_yaw, out);
+        part_quads(child, &m, sprite, tex_size, pose, out);
     }
 }
 
@@ -518,7 +568,7 @@ pub fn build_entity_quads(
 ) {
     let size = scene.volume.size_blocks();
     let mut quads: Vec<Quad> = Vec::new();
-    let mut lights: Vec<[i32; 3]> = Vec::new();
+    let mut lights: Vec<EntityLight> = Vec::new();
     let mut stats = EntityStats::default();
     let mut scratch = Vec::new();
     for e in entities {
@@ -557,12 +607,17 @@ pub fn build_entity_quads(
                 * Mat4::from_scale(Vec3::new(-1.0, -1.0, 1.0))
                 * Mat4::from_scale(Vec3::splat(scale))
                 * Mat4::from_translation(Vec3::new(0.0, -1.501, 0.0));
-            let extra = (id == "armor_stand").then(|| ("base_plate", -e.yaw.to_radians()));
-            for part in &def.parts {
-                if id == "armor_stand" && part.name == "base_plate" && e.flag("NoBasePlate") {
-                    continue;
+            let armor_stand = id == "armor_stand";
+            let no_plate = e.flag("NoBasePlate");
+            let yaw = e.yaw.to_radians();
+            let pose = |name: &str, p: &mut PartPose| {
+                if armor_stand && name == "base_plate" {
+                    p.rotation[1] -= yaw;
+                    p.visible = !no_plate;
                 }
-                part_quads(part, &root, &sprite, def.texture_size, extra, &mut quads);
+            };
+            for part in &def.parts {
+                part_quads(part, &root, &sprite, def.texture_size, &pose, &mut quads);
             }
             light_pos = rel + Vec3::new(0.0, def.hitbox[1] * scale * 0.5, 0.0);
             *stats.rendered.entry(id.clone()).or_default() += 1;
@@ -640,7 +695,7 @@ pub fn build_entity_quads(
         }
         let lp = light_pos.floor();
         lights.extend(std::iter::repeat_n(
-            [lp.x as i32, lp.y as i32, lp.z as i32],
+            EntityLight::shaded([lp.x as i32, lp.y as i32, lp.z as i32]),
             quads.len() - before,
         ));
     }
@@ -654,8 +709,8 @@ pub fn build_entity_quads(
         log::info!("entities skipped: {:?}", stats.skipped);
     }
     log::info!("entities rendered: {:?}", stats.rendered);
-    scene.entity_quads = quads;
-    scene.entity_quad_light = lights;
+    scene.entity_quads.extend(quads);
+    scene.entity_quad_light.extend(lights);
     scene.entity_stats = stats;
 }
 
@@ -694,6 +749,7 @@ mod tests {
             size: [8.0, 8.0, 8.0],
             inflate: 0.0,
             mirror: false,
+            faces: None,
         };
         for mirror in [false, true] {
             let mut out = Vec::new();
@@ -735,7 +791,7 @@ mod tests {
             * Mat4::from_translation(Vec3::new(0.0, -1.501, 0.0));
         let mut out = Vec::new();
         let head = pig.parts.iter().find(|p| p.name == "head").unwrap();
-        part_quads(head, &root, &sprite, pig.texture_size, None, &mut out);
+        part_quads(head, &root, &sprite, pig.texture_size, &rest_pose, &mut out);
         let max_z = out
             .iter()
             .flat_map(|q| q.corners())
@@ -745,7 +801,7 @@ mod tests {
         // Feet on the ground: every leg reaches y ~ 0.
         let mut all = Vec::new();
         for p in &pig.parts {
-            part_quads(p, &root, &sprite, pig.texture_size, None, &mut all);
+            part_quads(p, &root, &sprite, pig.texture_size, &rest_pose, &mut all);
         }
         let min_y = all
             .iter()

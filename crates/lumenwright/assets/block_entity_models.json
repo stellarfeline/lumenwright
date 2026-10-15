@@ -1,0 +1,2066 @@
+{
+ "format": 1,
+ "minecraft": "1.21.11",
+ "models": {
+  "banner_flag_standing": {
+   "source": "net.minecraft.client.model.object.banner.BannerFlagModel#createFlagLayer(true)",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "flag",
+     "pivot": [
+      0,
+      -44,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -10,
+        0,
+        -2
+       ],
+       "size": [
+        20,
+        40,
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "banner_flag_wall": {
+   "source": "net.minecraft.client.model.object.banner.BannerFlagModel#createFlagLayer(false)",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "flag",
+     "pivot": [
+      0,
+      -20.5,
+      10.5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -10,
+        0,
+        -2
+       ],
+       "size": [
+        20,
+        40,
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "banner_standing": {
+   "source": "net.minecraft.client.model.object.banner.BannerModel#createBodyLayer(true)",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "pole",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        44,
+        0
+       ],
+       "origin": [
+        -1,
+        -42,
+        -1
+       ],
+       "size": [
+        2,
+        42,
+        2
+       ]
+      }
+     ]
+    },
+    {
+     "name": "bar",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        42
+       ],
+       "origin": [
+        -10,
+        -44,
+        -1
+       ],
+       "size": [
+        20,
+        2,
+        2
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "banner_wall": {
+   "source": "net.minecraft.client.model.object.banner.BannerModel#createBodyLayer(false)",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "bar",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        42
+       ],
+       "origin": [
+        -10,
+        -20.5,
+        9.5
+       ],
+       "size": [
+        20,
+        2,
+        2
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "bell": {
+   "source": "net.minecraft.client.model.object.bell.BellModel#createBodyLayer",
+   "texture_size": [
+    32,
+    32
+   ],
+   "parts": [
+    {
+     "name": "bell_body",
+     "pivot": [
+      8,
+      12,
+      8
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -3,
+        -6,
+        -3
+       ],
+       "size": [
+        6,
+        7,
+        6
+       ]
+      }
+     ],
+     "children": [
+      {
+       "name": "bell_base",
+       "pivot": [
+        -8,
+        -12,
+        -8
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          13
+         ],
+         "origin": [
+          4,
+          4,
+          4
+         ],
+         "size": [
+          8,
+          2,
+          8
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "book": {
+   "source": "net.minecraft.client.model.object.book.BookModel#createBodyLayer",
+   "texture_size": [
+    64,
+    32
+   ],
+   "parts": [
+    {
+     "name": "left_lid",
+     "pivot": [
+      0,
+      0,
+      -1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -6,
+        -5,
+        -0.005
+       ],
+       "size": [
+        6,
+        10,
+        0.005
+       ]
+      }
+     ]
+    },
+    {
+     "name": "right_lid",
+     "pivot": [
+      0,
+      0,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        16,
+        0
+       ],
+       "origin": [
+        0,
+        -5,
+        -0.005
+       ],
+       "size": [
+        6,
+        10,
+        0.005
+       ]
+      }
+     ]
+    },
+    {
+     "name": "seam",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        12,
+        0
+       ],
+       "origin": [
+        -1,
+        -5,
+        0
+       ],
+       "size": [
+        2,
+        10,
+        0.005
+       ]
+      }
+     ]
+    },
+    {
+     "name": "left_pages",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        10
+       ],
+       "origin": [
+        0,
+        -4,
+        -0.99
+       ],
+       "size": [
+        5,
+        8,
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "name": "right_pages",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        12,
+        10
+       ],
+       "origin": [
+        0,
+        -4,
+        -0.01
+       ],
+       "size": [
+        5,
+        8,
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "name": "flip_page1",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        24,
+        10
+       ],
+       "origin": [
+        0,
+        -4,
+        0
+       ],
+       "size": [
+        5,
+        8,
+        0.005
+       ]
+      }
+     ]
+    },
+    {
+     "name": "flip_page2",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        24,
+        10
+       ],
+       "origin": [
+        0,
+        -4,
+        0
+       ],
+       "size": [
+        5,
+        8,
+        0.005
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "chest": {
+   "source": "net.minecraft.client.model.object.chest.ChestModel#createSingleBodyLayer",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "bottom",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        19
+       ],
+       "origin": [
+        1,
+        0,
+        1
+       ],
+       "size": [
+        14,
+        10,
+        14
+       ]
+      }
+     ]
+    },
+    {
+     "name": "lid",
+     "pivot": [
+      0,
+      9,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        1,
+        0,
+        0
+       ],
+       "size": [
+        14,
+        5,
+        14
+       ]
+      }
+     ]
+    },
+    {
+     "name": "lock",
+     "pivot": [
+      0,
+      9,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        7,
+        -2,
+        14
+       ],
+       "size": [
+        2,
+        4,
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "chest_left": {
+   "source": "net.minecraft.client.model.object.chest.ChestModel#createDoubleBodyLeftLayer",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "bottom",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        19
+       ],
+       "origin": [
+        0,
+        0,
+        1
+       ],
+       "size": [
+        15,
+        10,
+        14
+       ]
+      }
+     ]
+    },
+    {
+     "name": "lid",
+     "pivot": [
+      0,
+      9,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        15,
+        5,
+        14
+       ]
+      }
+     ]
+    },
+    {
+     "name": "lock",
+     "pivot": [
+      0,
+      9,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        0,
+        -2,
+        14
+       ],
+       "size": [
+        1,
+        4,
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "chest_right": {
+   "source": "net.minecraft.client.model.object.chest.ChestModel#createDoubleBodyRightLayer",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "bottom",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        19
+       ],
+       "origin": [
+        1,
+        0,
+        1
+       ],
+       "size": [
+        15,
+        10,
+        14
+       ]
+      }
+     ]
+    },
+    {
+     "name": "lid",
+     "pivot": [
+      0,
+      9,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        1,
+        0,
+        0
+       ],
+       "size": [
+        15,
+        5,
+        14
+       ]
+      }
+     ]
+    },
+    {
+     "name": "lock",
+     "pivot": [
+      0,
+      9,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        15,
+        -2,
+        14
+       ],
+       "size": [
+        1,
+        4,
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "decorated_pot_base": {
+   "source": "net.minecraft.client.renderer.blockentity.DecoratedPotRenderer#createBaseLayer",
+   "texture_size": [
+    32,
+    32
+   ],
+   "parts": [
+    {
+     "name": "neck",
+     "pivot": [
+      0,
+      37,
+      16
+     ],
+     "rotation": [
+      3.1415927,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        4,
+        17,
+        4
+       ],
+       "size": [
+        8,
+        3,
+        8
+       ],
+       "inflate": -0.1
+      },
+      {
+       "uv": [
+        0,
+        5
+       ],
+       "origin": [
+        5,
+        20,
+        5
+       ],
+       "size": [
+        6,
+        1,
+        6
+       ],
+       "inflate": 0.2
+      }
+     ]
+    },
+    {
+     "name": "top",
+     "pivot": [
+      1,
+      16,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        -14,
+        13
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        14,
+        0,
+        14
+       ]
+      }
+     ]
+    },
+    {
+     "name": "bottom",
+     "pivot": [
+      1,
+      0,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        -14,
+        13
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        14,
+        0,
+        14
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "decorated_pot_sides": {
+   "source": "net.minecraft.client.renderer.blockentity.DecoratedPotRenderer#createSidesLayer",
+   "texture_size": [
+    16,
+    16
+   ],
+   "parts": [
+    {
+     "name": "back",
+     "pivot": [
+      15,
+      16,
+      1
+     ],
+     "rotation": [
+      0,
+      0,
+      3.1415927
+     ],
+     "cubes": [
+      {
+       "uv": [
+        1,
+        0
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        14,
+        16,
+        0
+       ],
+       "faces": [
+        "north"
+       ]
+      }
+     ]
+    },
+    {
+     "name": "left",
+     "pivot": [
+      1,
+      16,
+      1
+     ],
+     "rotation": [
+      0,
+      -1.5707964,
+      3.1415927
+     ],
+     "cubes": [
+      {
+       "uv": [
+        1,
+        0
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        14,
+        16,
+        0
+       ],
+       "faces": [
+        "north"
+       ]
+      }
+     ]
+    },
+    {
+     "name": "right",
+     "pivot": [
+      15,
+      16,
+      15
+     ],
+     "rotation": [
+      0,
+      1.5707964,
+      3.1415927
+     ],
+     "cubes": [
+      {
+       "uv": [
+        1,
+        0
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        14,
+        16,
+        0
+       ],
+       "faces": [
+        "north"
+       ]
+      }
+     ]
+    },
+    {
+     "name": "front",
+     "pivot": [
+      1,
+      16,
+      15
+     ],
+     "rotation": [
+      3.1415927,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        1,
+        0
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        14,
+        16,
+        0
+       ],
+       "faces": [
+        "north"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "hanging_sign_ceiling": {
+   "source": "net.minecraft.client.renderer.blockentity.HangingSignRenderer#createHangingSignLayer(CEILING)",
+   "texture_size": [
+    64,
+    32
+   ],
+   "parts": [
+    {
+     "name": "board",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        12
+       ],
+       "origin": [
+        -7,
+        0,
+        -1
+       ],
+       "size": [
+        14,
+        10,
+        2
+       ]
+      }
+     ]
+    },
+    {
+     "name": "normalChains",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [],
+     "children": [
+      {
+       "name": "chainL1",
+       "pivot": [
+        -5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        -0.7853982,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          6
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          6,
+          0
+         ]
+        }
+       ]
+      },
+      {
+       "name": "chainL2",
+       "pivot": [
+        -5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        0.7853982,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          6,
+          6
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          6,
+          0
+         ]
+        }
+       ]
+      },
+      {
+       "name": "chainR1",
+       "pivot": [
+        5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        -0.7853982,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          6
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          6,
+          0
+         ]
+        }
+       ]
+      },
+      {
+       "name": "chainR2",
+       "pivot": [
+        5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        0.7853982,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          6,
+          6
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          6,
+          0
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "hanging_sign_ceiling_middle": {
+   "source": "net.minecraft.client.renderer.blockentity.HangingSignRenderer#createHangingSignLayer(CEILING_MIDDLE)",
+   "texture_size": [
+    64,
+    32
+   ],
+   "parts": [
+    {
+     "name": "board",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        12
+       ],
+       "origin": [
+        -7,
+        0,
+        -1
+       ],
+       "size": [
+        14,
+        10,
+        2
+       ]
+      }
+     ]
+    },
+    {
+     "name": "vChains",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        14,
+        6
+       ],
+       "origin": [
+        -6,
+        -6,
+        0
+       ],
+       "size": [
+        12,
+        6,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "hanging_sign_wall": {
+   "source": "net.minecraft.client.renderer.blockentity.HangingSignRenderer#createHangingSignLayer(WALL)",
+   "texture_size": [
+    64,
+    32
+   ],
+   "parts": [
+    {
+     "name": "board",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        12
+       ],
+       "origin": [
+        -7,
+        0,
+        -1
+       ],
+       "size": [
+        14,
+        10,
+        2
+       ]
+      }
+     ]
+    },
+    {
+     "name": "plank",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -8,
+        -6,
+        -2
+       ],
+       "size": [
+        16,
+        2,
+        4
+       ]
+      }
+     ]
+    },
+    {
+     "name": "normalChains",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [],
+     "children": [
+      {
+       "name": "chainL1",
+       "pivot": [
+        -5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        -0.7853982,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          6
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          6,
+          0
+         ]
+        }
+       ]
+      },
+      {
+       "name": "chainL2",
+       "pivot": [
+        -5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        0.7853982,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          6,
+          6
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          6,
+          0
+         ]
+        }
+       ]
+      },
+      {
+       "name": "chainR1",
+       "pivot": [
+        5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        -0.7853982,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          6
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          6,
+          0
+         ]
+        }
+       ]
+      },
+      {
+       "name": "chainR2",
+       "pivot": [
+        5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        0.7853982,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          6,
+          6
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          6,
+          0
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "sign_standing": {
+   "source": "net.minecraft.client.renderer.blockentity.SignRenderer#createSignLayer(true)",
+   "texture_size": [
+    64,
+    32
+   ],
+   "parts": [
+    {
+     "name": "sign",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -12,
+        -14,
+        -1
+       ],
+       "size": [
+        24,
+        12,
+        2
+       ]
+      }
+     ]
+    },
+    {
+     "name": "stick",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        14
+       ],
+       "origin": [
+        -1,
+        -2,
+        -1
+       ],
+       "size": [
+        2,
+        14,
+        2
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "sign_wall": {
+   "source": "net.minecraft.client.renderer.blockentity.SignRenderer#createSignLayer(false)",
+   "texture_size": [
+    64,
+    32
+   ],
+   "parts": [
+    {
+     "name": "sign",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -12,
+        -14,
+        -1
+       ],
+       "size": [
+        24,
+        12,
+        2
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "skull_dragon": {
+   "source": "net.minecraft.client.model.object.skull.DragonHeadModel#createHeadLayer",
+   "texture_size": [
+    256,
+    256
+   ],
+   "parts": [
+    {
+     "name": "head",
+     "pivot": [
+      0,
+      -5.9899995,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        176,
+        44
+       ],
+       "origin": [
+        -6,
+        -1,
+        -24
+       ],
+       "size": [
+        12,
+        5,
+        16
+       ]
+      },
+      {
+       "uv": [
+        112,
+        30
+       ],
+       "origin": [
+        -8,
+        -8,
+        -10
+       ],
+       "size": [
+        16,
+        16,
+        16
+       ]
+      },
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -5,
+        -12,
+        -4
+       ],
+       "size": [
+        2,
+        4,
+        6
+       ],
+       "mirror": true
+      },
+      {
+       "uv": [
+        112,
+        0
+       ],
+       "origin": [
+        -5,
+        -3,
+        -22
+       ],
+       "size": [
+        2,
+        2,
+        4
+       ],
+       "mirror": true
+      },
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        3,
+        -12,
+        -4
+       ],
+       "size": [
+        2,
+        4,
+        6
+       ]
+      },
+      {
+       "uv": [
+        112,
+        0
+       ],
+       "origin": [
+        3,
+        -3,
+        -22
+       ],
+       "size": [
+        2,
+        2,
+        4
+       ]
+      }
+     ],
+     "scale": [
+      0.75,
+      0.75,
+      0.75
+     ],
+     "children": [
+      {
+       "name": "jaw",
+       "pivot": [
+        0,
+        4,
+        -8
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          176,
+          65
+         ],
+         "origin": [
+          -6,
+          0,
+          -16
+         ],
+         "size": [
+          12,
+          4,
+          16
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "skull_humanoid": {
+   "source": "net.minecraft.client.model.object.skull.SkullModel#createHumanoidHeadLayer",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "head",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -4,
+        -8,
+        -4
+       ],
+       "size": [
+        8,
+        8,
+        8
+       ]
+      }
+     ],
+     "children": [
+      {
+       "name": "hat",
+       "pivot": [
+        0,
+        0,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          32,
+          0
+         ],
+         "origin": [
+          -4,
+          -8,
+          -4
+         ],
+         "size": [
+          8,
+          8,
+          8
+         ],
+         "inflate": 0.25
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "skull_mob": {
+   "source": "net.minecraft.client.model.object.skull.SkullModel#createMobHeadLayer",
+   "texture_size": [
+    64,
+    32
+   ],
+   "parts": [
+    {
+     "name": "head",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -4,
+        -8,
+        -4
+       ],
+       "size": [
+        8,
+        8,
+        8
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "skull_piglin": {
+   "source": "net.minecraft.client.model.object.skull.PiglinHeadModel#createHeadModel (net.minecraft.client.model.monster.piglin.AbstractPiglinModel#addHead)",
+   "texture_size": [
+    64,
+    64
+   ],
+   "parts": [
+    {
+     "name": "head",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -5,
+        -8,
+        -4
+       ],
+       "size": [
+        10,
+        8,
+        8
+       ]
+      },
+      {
+       "uv": [
+        31,
+        1
+       ],
+       "origin": [
+        -2,
+        -4,
+        -5
+       ],
+       "size": [
+        4,
+        4,
+        1
+       ]
+      },
+      {
+       "uv": [
+        2,
+        4
+       ],
+       "origin": [
+        2,
+        -2,
+        -5
+       ],
+       "size": [
+        1,
+        2,
+        1
+       ]
+      },
+      {
+       "uv": [
+        2,
+        0
+       ],
+       "origin": [
+        -3,
+        -2,
+        -5
+       ],
+       "size": [
+        1,
+        2,
+        1
+       ]
+      }
+     ],
+     "children": [
+      {
+       "name": "left_ear",
+       "pivot": [
+        4.5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        -0.5235988
+       ],
+       "cubes": [
+        {
+         "uv": [
+          51,
+          6
+         ],
+         "origin": [
+          0,
+          0,
+          -2
+         ],
+         "size": [
+          1,
+          5,
+          4
+         ]
+        }
+       ]
+      },
+      {
+       "name": "right_ear",
+       "pivot": [
+        -4.5,
+        -6,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0.5235988
+       ],
+       "cubes": [
+        {
+         "uv": [
+          39,
+          6
+         ],
+         "origin": [
+          -1,
+          0,
+          -2
+         ],
+         "size": [
+          1,
+          5,
+          4
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

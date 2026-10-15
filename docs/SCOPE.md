@@ -11,7 +11,7 @@ a given camera.
 | G1 | Input is a world save directory and CLI args | `lumenwright render --world <dir> ...` reads `level.dat`, `region/*.mca`, `entities/*.mca`. It never writes to the save. |
 | G2 | Output is a rendered image | PNG, 8-bit sRGB. HQ mode can also write the linear HDR accumulation as `.pfm`. |
 | G3 | Camera is fully controlled by CLI | Position, yaw/pitch in Minecraft's own convention or `--look-at`, vertical FOV, resolution. If you give no camera, it uses the single-player position from `level.dat`. |
-| G4 | Render blocks **and** entities | Blocks use the vanilla blockstate and model JSON from the client jar. Entities use a data-driven cuboid model file shipped with Lumenwright, because vanilla hard-codes mob geometry in Java code (see §4). |
+| G4 | Render blocks **and** entities | Blocks use the vanilla blockstate and model JSON from the client jar. Entities, and block entities vanilla draws in Java code, use data-driven cuboid model files shipped with Lumenwright, because vanilla hard-codes their geometry in Java code (see §4). |
 | G5 | Vanilla textures acquired the way Chunky does it | Chunky does not ship Mojang assets. It reads them from the official client jar, which it downloads from Mojang's version manifest (`piston-meta.mojang.com`) into its own cache. Lumenwright does the same, with this resolution order: `--minecraft-jar` → a launcher's or the cache's jar for the world's version (`--mc-version` overrides it) → Chunky's `~/.chunky/resources/minecraft.jar` if its version matches → a SHA-1-verified download from Mojang. Extra `--resource-pack` zips or directories layer on top of it. |
 | G6 | **Quick mode**: looks like the vanilla Java client, no ray tracing | A triangle rasterizer with a z-buffer, like vanilla: per-face directional shading, smooth lighting with ambient occlusion from the save's sky and block light, biome tints, cutout and translucent layers, distance fog, and a sky gradient. |
 | G7 | **HQ mode**: looks like Chunky | A unidirectional path tracer over a sparse voxel grid: sun and sky lighting with next-event estimation for the sun, emissive blocks, multiple diffuse bounces, Fresnel water with refraction, stochastic translucency, ACES or gamma tonemapping, progressive sample accumulation. |
@@ -38,6 +38,14 @@ a given camera.
   `Rotation`. Variant textures come from the NBT `variant` field. Block displays, paintings
   and item frames (through their vanilla block models) are built in code. Players from `level.dat` are optional (`--players`). An unknown entity is
   drawn as a box the size of its hitbox (`--unknown-entities box|skip`).
+* **Block entities.** Signs and hanging signs with their text (vanilla bitmap font from the
+  jar, dye colour, glowing text and outline, `translate` keys from the `en_us` language
+  files of the jar and resource packs), bells, lectern and enchanting-table books,
+  chests (single, double, trapped, ender, copper), banners with pattern layers, decorated
+  pots with sherds, skulls and heads. Geometry is `assets/block_entity_models.json`;
+  placement and per-block data come from the chunk's `block_entities`. The quads join the
+  entity quads, so both modes and every backend draw the same geometry.
+  `--no-block-entities` leaves them out.
 * **Lighting controls.** `--time` (ticks), or `--sun-altitude` and `--sun-azimuth`.
   `--exposure`, `--tonemap`, `--spp`, `--max-bounces`, `--ssaa` (quick mode).
 * **Tooling.** An `info` subcommand prints the world version, spawn, player position, and
@@ -47,7 +55,8 @@ a given camera.
 
 | Deferred | Why | Path forward |
 |----------|-----|--------------|
-| Block entities drawn by Java code: chests, beds, signs, banners, skulls, shulker boxes | Like mobs, they have no JSON models | Same cuboid model file as entities (the format already supports them) |
+| Beds, shulker boxes, the conduit; open chest lids, ringing bells, italic or obfuscated sign text | Not needed yet | Add models to `block_entity_models.json` and a placement in `scene/block_entities.rs` |
+| Player head skins from the network | Renders read the save and local packs only | A skin given as a resource-pack `texture` in the profile is used |
 | Item rendering: dropped items, item frame contents, display entities | Needs the item model pipeline (`items/*.json`) | Reuse block baking for block items; extruded sprites for flat items |
 | Clouds, rain and snow, mob animation, armor, held items, player skins from the network | Not needed for the core scene | Incremental |
 | Biome blending, mipmaps, anisotropic filtering in quick mode | Cosmetic | Incremental |
@@ -74,7 +83,9 @@ a given camera.
    matches Minecraft's pixel look and keeps CPU and GPU output identical.
 4. **Entity models are data, not code.** Vanilla mob geometry lives in Java classes, so
    Lumenwright ships `entity_models.json` in vanilla's own part/cube/box-UV terms. New mobs
-   need no Rust changes.
+   need no Rust changes. Block entities drawn in Java code use the same format in
+   `block_entity_models.json`, each model citing its client class; the placement of each
+   kind (the renderer's pose transform) and its per-block data are code.
 
 ## 5. Acceptance criteria for v0.1
 
@@ -105,7 +116,7 @@ a given camera.
 Follow-ups, in priority order:
 1. Run the CUDA backend and the Vulkan/DX12 parity tests on a Linux or Windows machine with an NVIDIA GPU.
 2. Entity layers with a second texture: sheep wool, drowned outer layer, glowing eyes.
-3. Block-entity models: chests, beds, signs, banners, skulls.
+3. Remaining block-entity models: beds, shulker boxes, the conduit.
 4. Emitter next-event estimation, for faster convergence in caves and at night.
 5. Item rendering for item frames and item displays.
 6. A stress test on a dense, full-height natural world. Only a flat test world and generated fixtures were available locally.
