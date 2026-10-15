@@ -3,7 +3,7 @@ name = "lumenwright-ptx"
 description = "CUDA entry point: lumenwright-kernel compiled to PTX (nvptx64-nvidia-cuda)"
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-or-later"
 
 [lib]
 crate-type = ["cdylib"]

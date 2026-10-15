@@ -7,7 +7,7 @@ exclude = ["crates/lumenwright-ptx"]
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-or-later"
 
 [profile.release]
 debug = 1

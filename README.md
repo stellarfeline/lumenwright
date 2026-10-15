@@ -15,6 +15,10 @@ Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vul
 | ![quick](docs/renders/showcase-quick.png) | ![hq](docs/renders/showcase-hq.png) |
 | ![quick](docs/renders/island-quick.png) | ![hq](docs/renders/island-hq.png) |
 
+The images in `docs/renders/` are renders of original scenes drawn with Minecraft's textures,
+and are shared under [Mojang's usage guidelines](https://www.minecraft.net/en-us/usage-guidelines)
+for screenshots.
+
 The requirements, design decisions and what is in or out of scope are in
 [docs/SCOPE.md](docs/SCOPE.md).
 
@@ -170,3 +174,13 @@ See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
 * Smooth fluid surfaces, clouds, weather, biome blending and mipmaps are not implemented.
 * There is no next-event estimation for emitters, so night scenes need many samples.
 * The CUDA backend has not been run on NVIDIA hardware yet.
+
+## License
+
+Lumenwright is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3 of
+the License, or (at your option) any later version. See [LICENSE](LICENSE).
+
+NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+Minecraft is a trademark of Mojang AB. Lumenwright ships no Minecraft assets: textures and models
+are read at run time from the user's own copy of the game.
