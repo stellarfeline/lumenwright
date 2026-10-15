@@ -905,12 +905,13 @@ fn compound(kv: Vec<(&str, Value)>) -> Value {
     Value::Compound(kv.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
 }
 
-/// One of every block entity Lumenwright draws, on a platform in three rows facing
-/// south (+Z), with the walls and ceilings they hang from.
+/// One of every block entity Lumenwright draws, on a platform in four rows facing
+/// south (+Z), with the walls and ceilings they hang from. Rows rise towards the back:
+/// heads and the pot, chests and books, signs and bells, hanging signs and banners.
 pub fn block_entity_gallery() -> FixtureWorld {
     let mut w = FixtureWorld::new();
-    for x in -2..30 {
-        for z in -12..6 {
+    for x in -3..22 {
+        for z in -11..7 {
             w.set(x, 63, z, bs("stone"));
             w.set(x, 64, z, bs("smooth_stone"));
         }
@@ -918,16 +919,143 @@ pub fn block_entity_gallery() -> FixtureWorld {
     let wall = |w: &mut FixtureWorld, x: i32, y: i32, z: i32| w.set(x, y, z, bs("stone_bricks"));
     let y = 65;
 
-    // Row 1 (z = 2): signs.
-    let z = 2;
+    // Row 1 (z = 3): skulls and heads, and a decorated pot.
+    let z = 3;
+    let heads = [
+        "skeleton_skull",
+        "wither_skeleton_skull",
+        "zombie_head",
+        "creeper_head",
+        "player_head",
+        "dragon_head",
+        "piglin_head",
+    ];
+    for (i, h) in heads.iter().enumerate() {
+        let x = 1 + i as i32 * 2;
+        // Skull rotation 8 faces south (a skull's rotation 0 looks north).
+        w.set(
+            x,
+            y,
+            z,
+            props(h, &[("powered", "false"), ("rotation", "8")]),
+        );
+        let extra = if *h == "player_head" {
+            vec![(
+                "profile",
+                compound(vec![
+                    ("name", s("gallery")),
+                    ("id", Value::IntArray(IntArray::new(vec![1, 2, 3, 4]))),
+                ]),
+            )]
+        } else {
+            vec![]
+        };
+        w.block_entity([x, y, z], "skull", extra);
+    }
+    wall(&mut w, 18, y, z - 1);
+    wall(&mut w, 18, y + 1, z - 1);
     w.set(
-        0,
+        18,
+        y + 1,
+        z,
+        props(
+            "zombie_wall_head",
+            &[("facing", "south"), ("powered", "false")],
+        ),
+    );
+    w.block_entity([18, y + 1, z], "skull", vec![]);
+    // A pot's front faces away from its `facing` (the placer looks along it).
+    w.set(
+        15,
+        y,
+        z,
+        props(
+            "decorated_pot",
+            &[
+                ("cracked", "false"),
+                ("facing", "north"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.block_entity(
+        [15, y, z],
+        "decorated_pot",
+        vec![(
+            "sherds",
+            Value::List(vec![
+                s("minecraft:brick"),
+                s("minecraft:heart_pottery_sherd"),
+                s("minecraft:brick"),
+                s("minecraft:skull_pottery_sherd"),
+            ]),
+        )],
+    );
+
+    // Row 2 (z = 0): chests, a barrel (a JSON model), the lectern and enchanting table.
+    let z = 0;
+    let chest = |w: &mut FixtureWorld, x: i32, name: &str, ty: &str| {
+        w.set(
+            x,
+            y,
+            z,
+            props(
+                name,
+                &[("facing", "south"), ("type", ty), ("waterlogged", "false")],
+            ),
+        );
+        w.block_entity([x, y, z], name, vec![]);
+    };
+    chest(&mut w, 1, "chest", "single");
+    // A double chest facing south: the right half is west of the left half.
+    chest(&mut w, 3, "chest", "right");
+    chest(&mut w, 4, "chest", "left");
+    chest(&mut w, 6, "trapped_chest", "single");
+    w.set(
+        8,
+        y,
+        z,
+        props(
+            "ender_chest",
+            &[("facing", "south"), ("waterlogged", "false")],
+        ),
+    );
+    w.block_entity([8, y, z], "ender_chest", vec![]);
+    chest(&mut w, 10, "copper_chest", "single");
+    w.set(
+        12,
+        y,
+        z,
+        props("barrel", &[("facing", "up"), ("open", "false")]),
+    );
+    w.block_entity([12, y, z], "barrel", vec![]);
+    w.set(
+        14,
+        y,
+        z,
+        props(
+            "lectern",
+            &[
+                ("facing", "south"),
+                ("has_book", "true"),
+                ("powered", "false"),
+            ],
+        ),
+    );
+    w.block_entity([14, y, z], "lectern", vec![]);
+    w.set(16, y, z, bs("enchanting_table"));
+    w.block_entity([16, y, z], "enchanting_table", vec![]);
+
+    // Row 3 (z = -3): signs and bells.
+    let z = -3;
+    w.set(
+        1,
         y,
         z,
         props("oak_sign", &[("rotation", "0"), ("waterlogged", "false")]),
     );
     w.block_entity(
-        [0, y, z],
+        [1, y, z],
         "sign",
         vec![
             (
@@ -978,9 +1106,9 @@ pub fn block_entity_gallery() -> FixtureWorld {
             ),
         ],
     );
-    wall(&mut w, 6, y, z - 1);
+    wall(&mut w, 5, y, z - 1);
     w.set(
-        6,
+        5,
         y,
         z,
         props(
@@ -989,16 +1117,16 @@ pub fn block_entity_gallery() -> FixtureWorld {
         ),
     );
     w.block_entity(
-        [6, y, z],
+        [5, y, z],
         "sign",
         vec![(
             "front_text",
             text_side([s("glowing"), s("cyan text"), s(""), s("")], "cyan", true),
         )],
     );
-    wall(&mut w, 9, y, z - 1);
+    wall(&mut w, 7, y, z - 1);
     w.set(
-        9,
+        7,
         y,
         z,
         props(
@@ -1007,18 +1135,44 @@ pub fn block_entity_gallery() -> FixtureWorld {
         ),
     );
     w.block_entity(
-        [9, y, z],
+        [7, y, z],
         "sign",
         vec![(
             "front_text",
             text_side([s(""), s("glowing black"), s(""), s("")], "black", true),
         )],
     );
-    for dx in -1..=1 {
-        wall(&mut w, 12 + dx, y + 2, z);
-    }
+    let bell = |w: &mut FixtureWorld, x: i32, attachment: &str, facing: &str| {
+        w.set(
+            x,
+            y,
+            z,
+            props(
+                "bell",
+                &[
+                    ("attachment", attachment),
+                    ("facing", facing),
+                    ("powered", "false"),
+                ],
+            ),
+        );
+        w.block_entity([x, y, z], "bell", vec![]);
+    };
+    bell(&mut w, 9, "floor", "south");
+    wall(&mut w, 11, y + 1, z);
+    bell(&mut w, 11, "ceiling", "south");
+    // A single-wall bell's facing points at its wall.
+    wall(&mut w, 13, y, z - 1);
+    bell(&mut w, 13, "single_wall", "north");
+    wall(&mut w, 15, y, z);
+    wall(&mut w, 17, y, z);
+    bell(&mut w, 16, "double_wall", "east");
+
+    // Row 4 (z = -7): hanging signs and banners.
+    let z = -7;
+    wall(&mut w, 2, y + 2, z);
     w.set(
-        12,
+        2,
         y + 1,
         z,
         props(
@@ -1031,15 +1185,16 @@ pub fn block_entity_gallery() -> FixtureWorld {
         ),
     );
     w.block_entity(
-        [12, y + 1, z],
+        [2, y + 1, z],
         "hanging_sign",
         vec![(
             "front_text",
             text_side([s("hanging"), s("ceiling"), s(""), s("")], "black", false),
         )],
     );
+    wall(&mut w, 5, y + 2, z);
     w.set(
-        15,
+        5,
         y + 1,
         z,
         props(
@@ -1051,19 +1206,18 @@ pub fn block_entity_gallery() -> FixtureWorld {
             ],
         ),
     );
-    wall(&mut w, 15, y + 2, z);
     w.block_entity(
-        [15, y + 1, z],
+        [5, y + 1, z],
         "hanging_sign",
         vec![(
             "front_text",
             text_side([s("attached"), s(""), s(""), s("")], "black", false),
         )],
     );
-    wall(&mut w, 17, y + 1, z);
-    wall(&mut w, 19, y + 1, z);
+    wall(&mut w, 7, y + 1, z);
+    wall(&mut w, 9, y + 1, z);
     w.set(
-        18,
+        8,
         y + 1,
         z,
         props(
@@ -1072,187 +1226,17 @@ pub fn block_entity_gallery() -> FixtureWorld {
         ),
     );
     w.block_entity(
-        [18, y + 1, z],
+        [8, y + 1, z],
         "hanging_sign",
         vec![(
             "front_text",
             text_side([s("wall"), s("hanging"), s(""), s("")], "black", false),
         )],
     );
-
-    // Row 2 (z = -3): bells, books, chests, barrel.
-    let z = -3;
-    w.set(
-        0,
-        y,
-        z,
-        props(
-            "bell",
-            &[
-                ("attachment", "floor"),
-                ("facing", "south"),
-                ("powered", "false"),
-            ],
-        ),
-    );
-    w.block_entity([0, y, z], "bell", vec![]);
-    wall(&mut w, 2, y + 1, z);
-    w.set(
-        2,
-        y,
-        z,
-        props(
-            "bell",
-            &[
-                ("attachment", "ceiling"),
-                ("facing", "south"),
-                ("powered", "false"),
-            ],
-        ),
-    );
-    w.block_entity([2, y, z], "bell", vec![]);
-    wall(&mut w, 4, y, z - 1);
-    w.set(
-        4,
-        y,
-        z,
-        props(
-            "bell",
-            &[
-                ("attachment", "single_wall"),
-                ("facing", "north"),
-                ("powered", "false"),
-            ],
-        ),
-    );
-    w.block_entity([4, y, z], "bell", vec![]);
-    wall(&mut w, 6, y, z);
-    wall(&mut w, 8, y, z);
-    w.set(
-        7,
-        y,
-        z,
-        props(
-            "bell",
-            &[
-                ("attachment", "double_wall"),
-                ("facing", "east"),
-                ("powered", "false"),
-            ],
-        ),
-    );
-    w.block_entity([7, y, z], "bell", vec![]);
-    w.set(
-        10,
-        y,
-        z,
-        props(
-            "lectern",
-            &[
-                ("facing", "south"),
-                ("has_book", "true"),
-                ("powered", "false"),
-            ],
-        ),
-    );
-    w.block_entity([10, y, z], "lectern", vec![]);
-    w.set(12, y, z, bs("enchanting_table"));
-    w.block_entity([12, y, z], "enchanting_table", vec![]);
-    w.set(
-        14,
-        y,
-        z,
-        props(
-            "chest",
-            &[
-                ("facing", "south"),
-                ("type", "single"),
-                ("waterlogged", "false"),
-            ],
-        ),
-    );
-    w.block_entity([14, y, z], "chest", vec![]);
-    // A double chest facing south: the right half is west of the left half.
-    w.set(
-        16,
-        y,
-        z,
-        props(
-            "chest",
-            &[
-                ("facing", "south"),
-                ("type", "right"),
-                ("waterlogged", "false"),
-            ],
-        ),
-    );
-    w.set(
-        17,
-        y,
-        z,
-        props(
-            "chest",
-            &[
-                ("facing", "south"),
-                ("type", "left"),
-                ("waterlogged", "false"),
-            ],
-        ),
-    );
-    w.block_entity([16, y, z], "chest", vec![]);
-    w.block_entity([17, y, z], "chest", vec![]);
-    w.set(
-        19,
-        y,
-        z,
-        props(
-            "trapped_chest",
-            &[
-                ("facing", "south"),
-                ("type", "single"),
-                ("waterlogged", "false"),
-            ],
-        ),
-    );
-    w.block_entity([19, y, z], "trapped_chest", vec![]);
-    w.set(
-        21,
-        y,
-        z,
-        props(
-            "ender_chest",
-            &[("facing", "south"), ("waterlogged", "false")],
-        ),
-    );
-    w.block_entity([21, y, z], "ender_chest", vec![]);
-    w.set(
-        23,
-        y,
-        z,
-        props("barrel", &[("facing", "up"), ("open", "false")]),
-    );
-    w.block_entity([23, y, z], "barrel", vec![]);
-    w.set(
-        25,
-        y,
-        z,
-        props(
-            "copper_chest",
-            &[
-                ("facing", "south"),
-                ("type", "single"),
-                ("waterlogged", "false"),
-            ],
-        ),
-    );
-    w.block_entity([25, y, z], "copper_chest", vec![]);
-
-    // Row 3 (z = -8): banners, pot, skulls and heads.
-    let z = -8;
     let layer = |p: &str, c: &str| compound(vec![("pattern", s(p)), ("color", s(c))]);
-    w.set(0, y, z, props("white_banner", &[("rotation", "0")]));
+    w.set(12, y, z, props("white_banner", &[("rotation", "0")]));
     w.block_entity(
-        [0, y, z],
+        [12, y, z],
         "banner",
         vec![(
             "patterns",
@@ -1264,16 +1248,16 @@ pub fn block_entity_gallery() -> FixtureWorld {
         )],
     );
     for dy in 0..3 {
-        wall(&mut w, 3, y + dy, z - 1);
+        wall(&mut w, 15, y + dy, z - 1);
     }
     w.set(
-        3,
+        15,
         y + 1,
         z,
         props("purple_wall_banner", &[("facing", "south")]),
     );
     w.block_entity(
-        [3, y + 1, z],
+        [15, y + 1, z],
         "banner",
         vec![(
             "patterns",
@@ -1283,78 +1267,9 @@ pub fn block_entity_gallery() -> FixtureWorld {
             ]),
         )],
     );
-    // A pot's front faces away from its `facing` (the placer looks along it).
-    w.set(
-        6,
-        y,
-        z,
-        props(
-            "decorated_pot",
-            &[
-                ("cracked", "false"),
-                ("facing", "north"),
-                ("waterlogged", "false"),
-            ],
-        ),
-    );
-    w.block_entity(
-        [6, y, z],
-        "decorated_pot",
-        vec![(
-            "sherds",
-            Value::List(vec![
-                s("minecraft:brick"),
-                s("minecraft:heart_pottery_sherd"),
-                s("minecraft:brick"),
-                s("minecraft:skull_pottery_sherd"),
-            ]),
-        )],
-    );
-    let heads = [
-        "skeleton_skull",
-        "wither_skeleton_skull",
-        "zombie_head",
-        "creeper_head",
-        "player_head",
-        "dragon_head",
-        "piglin_head",
-    ];
-    for (i, h) in heads.iter().enumerate() {
-        let x = 8 + i as i32 * 2;
-        // Skull rotation 8 faces south (a skull's rotation 0 looks north).
-        w.set(
-            x,
-            y,
-            z,
-            props(h, &[("powered", "false"), ("rotation", "8")]),
-        );
-        let extra = if *h == "player_head" {
-            vec![(
-                "profile",
-                compound(vec![
-                    ("name", s("lineup")),
-                    ("id", Value::IntArray(IntArray::new(vec![1, 2, 3, 4]))),
-                ]),
-            )]
-        } else {
-            vec![]
-        };
-        w.block_entity([x, y, z], "skull", extra);
-    }
-    wall(&mut w, 23, y + 1, z - 1);
-    w.set(
-        23,
-        y + 1,
-        z,
-        props(
-            "zombie_wall_head",
-            &[("facing", "south"), ("powered", "false")],
-        ),
-    );
-    w.block_entity([23, y + 1, z], "skull", vec![]);
 
-    w.spawn = [12, 66, 8];
-    w.player = Some(([13.5, 72.0, 12.0], 180.0, 25.0));
+    w.spawn = [9, 66, 8];
+    w.player = Some(([9.0, 70.0, 10.0], 180.0, 25.0));
     w
 }
 

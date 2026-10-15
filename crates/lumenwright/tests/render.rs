@@ -84,9 +84,9 @@ fn gallery() -> &'static Path {
 /// Looks north over the three rows of the block-entity gallery.
 const GALLERY_VIEW: [&str; 6] = [
     "--camera",
-    "12.5,69.5,8.5",
+    "9.5,70.5,11.5",
     "--look-at",
-    "12.5,65.5,-3",
+    "9.5,65.4,-2",
     "--fov",
     "60",
 ];
@@ -519,9 +519,9 @@ fn sign_text_reads_in_both_modes() {
             "--sun-altitude",
             "45",
             "--camera",
-            "0.5,66.1,3.6",
+            "1.5,66.1,-1.4",
             "--look-at",
-            "0.5,65.95,2.5",
+            "1.5,65.95,-2.5",
             "--fov",
             "50",
         ];
