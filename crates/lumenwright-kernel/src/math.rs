@@ -1,0 +1,213 @@
+//! Minimal vector math that works in `no_std` (nvptx) and std (host) builds.
+
+use core::ops::{Add, Div, Mul, Neg, Sub};
+
+#[inline(always)]
+pub fn sqrt(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        x.sqrt()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        libm::sqrtf(x)
+    }
+}
+
+#[inline(always)]
+pub fn floor(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        x.floor()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        libm::floorf(x)
+    }
+}
+
+#[inline(always)]
+pub fn sin(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        x.sin()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        libm::sinf(x)
+    }
+}
+
+#[inline(always)]
+pub fn cos(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        x.cos()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        libm::cosf(x)
+    }
+}
+
+#[inline(always)]
+pub fn exp(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        x.exp()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        libm::expf(x)
+    }
+}
+
+#[inline(always)]
+pub fn abs(x: f32) -> f32 {
+    if x < 0.0 { -x } else { x }
+}
+
+#[inline(always)]
+pub fn min(a: f32, b: f32) -> f32 {
+    if a < b { a } else { b }
+}
+
+#[inline(always)]
+pub fn max(a: f32, b: f32) -> f32 {
+    if a > b { a } else { b }
+}
+
+#[inline(always)]
+pub fn clamp(x: f32, lo: f32, hi: f32) -> f32 {
+    min(max(x, lo), hi)
+}
+
+/// Cheap polynomial sRGB -> linear conversion. The WGSL kernel uses the same
+/// polynomial so all backends agree.
+#[inline(always)]
+pub fn srgb_to_linear(c: f32) -> f32 {
+    c * (c * (c * 0.305_306_02 + 0.682_171_1) + 0.012_522_878)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[repr(C)]
+pub struct V3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[inline(always)]
+pub const fn v3(x: f32, y: f32, z: f32) -> V3 {
+    V3 { x, y, z }
+}
+
+// `mul` (component-wise) mirrors WGSL's `vec3 * vec3`; `Mul<f32>` is the scalar form.
+#[allow(clippy::should_implement_trait)]
+impl V3 {
+    pub const ZERO: V3 = v3(0.0, 0.0, 0.0);
+    pub const ONE: V3 = v3(1.0, 1.0, 1.0);
+
+    #[inline(always)]
+    pub fn from4(a: [f32; 4]) -> V3 {
+        v3(a[0], a[1], a[2])
+    }
+    #[inline(always)]
+    pub fn splat(v: f32) -> V3 {
+        v3(v, v, v)
+    }
+    #[inline(always)]
+    pub fn dot(self, o: V3) -> f32 {
+        self.x * o.x + self.y * o.y + self.z * o.z
+    }
+    #[inline(always)]
+    pub fn cross(self, o: V3) -> V3 {
+        v3(
+            self.y * o.z - self.z * o.y,
+            self.z * o.x - self.x * o.z,
+            self.x * o.y - self.y * o.x,
+        )
+    }
+    #[inline(always)]
+    pub fn length(self) -> f32 {
+        sqrt(self.dot(self))
+    }
+    #[inline(always)]
+    pub fn normalize(self) -> V3 {
+        let l = self.length();
+        if l > 0.0 { self * (1.0 / l) } else { self }
+    }
+    #[inline(always)]
+    pub fn mul(self, o: V3) -> V3 {
+        v3(self.x * o.x, self.y * o.y, self.z * o.z)
+    }
+    #[inline(always)]
+    pub fn max_elem(self) -> f32 {
+        max(self.x, max(self.y, self.z))
+    }
+    #[inline(always)]
+    pub fn get(self, i: usize) -> f32 {
+        match i {
+            0 => self.x,
+            1 => self.y,
+            _ => self.z,
+        }
+    }
+    /// Component-wise `exp(-self * t)` (Beer-Lambert transmittance).
+    #[inline(always)]
+    pub fn transmittance(self, t: f32) -> V3 {
+        v3(exp(-self.x * t), exp(-self.y * t), exp(-self.z * t))
+    }
+    #[inline(always)]
+    pub fn lerp(self, o: V3, t: f32) -> V3 {
+        self + (o - self) * t
+    }
+}
+
+impl Add for V3 {
+    type Output = V3;
+    #[inline(always)]
+    fn add(self, o: V3) -> V3 {
+        v3(self.x + o.x, self.y + o.y, self.z + o.z)
+    }
+}
+impl Sub for V3 {
+    type Output = V3;
+    #[inline(always)]
+    fn sub(self, o: V3) -> V3 {
+        v3(self.x - o.x, self.y - o.y, self.z - o.z)
+    }
+}
+impl Mul<f32> for V3 {
+    type Output = V3;
+    #[inline(always)]
+    fn mul(self, s: f32) -> V3 {
+        v3(self.x * s, self.y * s, self.z * s)
+    }
+}
+impl Div<f32> for V3 {
+    type Output = V3;
+    #[inline(always)]
+    fn div(self, s: f32) -> V3 {
+        self * (1.0 / s)
+    }
+}
+impl Neg for V3 {
+    type Output = V3;
+    #[inline(always)]
+    fn neg(self) -> V3 {
+        v3(-self.x, -self.y, -self.z)
+    }
+}
+
+/// Builds an orthonormal basis around `n` (Duff et al. 2017).
+#[inline(always)]
+pub fn onb(n: V3) -> (V3, V3) {
+    let sign = if n.z >= 0.0 { 1.0 } else { -1.0 };
+    let a = -1.0 / (sign + n.z);
+    let b = n.x * n.y * a;
+    (
+        v3(1.0 + sign * n.x * n.x * a, sign * b, -sign * n.x),
+        v3(b, sign + n.y * n.y * a, -n.y),
+    )
+}

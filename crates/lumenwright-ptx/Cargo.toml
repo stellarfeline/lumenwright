@@ -1,0 +1,21 @@
+[package]
+name = "lumenwright-ptx"
+description = "CUDA entry point: lumenwright-kernel compiled to PTX (nvptx64-nvidia-cuda)"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+lumenwright-kernel = { path = "../lumenwright-kernel" }
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
+debug = false
+
+[profile.dev]
+panic = "abort"

@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+members = ["crates/lumenwright", "crates/lumenwright-kernel"]
+# The PTX crate only builds for nvptx64-nvidia-cuda; see scripts/build-ptx.sh.
+exclude = ["crates/lumenwright-ptx"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+
+[profile.release]
+debug = 1
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

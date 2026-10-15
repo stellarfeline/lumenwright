@@ -1,0 +1,6 @@
+[build]
+target = "nvptx64-nvidia-cuda"
+
+[target.nvptx64-nvidia-cuda]
+# sm_70 (Volta) and newer; PTX is JIT-compiled for the actual GPU by the driver.
+rustflags = ["-C", "target-cpu=sm_70"]

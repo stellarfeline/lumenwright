@@ -1,0 +1,17 @@
+[package]
+name = "lumenwright-kernel"
+description = "no_std path-tracing kernel shared by the CPU and CUDA backends"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[features]
+default = ["libm"]
+# Use std's hardware float intrinsics on the host (the CPU backend enables this).
+std = []
+# Pure-Rust float math for no_std targets (nvptx64-nvidia-cuda).
+libm = ["dep:libm"]
+
+[dependencies]
+libm = { version = "0.2", optional = true }
+bytemuck = { version = "1.25", default-features = false, features = ["derive"] }
