@@ -129,6 +129,7 @@ impl QuickSky {
 }
 
 /// Physically-motivated sky and sun parameters for HQ mode (linear RGB).
+#[derive(Clone, Copy, Debug)]
 pub struct HqSky {
     pub sun_dir: Vec3,
     pub sun_color: Vec3,

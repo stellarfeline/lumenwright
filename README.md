@@ -1,7 +1,9 @@
 # Lumenwright
 
 An offline, headless renderer for Minecraft Java Edition worlds. You give it a world save and
-a camera, and it writes a PNG of the blocks and entities. It has two looks:
+a camera, and it draws the blocks and entities: the `lumenwright` command writes a PNG, and
+the `lumenwright` library returns the pixels to your program (see [Library](#library)). It has
+two looks:
 
 * **quick**: rasterized to look like the vanilla Java client, with no ray tracing.
 * **hq**: a Chunky-style path tracer with sun and sky light, soft shadows, emissive blocks
@@ -64,7 +66,8 @@ resolved in this order:
 3. Chunky's `~/.chunky/resources/minecraft.jar`, if its version matches
 4. A download from Mojang's version manifest (`piston-meta.mojang.com`), SHA-1 verified, into
    the cache (`~/Library/Caches/lumenwright` or `$XDG_CACHE_HOME/lumenwright`). `--offline`
-   disables this; `lumenwright assets fetch <version|latest>` downloads ahead of time.
+   disables this; `lumenwright assets fetch <version|latest>` downloads ahead of time. The
+   downloader is the `download` cargo feature, on by default.
 
 `--resource-pack` (zip or directory, repeatable) layers packs on top of the vanilla assets.
 
@@ -93,6 +96,54 @@ resolved in this order:
 | `--no-entities`, `--players`, `--unknown-entities box\|skip` | | entity options |
 | `--no-block-entities` | | leave out block entities drawn by Java code |
 
+## Library
+
+`lumenwright::render(&Request)` draws one frame and returns a `Rendered`. The request names
+every input: the world (a save directory, or a `World` you opened) and the inclusive chunk
+rectangle to load, the client jar and resource packs as paths, the camera, the mode, the
+backend, the size, the quick and HQ options, which entities to draw, and the sky. The sky is
+either vanilla's at a time of day (`Sky::Vanilla`) or the colours and sun you state
+(`Sky::Stated`).
+
+```rust
+use std::path::Path;
+use lumenwright::glam::DVec3;
+use lumenwright::render::{BackendKind, Mode};
+use lumenwright::scene::camera::Camera;
+use lumenwright::world::Dimension;
+use lumenwright::*;
+
+let camera = Camera { pos: DVec3::new(18.5, 73.6, 22.5), yaw: 150.0, pitch: 18.0, fov_y: 70.0 };
+let frame = lumenwright::render(&Request {
+    world: WorldSource::Dir { path: Path::new("saves/MyWorld"), dimension: Dimension::Overworld },
+    chunks: ChunkRect::around(camera.pos, 8),
+    jar: Path::new("minecraft-1.21.11-client.jar"),
+    resource_packs: &[],
+    camera,
+    mode: Mode::Quick,
+    backend: BackendKind::Auto,
+    width: 1280,
+    height: 720,
+    entities: EntityPolicy::default(),
+    quick: QuickOptions::default(),
+    hq: HqOptions::default(),
+    sky: Sky::default(),
+})?;
+// frame.rgba: RGBA8, top row first. frame.backend, frame.backend_fallback,
+// frame.timings, frame.entity_stats, frame.block_entity_stats: what was drawn and how.
+```
+
+`render` does not look for a jar, use the network, write files or print. When it refuses a
+request before drawing (a missing jar, an empty image, no chunks in the rectangle), the
+error holds a `RequestError` you can match with `err.downcast_ref::<RequestError>()`. On the
+CPU backend the same request gives the same bytes whatever the thread count.
+
+To embed Lumenwright without the downloader, depend on it with
+`default-features = false, features = ["gpu"]`. That build compiles no C code, so it
+cross-checks for Linux, macOS and Windows targets without a cross C compiler. The
+`lumenwright render` command calls the same function, so the CLI and the library draw the
+same pixels.
+
 ## Architecture
 
 ```
@@ -100,6 +151,8 @@ world/      Anvil regions, paletted chunk sections, light, biomes, entities, lev
 assets/     client-jar resolution, blockstate variants/multipart, model baking, atlas, biome tints
 scene/      material-resolved quads; quick mesh (culling, smooth light + AO);
             HQ brick grid (16³ bricks, u16 model instances, entity overlay cells); entity models
+request.rs  the library entry: Request -> render() -> Rendered
+job.rs      the CLI's render: flags -> Request, jar resolution, PNG/PFM output
 render/     Backend trait
   cpu/        tile-binned software rasterizer + lumenwright-kernel on rayon
   gpu/        wgpu: quick.wgsl (raster pipeline), pathtrace.wgsl (compute port of the kernel)
@@ -178,7 +231,9 @@ cargo test --workspace --release
 * **Integration tests** write fixture worlds and render them end to end. They check terrain
   colours seen from above, entity coverage, block entities in both modes, sign text, HQ
   sanity, CPU-vs-GPU parity in both modes (showcase and block-entity gallery), determinism,
-  and the CLI. Tests that need the client jar or a GPU skip with a message when
+  and the CLI. The library tests check that the CLI's PNG and the library's pixels are
+  byte-equal in both modes, that a missing jar is refused by name, that a stated sky is drawn
+  as given, and that CPU pixels are bit-identical on 1, 3 and 8 threads. Tests that need the client jar or a GPU skip with a message when
   it is missing. `LUMENWRIGHT_MC_JAR` points the tests at a jar.
 
 ## Measured on an M2 Pro (10 CPU cores, 16 GPU cores)

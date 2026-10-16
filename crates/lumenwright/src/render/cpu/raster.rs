@@ -148,6 +148,8 @@ fn pack(c: Vec3) -> u32 {
     c.x | (c.y << 8) | (c.z << 16) | 0xFF00_0000
 }
 
+// The open depth comparisons reject a NaN; `RangeInclusive::contains` would not.
+#[allow(clippy::manual_range_contains)]
 pub fn rasterize(f: &QuickFrame) -> Vec<u32> {
     let (w, h) = (f.width as f32, f.height as f32);
     let mesh = f.mesh;

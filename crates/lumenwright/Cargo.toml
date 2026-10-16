@@ -22,14 +22,19 @@ pollster = { version = "1.0.1", optional = true }
 rayon = "1.12.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-sha1_smol = "1.0.1"
-ureq = "3.4.2"
+sha1_smol = { version = "1.0.1", optional = true }
+ureq = { version = "3.4.2", optional = true }
 wgpu = { version = "30.0.1", optional = true }
-zip = "9.0.3"
+# Jars and resource packs are deflate-only; the decoder is flate2's, the one the
+# region reader already uses, so no other compression method is linked.
+zip = { version = "9.0.3", default-features = false, features = ["deflate-flate2"] }
 
 [features]
-default = ["gpu"]
+default = ["gpu", "download"]
 # Metal / Vulkan / DX12 backends via wgpu.
 gpu = ["dep:wgpu", "dep:pollster"]
 # CUDA backend: runs the lumenwright-kernel crate compiled to PTX (scripts/build-ptx.sh).
 cuda = ["dep:cudarc"]
+# The client-jar downloader and its TLS stack (the CLI's `assets fetch` and its
+# resolution fallback). A library consumer that hands the jar in turns it off.
+download = ["dep:ureq", "dep:sha1_smol"]

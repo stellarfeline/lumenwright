@@ -23,6 +23,8 @@ const MAX_STEPS: u32 = 65536;
 
 /// Intersects a ray with a (two-sided) quad. Returns `(t, s, tt)`.
 #[inline(always)]
+// The open comparisons reject a NaN coordinate; `RangeInclusive::contains` would not.
+#[allow(clippy::manual_range_contains)]
 pub fn intersect_quad(q: &GpuQuad, o: V3, d: V3, tmin: f32, tmax: f32) -> Option<(f32, f32, f32)> {
     let eu = q.edge_u();
     let ev = q.edge_v();
