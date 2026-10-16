@@ -1,6 +1,6 @@
 [package]
 name = "lumenwright-cli"
-description = "The lumenwright command: renders Minecraft Java Edition worlds to PNG"
+description = "Offline headless Minecraft world renderer"
 edition.workspace = true
 version.workspace = true
 license.workspace = true

@@ -1,8 +1,9 @@
 # Lumenwright — requirements scope (prototype v0.1)
 
 Lumenwright is an offline, headless renderer: it takes a Minecraft Java Edition world
-save and a camera and draws the scene, blocks and entities. The CLI writes the image; the
-library's `render(&Request)` returns it to the calling program.
+save and a camera and draws the scene, blocks and entities. It is two crates: the
+`lumenwright` library, whose `render(&Request)` returns the image to the calling program,
+and `lumenwright-cli`, the `lumenwright` command, which writes it.
 
 ## 1. Goals
 
@@ -12,7 +13,7 @@ library's `render(&Request)` returns it to the calling program.
 | G2 | Output is a rendered image | PNG, 8-bit sRGB. HQ mode can also write the linear HDR accumulation as `.pfm`. |
 | G3 | Camera is fully controlled by CLI | Position, yaw/pitch in Minecraft's own convention or `--look-at`, vertical FOV, resolution. If you give no camera, it uses the single-player position from `level.dat`. |
 | G4 | Render blocks **and** entities | Blocks use the vanilla blockstate and model JSON from the client jar. Entities, and block entities vanilla draws in Java code, use data-driven cuboid model files shipped with Lumenwright, because vanilla hard-codes their geometry in Java code (see §4). |
-| G5 | Vanilla textures acquired the way Chunky does it | Chunky does not ship Mojang assets. It reads them from the official client jar, which it downloads from Mojang's version manifest (`piston-meta.mojang.com`) into its own cache. Lumenwright does the same, with this resolution order: `--minecraft-jar` → a launcher's or the cache's jar for the world's version (`--mc-version` overrides it) → Chunky's `~/.chunky/resources/minecraft.jar` if its version matches → a SHA-1-verified download from Mojang. Extra `--resource-pack` zips or directories layer on top of it. This resolution is the CLI's; the library takes the jar as a path. The downloader is the `download` cargo feature, on by default. |
+| G5 | Vanilla textures acquired the way Chunky does it | Chunky does not ship Mojang assets. It reads them from the official client jar, which it downloads from Mojang's version manifest (`piston-meta.mojang.com`) into its own cache. Lumenwright does the same, with this resolution order: `--minecraft-jar` → a launcher's or the cache's jar for the world's version (`--mc-version` overrides it) → Chunky's `~/.chunky/resources/minecraft.jar` if its version matches → a SHA-1-verified download from Mojang. Extra `--resource-pack` zips or directories layer on top of it. This resolution and the downloader are `lumenwright-cli`'s; the library takes the jar as a path. |
 | G6 | **Quick mode**: looks like the vanilla Java client, no ray tracing | A triangle rasterizer with a z-buffer, like vanilla: per-face directional shading, smooth lighting with ambient occlusion from the save's sky and block light, biome tints, cutout and translucent layers, distance fog, and a sky gradient. |
 | G7 | **HQ mode**: looks like Chunky | A unidirectional path tracer over a sparse voxel grid: sun and sky lighting with next-event estimation for the sun, emissive blocks, multiple diffuse bounces, Fresnel water with refraction, stochastic translucency, ACES or gamma tonemapping, progressive sample accumulation. |
 | G8 | Multiple native rendering backends | One `Backend` trait. **cpu**: Rust and rayon on all cores. **metal / vulkan / dx12**: native GPU APIs through `wgpu`, with WGSL shaders that naga translates to MSL, SPIR-V or HLSL. **cuda**: the same Rust path-tracing kernel crate that the CPU backend runs, compiled to PTX (`nvptx64-nvidia-cuda`) and launched through the CUDA driver API (`cudarc`, cargo feature `cuda`). |
@@ -50,8 +51,7 @@ library's `render(&Request)` returns it to the calling program.
 * **Lighting controls.** `--time` (ticks), or `--sun-altitude` and `--sun-azimuth`.
   `--exposure`, `--tonemap`, `--spp`, `--max-bounces`, `--ssaa` (quick mode).
 * **Tooling.** An `info` subcommand prints the world version, spawn, player position, and
-  block and entity statistics. An `assets` subcommand fetches the client jar (with the
-  `download` feature).
+  block and entity statistics. An `assets` subcommand fetches the client jar.
 
 ## 3. Out of scope (explicitly deferred)
 
@@ -90,16 +90,20 @@ library's `render(&Request)` returns it to the calling program.
    kind (the renderer's pose transform) and its per-block data are code.
 
 5. **One render path.** `render(&Request)` is the pipeline. The CLI's `render` subcommand
-   (`job::run`) resolves the jar, derives the camera and a square of chunks around it from
+   (`lumenwright-cli`'s `job::run`) resolves the jar, derives the camera and a square of chunks around it from
    the flags, calls `render`, and writes the PNG and PFM. Nothing draws a frame any other
    way, so the CLI and an embedding program get the same pixels for the same inputs.
-6. **Dependencies for an embedding crate.** `zip` is built without default features and
-   reads deflate only, through the `flate2` decoder the region reader uses. The jar
-   downloader (`ureq`, its TLS stack, the SHA-1 check) is the `download` feature. With
-   `default-features = false, features = ["gpu"]` the normal dependency tree contains no C
-   build script and no `*-sys` crate other than platform bindings (`wayland-sys`,
-   `windows-sys`, `renderdoc-sys`, and for Android and the web `ndk-sys`, `jni-sys`,
-   `js-sys`, `web-sys`).
+6. **The library is a library only.** The command line is its own crate,
+   `lumenwright-cli`, which builds the `lumenwright` binary and calls only the library's
+   public API. It owns argument parsing (`clap`), logging set-up (`env_logger`), the jar
+   resolver and downloader (`ureq`, its TLS stack, the SHA-1 check), the PNG and PFM
+   writers, and the fixture worlds. Its flag values mirror the library's `Mode`,
+   `BackendKind`, `Tonemap` and `UnknownEntities` with exhaustive conversions both ways.
+   The library's `zip` is built without default features and reads deflate only, through
+   the `flate2` decoder the region reader uses. With the default features (`gpu`) the
+   library's normal dependency tree contains no C build script and no `*-sys` crate other
+   than platform bindings (`wayland-sys`, `windows-sys`, `renderdoc-sys`, and for Android
+   and the web `ndk-sys`, `jni-sys`, `js-sys`, `web-sys`).
 7. **CPU determinism across thread counts.** On the CPU backend the pixels and the HQ
    radiance depend on the request alone, not on the rayon thread count. The library tests
    render one request in both modes on 1, 3 and 8 threads and compare the bits.
@@ -115,7 +119,7 @@ library's `render(&Request)` returns it to the calling program.
   mode at 1280×720 and 256 spp on Metal finishes in minutes, not hours.
 * The CPU and Metal backends agree: quick mode differs in under 1% of pixels, and HQ
   mean luminance differs by under 3%.
-* `--features cuda` builds, and the PTX kernel compiles.
+* `-p lumenwright-cli --features cuda` builds, and the PTX kernel compiles.
 * The CLI's PNG and `render`'s pixels for the same fixture and view are byte-equal in both
   modes. A request whose jar path does not exist fails with `RequestError::JarNotFound` before
   anything is read.
@@ -130,15 +134,15 @@ library's `render(&Request)` returns it to the calling program.
 
 | Criterion | Result |
 |-----------|--------|
-| Tests | `cargo test --workspace`: 43 unit, 8 kernel and 13 integration tests (9 render, 4 library) pass. The integration tests ran for real (jar and Metal adapter present). |
+| Tests | `cargo test --workspace`: 42 library unit, 2 CLI unit, 8 kernel and 13 integration tests (9 render, 4 library) pass. The integration tests ran for real (jar and Metal adapter present). |
 | One render path | The CLI's PNG equals the library's pixels in both modes on the block-entity gallery (integration test) and on the showcase at 1280×720 quick and 640×360 HQ, CPU and Metal. |
-| Embedding build | `--no-default-features --features gpu`: 117 packages in the normal tree on macOS, 119 on Linux, 133 on Windows (170, 172 and 186 with `zip`'s defaults and the downloader); `cargo check` passes for the five targets above. |
+| Embedding build | The library's default features (`gpu`): 96 packages in the normal tree on macOS, 98 on Linux gnu, 109 on Windows MSVC; `cargo check` passes for the five targets above. |
 | Real save, both modes, CPU + Metal | `datapack_test` (1.21.11) renders in all four combinations. Blocks, water, mannequins, an enderman, 68 rotated and scaled block displays, and glow squids (drawn as fallback boxes) all appear. |
 | Quick mode performance | 33×33 chunks at 1920×1080: 0.33 s end to end on Metal (24 ms raster) and 0.29 s on CPU (65 ms raster). |
 | HQ mode performance | 1280×720 at 256 spp: 21 s on Metal for 33×33 chunks, 11.8 s for the showcase. The CPU is about 6× slower. |
 | Backend parity | Quick mode, CPU vs Metal: 0.075% of pixels differ by more than 8/255. HQ at 32 spp: 0.03% of pixels differ, because both backends use the same RNG streams. |
 | Determinism | Identical inputs give bit-identical images on CPU and Metal, in both modes. |
-| CUDA | `scripts/build-ptx.sh` compiles the shared kernel to PTX: ISA 7.0, sm_70, no unresolved externs. `--features cuda` builds, and without a driver the backend reports `libcuda not found` cleanly. **Not executed:** there is no NVIDIA GPU on the development machine. |
+| CUDA | `scripts/build-ptx.sh` compiles the shared kernel to PTX: ISA 7.0, sm_70, no unresolved externs. `-p lumenwright-cli --features cuda` builds, and without a driver the backend reports `libcuda not found` cleanly. **Not executed:** there is no NVIDIA GPU on the development machine. |
 | Vulkan / DX12 | Same wgpu and WGSL code as Metal. Not exercised on macOS: wgpu builds neither backend there by default. |
 
 Follow-ups, in priority order:
