@@ -2,7 +2,7 @@
 //!
 //! # Embedding
 //!
-//! [`render`] draws one frame from a [`Request`] and returns a [`Rendered`]:
+//! [`render()`] draws one frame from a [`Request`] and returns a [`Rendered`]:
 //! the RGBA8 pixels, the HQ radiance, the backend that drew it (and why, when
 //! `auto` fell back to the CPU), the per-stage timings and the per-kind entity
 //! and block-entity counts. The request carries every input: the world (a
@@ -28,7 +28,7 @@
 //! [`world`] (read the save) → [`assets`] (vanilla client jar) →
 //! [`scene`] (baked quads, quick-mode mesh, HQ voxel grid) → [`mod@render`]
 //! (CPU / Metal / Vulkan / DX12 / CUDA backends) → pixels. [`job`] is the
-//! CLI's `render` subcommand over [`render`]: it resolves the jar, derives the
+//! CLI's `render` subcommand over [`render()`]: it resolves the jar, derives the
 //! camera and chunk square from the flags, and writes the PNG.
 
 pub use glam;

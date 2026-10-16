@@ -1,6 +1,6 @@
 //! The library entry point: one frame from an explicit [`Request`].
 //!
-//! [`render`] takes every input from the request. It resolves no client jar,
+//! [`render()`] takes every input from the request. It resolves no client jar,
 //! performs no network access, writes no file and prints nothing (it emits
 //! `log` records, which reach no output unless the caller installs a logger).
 //! The CLI's `render` subcommand ([`crate::job::run`]) is a caller of it.
@@ -229,7 +229,7 @@ pub struct Rendered {
     pub block_entity_stats: BlockEntityStats,
 }
 
-/// A request [`render`] refuses before drawing. Returned inside the
+/// A request [`render()`] refuses before drawing. Returned inside the
 /// `anyhow::Error`; `err.downcast_ref::<RequestError>()` names it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RequestError {

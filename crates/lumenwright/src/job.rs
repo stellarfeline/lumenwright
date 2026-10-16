@@ -1,4 +1,4 @@
-//! The CLI's render job: flags -> [`Request`] -> [`crate::render`] -> image file.
+//! The CLI's render job: flags -> [`Request`] -> [`crate::render()`] -> image file.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -177,7 +177,7 @@ fn camera_from_args(a: &RenderArgs, world: &World) -> Result<Camera> {
 }
 
 /// The CLI's `render`: resolves the jar, derives the camera and the chunk
-/// square from the flags, calls [`crate::render`], and writes the image.
+/// square from the flags, calls [`crate::render()`], and writes the image.
 pub fn run(a: &RenderArgs) -> Result<RenderReport> {
     let t = Instant::now();
     let dimension = Dimension::parse(&a.dimension)?;
