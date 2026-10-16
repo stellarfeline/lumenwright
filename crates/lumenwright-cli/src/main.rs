@@ -120,8 +120,11 @@ fn main() -> Result<()> {
             lineup,
             block_entities,
         } => {
-            let world = if block_entities {
-                lumenwright_cli::fixture::block_entity_gallery()
+            let (what, world) = if block_entities {
+                (
+                    "block-entity gallery",
+                    lumenwright_cli::fixture::block_entity_gallery(),
+                )
             } else if lineup {
                 let mut ids: Vec<String> =
                     lumenwright::scene::entities::EntityModels::load_builtin()
@@ -129,12 +132,12 @@ fn main() -> Result<()> {
                         .into_keys()
                         .collect();
                 ids.sort();
-                lumenwright_cli::fixture::lineup(&ids, 10)
+                ("entity lineup", lumenwright_cli::fixture::lineup(&ids, 10))
             } else {
-                lumenwright_cli::fixture::showcase()
+                ("showcase", lumenwright_cli::fixture::showcase())
             };
             world.write(&dir)?;
-            println!("wrote showcase world to {}", dir.display());
+            println!("wrote {what} world to {}", dir.display());
         }
     }
     Ok(())
