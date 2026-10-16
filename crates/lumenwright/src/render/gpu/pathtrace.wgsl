@@ -144,7 +144,6 @@ fn texel_at(u: f32, v: f32) -> u32 {
 
 fn test_quad(qi: u32, o: vec3<f32>, d: vec3<f32>, tmin: f32, best: ptr<function, Hit>) {
     let q = quads[qi];
-    if ((q_flags(q) & FLAG_FRONT_ONLY) != 0u && dot(q_normal(q), d) >= 0.0) { return; }
     let eu = q_eu(q);
     let ev = q_ev(q);
     let n = cross(eu, ev);
@@ -158,6 +157,7 @@ fn test_quad(qi: u32, o: vec3<f32>, d: vec3<f32>, tmin: f32, best: ptr<function,
     let s = dot(cross(p, ev), n) / nn;
     let tt = dot(cross(eu, p), n) / nn;
     if (s < 0.0 || s > 1.0 || tt < 0.0 || tt > 1.0) { return; }
+    if ((q_flags(q) & FLAG_FRONT_ONLY) != 0u && dot(q_normal(q), d) >= 0.0) { return; }
     let sc = min(max(s, 0.0005), 0.9995);
     let tc = min(max(tt, 0.0005), 0.9995);
     let u = q.uv.x + sc * q.uv.z + tc * q.uvt.x;
