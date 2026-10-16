@@ -1,6 +1,7 @@
 //! HDR -> display post-processing shared by every backend.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The tone-mapping operator that maps linear HDR radiance to display values.
 pub enum Tonemap {
     /// Clamp + sRGB (Chunky's default "gamma correction").
     Gamma,
@@ -20,6 +21,8 @@ fn hable(x: f32) -> f32 {
     ((x * (a * x + c * b) + d * e) / (x * (a * x + b) + d * f)) - e / f
 }
 
+/// Converts one linear channel value, clamped to `[0, 1]`, to the sRGB
+/// transfer curve.
 pub fn linear_to_srgb(c: f32) -> f32 {
     let c = c.clamp(0.0, 1.0);
     if c <= 0.003_130_8 {

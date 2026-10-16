@@ -28,6 +28,7 @@ const SKIPPED: &[&str] = &[
 #[derive(Default)]
 pub struct ResourceStore {
     files: HashMap<String, Vec<u8>>,
+    /// The jar, packs and directories added, in layer order.
     pub sources: Vec<PathBuf>,
 }
 
@@ -45,6 +46,7 @@ fn wanted(name: &str) -> bool {
 }
 
 impl ResourceStore {
+    /// An empty store.
     pub fn new() -> ResourceStore {
         ResourceStore::default()
     }
@@ -93,6 +95,7 @@ impl ResourceStore {
         self.files.insert(path.to_string(), data);
     }
 
+    /// The bytes of the file at `path` inside the pack, if loaded.
     pub fn get(&self, path: &str) -> Option<&[u8]> {
         self.files.get(path).map(|v| v.as_slice())
     }
@@ -109,10 +112,12 @@ impl ResourceStore {
         v
     }
 
+    /// Number of files loaded.
     pub fn len(&self) -> usize {
         self.files.len()
     }
 
+    /// No file is loaded.
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
@@ -124,6 +129,7 @@ impl ResourceStore {
         self.get(&format!("assets/{ns}/{kind}/{path}.{ext}"))
     }
 
+    /// The Minecraft version from the jar's `version.json` (such as `1.21.11`).
     pub fn version_name(&self) -> Option<String> {
         let v: serde_json::Value = serde_json::from_slice(self.get("version.json")?).ok()?;
         v.get("id").and_then(|s| s.as_str()).map(str::to_string)

@@ -6,9 +6,12 @@ use crate::scene::{
     SceneView, UNIFORM,
 };
 
+/// The nearest surface a ray hit.
 #[derive(Clone, Copy, Debug)]
 pub struct Hit {
+    /// Distance along the ray direction to the hit, in blocks for a unit direction.
     pub t: f32,
+    /// Index of the hit quad in [`SceneView::quads`].
     pub quad: u32,
     /// Texel at the hit (rgba8, sRGB).
     pub texel: u32,

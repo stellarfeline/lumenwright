@@ -8,6 +8,7 @@ use super::source::ResourceStore;
 /// The language Lumenwright resolves `translate` keys in (the client's default).
 pub const DEFAULT_LANGUAGE: &str = "en_us";
 
+/// One language's translation table: `translate` keys to their text.
 #[derive(Clone, Debug, Default)]
 pub struct Lang {
     entries: HashMap<String, String>,
@@ -31,10 +32,12 @@ impl Lang {
         lang
     }
 
+    /// The text for `key`, if the table has it.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.entries.get(key).map(|s| s.as_str())
     }
 
+    /// Adds or replaces the text for `key`.
     pub fn insert(&mut self, key: &str, value: &str) {
         self.entries.insert(key.to_string(), value.to_string());
     }
