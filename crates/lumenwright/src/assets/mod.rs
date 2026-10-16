@@ -1,11 +1,12 @@
 //! Vanilla assets read from a client jar and resource packs: block models,
-//! textures, tints, the font and the language files.
+//! item model definitions, textures, tints, the font and the language files.
 
 pub mod atlas;
 pub mod biome;
 pub mod blockinfo;
 pub mod blockstate;
 pub mod font;
+pub mod items;
 pub mod lang;
 pub mod model;
 pub mod source;

@@ -4,6 +4,7 @@
 pub mod block_entities;
 pub mod camera;
 pub mod entities;
+pub mod items;
 pub mod mesh;
 pub mod text;
 pub mod voxel;
@@ -165,6 +166,9 @@ pub struct BuildOptions {
     pub block_entities: bool,
     /// Camera position in world coordinates, when known.
     pub eye: Option<[f64; 3]>,
+    /// Camera yaw and pitch in degrees (Minecraft's convention), when known:
+    /// billboarded display entities turn to it.
+    pub view: Option<[f32; 2]>,
 }
 
 /// The world baked against a resource set.
@@ -265,6 +269,10 @@ impl Scene {
         }
         let models_json = entities::EntityModels::load_builtin();
         entities::register_textures(&models_json, entity_list, &mut ab);
+        let mut item_bakery = items::ItemBakery::new(store);
+        if opts.entities {
+            entities::register_item_textures(&mut item_bakery, entity_list, &mut ab);
+        }
         let origin = volume.min_block();
         let mut be_plan = block_entities::plan(
             &block_entities::PlanContext {
@@ -313,7 +321,14 @@ impl Scene {
             block_entity_stats: be_plan.stats.clone(),
         };
         if opts.entities {
-            entities::build_entity_quads(&mut scene, &models_json, entity_list, store, opts);
+            entities::build_entity_quads(
+                &mut scene,
+                &models_json,
+                &mut item_bakery,
+                entity_list,
+                store,
+                opts,
+            );
         }
         if !be_plan.is_empty() {
             let models = block_entities::BlockEntityModels::load_builtin();

@@ -208,17 +208,43 @@ fn cpu_pixels_are_identical_across_thread_counts() {
     let dir = tmp("threads");
     let world = dir.join("world");
     fixture::showcase().write(&world).unwrap();
-    for mode in [Mode::Quick, Mode::Hq] {
-        let mut req = request(&world, &jar, mode);
-        req.camera = Camera {
-            // The showcase's own player view (fixture::showcase).
-            pos: DVec3::new(18.5, 72.0 + 1.62, 22.5),
-            yaw: 150.0,
-            pitch: 18.0,
-            fov_y: 70.0,
-        };
+    let items = dir.join("items");
+    fixture::item_gallery(true).write(&items).unwrap();
+    // The item gallery's view (fixture::ITEM_GALLERY_VIEW).
+    let item_eye = DVec3::new(7.5, 67.6, 9.5);
+    let (yaw, pitch) = Camera::look_at(item_eye, DVec3::new(7.5, 66.0, 2.5));
+    let views = [
+        (
+            &world,
+            Camera {
+                // The showcase's own player view (fixture::showcase).
+                pos: DVec3::new(18.5, 72.0 + 1.62, 22.5),
+                yaw: 150.0,
+                pitch: 18.0,
+                fov_y: 70.0,
+            },
+        ),
+        (
+            &items,
+            Camera {
+                pos: item_eye,
+                yaw,
+                pitch,
+                fov_y: 60.0,
+            },
+        ),
+    ];
+    for ((world, camera), mode) in views.iter().flat_map(|v| [(v, Mode::Quick), (v, Mode::Hq)]) {
+        let mut req = request(world, &jar, mode);
+        req.camera = *camera;
         req.chunks = ChunkRect::around(req.camera.pos, RADIUS);
         let one = on_threads(1, &req);
+        if world == &&items {
+            assert!(
+                one.entity_stats.items_rendered.values().sum::<usize>() > 0,
+                "no item drawn"
+            );
+        }
         assert!(one.backend.contains("1 thread"), "{}", one.backend);
         for n in [3, 8] {
             let many = on_threads(n, &req);

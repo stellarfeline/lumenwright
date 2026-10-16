@@ -180,6 +180,11 @@ impl BiomeColors {
     pub fn water(&self, biome: &str) -> u32 {
         biome_info(biome).water
     }
+
+    /// The grass colormap at a climate (an item's `minecraft:grass` tint).
+    pub fn grass_climate(&self, temperature: f32, downfall: f32) -> u32 {
+        self.grass.sample(temperature, downfall)
+    }
 }
 
 /// Vanilla overworld sky colour for a biome temperature (`Biome.calculateSkyColor`).

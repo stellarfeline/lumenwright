@@ -362,6 +362,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
         unknown_entities_as_boxes: policy.unknown == UnknownEntities::Box,
         block_entities: policy.block_entities,
         eye: Some([cam.pos.x, cam.pos.y, cam.pos.z]),
+        view: Some([cam.yaw, cam.pitch]),
     };
     let block_entities = block_entities::parse_all(&area.block_entities);
     let scene = Scene::build(
