@@ -24,6 +24,36 @@ for screenshots.
 The requirements, design decisions and what is in or out of scope are in
 [docs/SCOPE.md](docs/SCOPE.md).
 
+## Install
+
+The command, from crates.io:
+
+```sh
+cargo install lumenwright-cli    # installs the `lumenwright` command
+lumenwright backends             # the backends this machine can draw with
+```
+
+The library, in your own crate:
+
+```sh
+cargo add lumenwright
+```
+
+You need Rust 1.90 or newer. Installing the command also compiles a little C (the TLS
+library its jar downloader uses), so it needs a C compiler; the library alone compiles none.
+
+What each backend needs to run:
+
+* **CPU**: any Linux, macOS or Windows machine. It uses every core.
+* **Metal, Vulkan, DX12**: a GPU and its driver: Metal on macOS, Vulkan on Linux or Windows,
+  DX12 on Windows.
+* **CUDA**: an NVIDIA GPU and its driver, and a build from a clone of this repository (see
+  [Backends](#backends)).
+
+Every render also needs the Minecraft Java Edition client jar, which Lumenwright reads its
+textures and models from. The command finds it or downloads it from Mojang (see
+[Textures](#textures-the-chunky-approach)); the library takes its path.
+
 ## Quick start
 
 ```sh
@@ -77,6 +107,7 @@ This resolution and the downloader belong to the command. The library takes the 
 | flag | default | meaning |
 |---|---|---|
 | `-w, --world` | required | save directory (contains `level.dat`) |
+| `-o, --output` | render.png | the PNG to write |
 | `--mode quick\|hq` | quick | vanilla raster or path tracing |
 | `--backend auto\|cpu\|gpu\|metal\|vulkan\|dx12\|cuda` | auto | `auto` uses the GPU if one is available, otherwise the CPU |
 | `--camera x,y,z` | player eye, else spawn | eye position |
@@ -87,8 +118,8 @@ This resolution and the downloader belong to the command. The library takes the 
 | `--render-distance` | 8 | chunk radius loaded around the camera |
 | `--dimension` | overworld | `overworld`, `nether`, `end` |
 | `--time` | world time | ticks: 0 = sunrise, 6000 = noon |
-| `--sun-altitude`, `--sun-azimuth` | from time | degrees, overrides `--time` for the sun |
-| `--spp`, `--max-bounces` | 64, 4 | HQ sampling |
+| `--sun-altitude`, `--sun-azimuth` | from time, 135 | degrees (azimuth 0 = north, 90 = east); an altitude overrides `--time` for the sun |
+| `--spp`, `--max-bounces`, `--seed` | 64, 4, 0 | HQ sampling; the same seed gives the same image |
 | `--exposure`, `--tonemap aces\|gamma\|filmic` | 1.0, aces | HQ post-processing |
 | `--sun-intensity`, `--sky-intensity`, `--emitter-intensity` | 1.5, 1, 6 | HQ lighting |
 | `--ssaa N` | 1 | quick-mode supersampling |
@@ -96,6 +127,8 @@ This resolution and the downloader belong to the command. The library takes the 
 | `--hdr-output out.pfm` | | also write the linear HDR image (HQ) |
 | `--no-entities`, `--players`, `--unknown-entities box\|skip` | | entity options |
 | `--no-block-entities` | | leave out block entities drawn by Java code |
+| `--minecraft-jar`, `--mc-version`, `--offline`, `--resource-pack` | | the client jar and packs (see [Textures](#textures-the-chunky-approach)) |
+| `--threads`, `--log` | all cores, info | CPU worker threads and log level, for every subcommand |
 
 ## Library
 

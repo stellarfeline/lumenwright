@@ -51,7 +51,9 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 * **Lighting controls.** `--time` (ticks), or `--sun-altitude` and `--sun-azimuth`.
   `--exposure`, `--tonemap`, `--spp`, `--max-bounces`, `--ssaa` (quick mode).
 * **Tooling.** An `info` subcommand prints the world version, spawn, player position, and
-  block and entity statistics. An `assets` subcommand fetches the client jar.
+  block and entity statistics. An `assets` subcommand fetches the client jar and shows which
+  jar a version resolves to. `backends` lists the backends available on the machine, and
+  `demo-world` writes generated worlds to try things on.
 
 ## 3. Out of scope (explicitly deferred)
 
