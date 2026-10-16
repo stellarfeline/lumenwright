@@ -2,8 +2,8 @@
 
 use crate::math::{V3, abs, floor, max, min, v3};
 use crate::scene::{
-    ALPHA_CUTOUT, ALPHA_TRANSLUCENT, BRICK_WORDS, EMPTY, FLAG_ALPHA_MASK, GpuQuad, OV_CELL_WORDS,
-    SceneView, UNIFORM,
+    ALPHA_CUTOUT, ALPHA_TRANSLUCENT, BRICK_WORDS, EMPTY, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY, GpuQuad,
+    OV_CELL_WORDS, SceneView, UNIFORM,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -59,11 +59,18 @@ pub fn quad_texel(scene: &SceneView, q: &GpuQuad, s: f32, t: f32) -> u32 {
     scene.texel(u, v)
 }
 
-/// Tests a quad, applying alpha testing. Updates `best` when closer.
+/// Tests a quad, applying alpha testing and front-only culling. Updates `best`
+/// when closer.
 #[inline(always)]
 fn test_quad(scene: &SceneView, qi: u32, o: V3, d: V3, tmin: f32, best: &mut Hit) {
     let q = &scene.quads[qi as usize];
     if let Some((t, s, tt)) = intersect_quad(q, o, d, tmin, best.t) {
+        // Tested after the intersection: with the test ahead of it, the PTX build's
+        // multi-sample launches disagreed with the CPU on text pixels (cause not
+        // established), and an intersection is rarer than a test.
+        if q.flags() & FLAG_FRONT_ONLY != 0 && q.normal().dot(d) >= 0.0 {
+            return;
+        }
         let texel = quad_texel(scene, q, s, tt);
         let alpha = texel >> 24;
         let mode = q.flags() & FLAG_ALPHA_MASK;
@@ -71,6 +78,28 @@ fn test_quad(scene: &SceneView, qi: u32, o: V3, d: V3, tmin: f32, best: &mut Hit
             return;
         }
         *best = Hit { t, quad: qi, texel };
+    }
+}
+
+/// Whether a quad index is one of the see-through quads.
+#[inline(always)]
+pub fn is_see_through(scene: &SceneView, qi: u32) -> bool {
+    let st = scene.params.see_through;
+    qi >= st[0] && qi - st[0] < st[1]
+}
+
+/// The closest see-through quad along `o + t*d` with `t > tmin`, whatever lies in
+/// front of it (`o` grid-relative).
+pub fn see_through_hit(scene: &SceneView, o: V3, d: V3, tmin: f32) -> Option<Hit> {
+    let st = scene.params.see_through;
+    let mut best = NO_HIT;
+    for i in 0..st[1] {
+        test_quad(scene, st[0] + i, o, d, tmin, &mut best);
+    }
+    if best.quad != u32::MAX {
+        Some(best)
+    } else {
+        None
     }
 }
 
