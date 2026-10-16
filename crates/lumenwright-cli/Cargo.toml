@@ -1,9 +1,16 @@
 [package]
 name = "lumenwright-cli"
-description = "Offline headless Minecraft world renderer"
+description = "The lumenwright command: render a Minecraft Java Edition world save to a PNG, in the vanilla look or path traced"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version = "1.90"
+readme = "../../README.md"
+documentation = "https://github.com/stellarfeline/lumenwright#readme"
+keywords = ["minecraft", "renderer", "path-tracing", "cli", "screenshot"]
+categories = ["command-line-utilities", "rendering", "multimedia::images"]
+include = ["/src", "/tests", "/LICENSE"]
 
 [lib]
 name = "lumenwright_cli"
@@ -12,6 +19,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "lumenwright"
 path = "src/main.rs"
+# The library crate of the same name owns the `lumenwright` doc page.
+doc = false
 
 [dependencies]
 anyhow = "1.0.104"

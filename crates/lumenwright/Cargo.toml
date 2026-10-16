@@ -1,9 +1,16 @@
 [package]
 name = "lumenwright"
-description = "Offline headless Minecraft world renderer"
+description = "Offline, headless renderer for Minecraft Java Edition worlds: a vanilla-look rasterizer and a path tracer, on the CPU, Metal, Vulkan, DX12 and CUDA"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version = "1.90"
+readme = "../../README.md"
+documentation = "https://docs.rs/lumenwright"
+keywords = ["minecraft", "renderer", "path-tracing", "voxel", "wgpu"]
+categories = ["rendering", "graphics", "game-development"]
+include = ["/src", "/assets", "/build.rs", "/LICENSE"]
 
 [dependencies]
 anyhow = "1.0.104"

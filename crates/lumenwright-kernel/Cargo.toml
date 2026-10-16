@@ -1,9 +1,16 @@
 [package]
 name = "lumenwright-kernel"
-description = "no_std path-tracing kernel shared by the CPU and CUDA backends"
+description = "The no_std path-tracing kernel of the lumenwright Minecraft renderer, shared by its CPU and CUDA backends"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version = "1.85"
+readme = "README.md"
+documentation = "https://docs.rs/lumenwright-kernel"
+keywords = ["minecraft", "path-tracing", "no-std", "cuda", "ptx"]
+categories = ["rendering", "no-std", "no-std::no-alloc"]
+include = ["/src", "/README.md", "/LICENSE"]
 
 [features]
 default = ["libm"]
