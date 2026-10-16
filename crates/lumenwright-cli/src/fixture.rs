@@ -1295,10 +1295,10 @@ pub const ITEM_GALLERY_SPOTS: &[(&str, [f64; 3])] = &[
     ("item_display (end rod)", [12.5, 66.0, 4.5]),
     ("armor_stand helmet", [6.5, 66.75, 3.5]),
     ("armor_stand chestplate", [6.5, 66.1, 3.5]),
-    ("armor_stand sword", [6.85, 65.8, 3.95]),
-    ("armor_stand shield", [6.1, 65.75, 3.8]),
+    ("armor_stand sword", [6.05, 65.7, 4.1]),
+    ("armor_stand shield", [7.08, 66.0, 3.7]),
     ("mannequin helmet", [9.5, 66.85, 3.5]),
-    ("mannequin axe", [9.85, 65.75, 3.95]),
+    ("mannequin axe", [9.1, 65.7, 3.9]),
     ("zombie pumpkin", [13.5, 66.9, 2.0]),
 ];
 
