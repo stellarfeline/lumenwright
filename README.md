@@ -12,14 +12,69 @@ pixels to your program (see [Library](#library)). It has two looks:
 Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vulkan** and
 **DX12** (through wgpu), and **CUDA** (the Rust path-tracing kernel compiled to PTX).
 
-| quick (vanilla look) | hq (path traced) |
-|---|---|
-| ![quick](docs/renders/showcase-quick.png) | ![hq](docs/renders/showcase-hq.png) |
-| ![quick](docs/renders/island-quick.png) | ![hq](docs/renders/island-hq.png) |
+## The Treehouse Camp, by day and at dusk
 
-The images in `docs/renders/` are renders of original scenes drawn with Minecraft's textures,
-and are shared under [Mojang's usage guidelines](https://www.minecraft.net/en-us/usage-guidelines)
-for screenshots.
+| | quick (vanilla look) | hq (path traced) |
+|---|---|---|
+| **The whole camp, day** | ![camp, day, quick](docs/renders/treehouse-camp-day-quick.png) quick · `--time 4000` · Metal | ![camp, day, hq](docs/renders/treehouse-camp-day-hq.png) hq · `--time 4000` · 256 spp · Metal |
+| **The whole camp, dusk** | ![camp, dusk, quick](docs/renders/treehouse-camp-dusk-quick.png) quick · `--time 12800` · Metal | ![camp, dusk, hq](docs/renders/treehouse-camp-dusk-hq.png) hq · `--time 12800` · 1024 spp · Metal |
+| **The Long Bridge, day** | ![bridge, day, quick](docs/renders/treehouse-bridge-day-quick.png) quick · `--time 4000` · Metal | ![bridge, day, hq](docs/renders/treehouse-bridge-day-hq.png) hq · `--time 4000` · 256 spp · Metal |
+| **The Long Bridge, dusk** | ![bridge, dusk, quick](docs/renders/treehouse-bridge-dusk-quick.png) quick · `--time 12800` · Metal | ![bridge, dusk, hq](docs/renders/treehouse-bridge-dusk-hq.png) hq · `--time 12800` · 1024 spp · Metal |
+
+*The Treehouse Camp* is a small adventure map: a forest clan's houses on four giant trees,
+joined by rope bridges and ladders and lit by lanterns. The top rows look at the whole camp
+from the east-north-east; the bottom rows stand above the Long Bridge, looking south. All
+eight are 1280×720, rendered from a save written by the map's own server, on an Apple M2 Pro.
+
+At dusk, quick mode draws the light the game stored in the save, so the lantern-lit valley
+reads warmer than the hills around it. HQ mode finds a lantern's light only when a bounced
+path happens to hit the lantern, because it does not sample emitters yet. At 1024 spp the
+lanterns glow and light the posts they stand on, and the evening sky lights the rest. After
+about `--time 13000` the sun is down, and an HQ frame at these sample counts shows lanterns
+on black.
+
+Each image's command, run from the repository root with the save from
+[Get the camp](#get-the-camp) in `the-treehouse-camp`:
+
+```sh
+# The whole camp
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 4000 --backend metal -o treehouse-camp-day-quick.png
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 4000 --backend metal --mode hq --spp 256 -o treehouse-camp-day-hq.png
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 12800 --backend metal -o treehouse-camp-dusk-quick.png
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 12800 --backend metal --mode hq --spp 1024 -o treehouse-camp-dusk-hq.png
+
+# The Long Bridge
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 4000 --backend metal -o treehouse-bridge-day-quick.png
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 4000 --backend metal --mode hq --spp 256 -o treehouse-bridge-day-hq.png
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 12800 --backend metal -o treehouse-bridge-dusk-quick.png
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 12800 --backend metal --mode hq --spp 1024 -o treehouse-bridge-dusk-hq.png
+```
+
+| image | time on the M2 Pro (end to end) |
+|---|---|
+| camp, quick, day / dusk | 0.4 s / 1.0 s |
+| camp, hq, day (256 spp) / dusk (1024 spp) | 21 s / 70 s |
+| bridge, quick, day / dusk | 0.3 s / 0.3 s |
+| bridge, hq, day (256 spp) / dusk (1024 spp) | 25 s / 87 s |
+
+### Image licence
+
+The Treehouse Camp images are renders of *The Treehouse Camp*, from
+[stellarfeline/delvewright-campaigns](https://github.com/stellarfeline/delvewright-campaigns),
+`campaigns/the-treehouse-camp/`, release `release/the-treehouse-camp/v1.0.1`, licensed
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The renders do not change the
+map, and they are shared under the same licence. The other images in `docs/renders/` are
+renders of worlds Lumenwright generates (`demo-world`). Every image is drawn with Minecraft's
+textures and shared under
+[Mojang's usage guidelines](https://www.minecraft.net/en-us/usage-guidelines) for screenshots.
 
 The requirements, design decisions and what is in or out of scope are in
 [docs/SCOPE.md](docs/SCOPE.md).
@@ -28,28 +83,56 @@ The requirements, design decisions and what is in or out of scope are in
 
 ```sh
 cargo build --release
+```
 
+### Get the camp
+
+The camp ships as a container image that runs the map's own server. The server builds the
+camp over its first ticks. These commands wait for it to finish, then save the world and copy
+it out. They need Docker. `EULA=TRUE` accepts [Mojang's EULA](https://aka.ms/MinecraftEULA)
+for the server inside the container.
+
+```sh
+docker run -d --name treehouse-camp -e EULA=TRUE ghcr.io/stellarfeline/delve-the-treehouse-camp:v1.0.1
+# The camp is stamped by its datapack over the first ticks; wait until it says so.
+until docker exec treehouse-camp rcon-cli scoreboard players get '#placed' dw.sys 2>/dev/null | grep -q 'has 1'; do sleep 5; done
+docker exec treehouse-camp rcon-cli save-all flush
+docker stop treehouse-camp
+docker cp treehouse-camp:/data/world the-treehouse-camp
+docker rm treehouse-camp
+```
+
+The image is release v1.0.1 of the camp, built by `delvec` 1.12.0 from
+`campaigns/the-treehouse-camp/` in
+[stellarfeline/delvewright-campaigns](https://github.com/stellarfeline/delvewright-campaigns)
+at the release's tag. The campaign's `GENERATION.md` there records how it was built and
+checked. The save is written by a running server, so it is not byte-identical from one run
+to the next: the same frame of two saves from two server runs differed in 257 of its 921,600 pixels.
+
+### Render
+
+```sh
 # Inspect a save
-target/release/lumenwright info ~/path/to/saves/MyWorld --entities
+target/release/lumenwright info the-treehouse-camp --entities
 
 # List the block entities (and sign text) in a box of x,z block coordinates
-target/release/lumenwright info ~/path/to/saves/MyWorld --block-entities=-40,-40,40,40
+target/release/lumenwright info the-treehouse-camp --block-entities=0,0,112,112
 
-# Vanilla-look render from the player's own viewpoint (level.dat)
-target/release/lumenwright render -w ~/path/to/saves/MyWorld -o quick.png
+# Vanilla-look render from the save's spawn, at the save's own time of day
+target/release/lumenwright render -w the-treehouse-camp -o quick.png
 
 # Chunky-look render from an explicit camera
-target/release/lumenwright render -w ~/path/to/saves/MyWorld --mode hq --spp 256 \
-    --camera 120,90,-40 --look-at 100,70,-10 --sun-altitude 35 --sun-azimuth 120 -o hq.png
+target/release/lumenwright render -w the-treehouse-camp --mode hq --spp 256 \
+    --camera 140,118,14 --look-at 56,82,58 --sun-altitude 35 --sun-azimuth 120 -o hq.png
 
-# No world handy? Generate one:
-target/release/lumenwright demo-world /tmp/showcase
-target/release/lumenwright render -w /tmp/showcase --mode hq
+# Generated worlds, no download: a small showcase (terrain, cottage, lake, mobs)
+target/release/lumenwright demo-world showcase
+target/release/lumenwright render -w showcase --mode hq -o showcase.png
 
-# One of every block entity Lumenwright draws (the render below):
-target/release/lumenwright demo-world --block-entities /tmp/gallery
-target/release/lumenwright render -w /tmp/gallery \
-    --camera 9.5,70.5,11.5 --look-at 9.5,65.4,-2 --fov 60
+# One of every block entity Lumenwright draws (the render below)
+target/release/lumenwright demo-world --block-entities gallery
+target/release/lumenwright render -w gallery \
+    --camera 9.5,70.5,11.5 --look-at 9.5,65.4,-2 --fov 60 -o gallery.png
 ```
 
 `lumenwright backends` lists the backends available on the current machine.
@@ -249,14 +332,13 @@ cargo test --workspace --release
 
 | scene | mode / backend | time |
 |---|---|---|
-| island save, 33×33 chunks, 1920×1080 | quick / metal | 0.33 s end to end (24 ms raster, 497k triangles) |
-| same | quick / cpu | 0.29 s end to end (65 ms raster) |
+| The Treehouse Camp, whole-camp view, 625 chunks loaded, 1920×1080 | quick / metal | 0.53 s end to end (77 ms raster, 982k triangles) |
+| same | quick / cpu | 0.51 s end to end (144 ms raster) |
 | same, 1280×720, 256 spp | hq / metal | 21 s |
-| same, 1280×720, 16 spp | hq / cpu | 7.7 s (about 6× slower than Metal) |
-| showcase, 1280×720, 256 spp | hq / metal | 11.8 s |
+| same, 1280×720, 16 spp | hq / cpu | 8.3 s |
 
-Parity on the same view: quick mode, CPU vs Metal, differs in 0.075% of pixels; HQ mode at
-32 spp differs in 0.03%.
+Parity on the whole-camp view, CPU vs Metal: in quick mode at 1920×1080, 0.36% of pixels
+differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.16% do.
 
 ## Known limitations (v0.1)
 
