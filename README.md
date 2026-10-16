@@ -14,6 +14,10 @@ Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vul
 
 ## The Treehouse Camp, by day and at dusk
 
+![The Treehouse Camp by day, path traced](docs/renders/treehouse-camp-day-hq-4070.png)
+
+*hq · `--time 4000` · 4096 spp · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 74 s end to end*
+
 | | quick (vanilla look) | hq (path traced) |
 |---|---|---|
 | **The whole camp, day** | ![camp, day, quick](docs/renders/treehouse-camp-day-quick.png) quick · `--time 4000` · Metal | ![camp, day, hq](docs/renders/treehouse-camp-day-hq.png) hq · `--time 4000` · 256 spp · Metal |
@@ -32,6 +36,13 @@ path happens to hit the lantern, because it does not sample emitters yet. At 102
 lanterns glow and light the posts they stand on, and the evening sky lights the rest. After
 about `--time 13000` the sun is down, and an HQ frame at these sample counts shows lanterns
 on black.
+
+The lantern light at dusk is not short of samples. On the RTX 4070 Ti SUPER the dusk frames at
+16384 spp ([camp](docs/renders/treehouse-camp-dusk-hq-4070.png),
+[bridge](docs/renders/treehouse-bridge-dusk-hq-4070.png)) have the same mean brightness as
+the 1024 spp frames above, with less grain: the lanterns light their own posts and little
+else. Sampling emitters would bring that picture at fewer samples; it would not make the
+lanterns light the valley.
 
 Each image's command, run from the repository root with the save from
 [Get the camp](#get-the-camp) in `the-treehouse-camp`:
@@ -56,14 +67,27 @@ target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look
     --time 12800 --backend metal -o treehouse-bridge-dusk-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
     --time 12800 --backend metal --mode hq --spp 1024 -o treehouse-bridge-dusk-hq.png
+
+# On the RTX 4070 Ti SUPER (build the PTX first, see Backends)
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 4000 --backend cuda --mode hq --spp 4096 -o treehouse-camp-day-hq-4070.png
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 12800 --backend cuda --mode hq --spp 16384 -o treehouse-camp-dusk-hq-4070.png
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 12800 --backend cuda --mode hq --spp 16384 -o treehouse-bridge-dusk-hq-4070.png
 ```
 
-| image | time on the M2 Pro (end to end) |
-|---|---|
-| camp, quick, day / dusk | 0.4 s / 1.0 s |
-| camp, hq, day (256 spp) / dusk (1024 spp) | 21 s / 70 s |
-| bridge, quick, day / dusk | 0.3 s / 0.3 s |
-| bridge, hq, day (256 spp) / dusk (1024 spp) | 25 s / 87 s |
+| image | M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end) |
+|---|---|---|
+| camp, quick, day / dusk | 0.4 s / 1.0 s | |
+| camp, hq, day (256 spp) / dusk (1024 spp) | 21 s / 70 s | 5.1 s / 16.5 s |
+| bridge, quick, day / dusk | 0.3 s / 0.3 s | |
+| bridge, hq, day (256 spp) / dusk (1024 spp) | 25 s / 87 s | 6.3 s / 21.6 s |
+| camp, hq, day (4096 spp) / dusk (16384 spp) | | 74 s / 260 s |
+| bridge, hq, dusk (16384 spp) | | 340 s |
+
+The 4070 Ti SUPER runs under WSL2 on a 16-thread PC. Its 256 and 1024 spp frames differ from
+the M2 Pro's Metal frames in at most 38 of 921,600 pixels by more than 8/255.
 
 ### Image licence
 
