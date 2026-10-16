@@ -599,292 +599,6 @@ fn flat_quad(p0: Vec3, eu: Vec3, ev: Vec3, sprite: &crate::assets::atlas::Sprite
     }
 }
 
-/// An entity's equipment: `equipment` (1.21.5+), or the older `HandItems`
-/// (main, off) and `ArmorItems` (feet, legs, chest, head).
-#[derive(Default, Debug, Clone)]
-pub struct Equipment {
-    pub mainhand: Option<ItemStack>,
-    pub offhand: Option<ItemStack>,
-    pub head: Option<ItemStack>,
-    pub chest: Option<ItemStack>,
-    pub legs: Option<ItemStack>,
-    pub feet: Option<ItemStack>,
-}
-
-pub fn equipment(e: &Entity) -> Equipment {
-    let slot = |k: &str| nbt::get(&e.nbt, &format!("equipment.{k}")).and_then(ItemStack::from_nbt);
-    let list = |k: &str, i: usize| match nbt::get(&e.nbt, k) {
-        Some(fastnbt::Value::List(l)) => l.get(i).and_then(ItemStack::from_nbt),
-        _ => None,
-    };
-    Equipment {
-        mainhand: slot("mainhand").or_else(|| list("HandItems", 0)),
-        offhand: slot("offhand").or_else(|| list("HandItems", 1)),
-        feet: slot("feet").or_else(|| list("ArmorItems", 0)),
-        legs: slot("legs").or_else(|| list("ArmorItems", 1)),
-        chest: slot("chest").or_else(|| list("ArmorItems", 2)),
-        head: slot("head").or_else(|| list("ArmorItems", 3)),
-    }
-}
-
-/// Entities whose renderer has the armour, held-item and head-item layers: the
-/// armour mesh family they wear, and the x shift (pixels, outward) their
-/// `translateToHand` gives an arm (`SkeletonModel` moves it by one).
-fn holder_kind(id: &str) -> Option<(&'static str, f32)> {
-    Some(match id {
-        "armor_stand" => ("armor_stand_armor", 0.0),
-        "mannequin" | "player" | "zombie" | "husk" | "drowned" | "giant" | "zombie_villager"
-        | "zombified_piglin" | "piglin" | "piglin_brute" => ("humanoid_armor", 0.0),
-        "skeleton" | "stray" | "wither_skeleton" | "bogged" => ("humanoid_armor", 1.0),
-        _ => return None,
-    })
-}
-
-/// A stack an entity carries, with how it is drawn.
-#[derive(Clone, Debug)]
-pub enum Carried {
-    /// Drawn through its item model in a display context.
-    Item(ItemStack, DisplayContext),
-    /// Worn: drawn through its equipment asset on the armour mesh.
-    Armor(ItemStack),
-}
-
-/// Every stack an entity draws.
-pub fn carried(e: &Entity) -> Vec<Carried> {
-    let id = e.short_id();
-    let mut out = Vec::new();
-    match id {
-        "item" => {
-            if let Some(s) = nbt::get(&e.nbt, "Item").and_then(ItemStack::from_nbt) {
-                out.push(Carried::Item(s, DisplayContext::Ground));
-            }
-        }
-        "item_display" => {
-            if let Some(s) = nbt::get(&e.nbt, "item").and_then(ItemStack::from_nbt) {
-                out.push(Carried::Item(s, item_display_context(e)));
-            }
-        }
-        "item_frame" | "glow_item_frame" => {
-            if let Some(s) = nbt::get(&e.nbt, "Item").and_then(ItemStack::from_nbt) {
-                out.push(Carried::Item(s, DisplayContext::Fixed));
-            }
-        }
-        _ if holder_kind(id).is_some() => {
-            let eq = equipment(e);
-            let left_handed = e.flag("LeftHanded");
-            let (right, left) = if left_handed {
-                (eq.offhand, eq.mainhand)
-            } else {
-                (eq.mainhand, eq.offhand)
-            };
-            if let Some(s) = right {
-                out.push(Carried::Item(s, DisplayContext::ThirdPersonRightHand));
-            }
-            if let Some(s) = left {
-                out.push(Carried::Item(s, DisplayContext::ThirdPersonLeftHand));
-            }
-            if let Some(s) = eq.head {
-                if super::items::armor_of(&s).is_some() {
-                    out.push(Carried::Armor(s));
-                } else {
-                    out.push(Carried::Item(s, DisplayContext::Head));
-                }
-            }
-            // Only armour is drawn from the body slots, as in vanilla.
-            for s in [eq.chest, eq.legs, eq.feet].into_iter().flatten() {
-                if super::items::armor_of(&s).is_some() {
-                    out.push(Carried::Armor(s));
-                }
-            }
-        }
-        _ => {}
-    }
-    out
-}
-
-fn item_display_context(e: &Entity) -> DisplayContext {
-    e.str_field("item_display")
-        .and_then(DisplayContext::parse)
-        .unwrap_or(DisplayContext::None)
-}
-
-/// Registers the textures of every stack the entities carry.
-pub fn register_item_textures(bakery: &mut ItemBakery, entities: &[Entity], ab: &mut AtlasBuilder) {
-    for e in entities {
-        for c in carried(e) {
-            match c {
-                Carried::Item(stack, ctx) => {
-                    let p = bakery.prepare(&stack, ctx);
-                    bakery.register_textures(&p, ab);
-                }
-                Carried::Armor(stack) => {
-                    if let Some((_, layers)) = bakery.armor_layers(&stack) {
-                        bakery.register_armor(&layers, ab);
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn bump(m: &mut BTreeMap<String, usize>, k: &str) {
-    *m.entry(k.to_string()).or_default() += 1;
-}
-
-fn short(id: &str) -> &str {
-    id.strip_prefix("minecraft:").unwrap_or(id)
-}
-
-/// Resolves and draws one stack posed by `m`; counts it either way.
-#[allow(clippy::too_many_arguments)]
-fn draw_item(
-    bakery: &mut ItemBakery,
-    scene: &Scene,
-    stats: &mut EntityStats,
-    holder: &str,
-    stack: &ItemStack,
-    ctx: DisplayContext,
-    m: &Mat4,
-    out: &mut Vec<Quad>,
-) -> bool {
-    let p = bakery.prepare(stack, ctx);
-    count_item(stats, holder, stack, &p);
-    if p.drawn() {
-        bakery.emit(scene, &p, ctx, m, out);
-    }
-    p.drawn()
-}
-
-fn count_item(stats: &mut EntityStats, holder: &str, stack: &ItemStack, p: &Prepared) {
-    if p.drawn() {
-        bump(&mut stats.items_rendered, short(&stack.id));
-        if !p.undrawn.is_empty() {
-            log::debug!("{holder}: part of {} not drawn: {}", stack.id, p.reason());
-        }
-    } else {
-        bump(&mut stats.items_skipped, short(&stack.id));
-        log::debug!("{holder}: {} not drawn: {}", stack.id, p.reason());
-    }
-}
-
-/// A float in [0, 1) from a hash of `seed` and `k`.
-fn unit(seed: u32, k: u32) -> f32 {
-    (pos_hash(seed as i32, k as i32, 0x17, 0x5EED) >> 8) as f32 / (1u32 << 24) as f32
-}
-
-fn str_hash(s: &str) -> u32 {
-    s.bytes().fold(0x811C_9DC5u32, |h, b| {
-        (h ^ b as u32).wrapping_mul(0x0100_0193)
-    })
-}
-
-/// A dropped item (`ItemEntityRenderer`): lifted so its model's lowest point
-/// floats 1/16 above the entity, bobbing and spun by its phase, and drawn as a
-/// cluster of up to five copies for a large stack. The phase vanilla draws at
-/// random when the entity loads comes from its UUID here, and the clock is the
-/// first frame after loading (age 0), so a frame is reproducible.
-#[allow(clippy::too_many_arguments)]
-fn draw_dropped(
-    bakery: &mut ItemBakery,
-    scene: &Scene,
-    stats: &mut EntityStats,
-    e: &Entity,
-    stack: &ItemStack,
-    rel: Vec3,
-    out: &mut Vec<Quad>,
-) -> bool {
-    let p = bakery.prepare(stack, DisplayContext::Ground);
-    count_item(stats, "item", stack, &p);
-    if !p.drawn() {
-        return false;
-    }
-    let mut probe = Vec::new();
-    bakery.emit(
-        scene,
-        &p,
-        DisplayContext::Ground,
-        &Mat4::IDENTITY,
-        &mut probe,
-    );
-    let Some((lo, hi)) = bounds(&probe) else {
-        return false;
-    };
-    let uuid = match nbt::get(&e.nbt, "UUID") {
-        Some(fastnbt::Value::IntArray(a)) => a.iter().fold(0u32, |h, &x| {
-            pos_hash(h as i32, x, 0x55, 0x1D) ^ h.rotate_left(7)
-        }),
-        _ => str_hash(&format!("{:?}", e.pos)),
-    };
-    let phase = unit(uuid, 0) * std::f32::consts::TAU;
-    let age = 0.0f32;
-    let bob = (age / 10.0 + phase).sin() * 0.1 + 0.1;
-    let lift = -lo.y + 0.0625;
-    let spin = age / 20.0 + phase;
-    let base =
-        Mat4::from_translation(rel + Vec3::new(0.0, bob + lift, 0.0)) * Mat4::from_rotation_y(spin);
-    let place = |m: &Mat4, out: &mut Vec<Quad>| {
-        for q in &probe {
-            let mut q = *q;
-            transform_quad(&mut q, m);
-            out.push(q);
-        }
-    };
-    let n = rendered_amount(stack.count);
-    let seed = str_hash(&stack.id);
-    let jitter = |k: u32, axis: u32| (unit(seed, k * 3 + axis) * 2.0 - 1.0) * 0.15;
-    let depth = hi.z - lo.z;
-    if depth > 0.0625 {
-        place(&base, out);
-        for k in 1..n as u32 {
-            let t = Vec3::new(jitter(k, 0), jitter(k, 1), jitter(k, 2));
-            place(&(base * Mat4::from_translation(t)), out);
-        }
-    } else {
-        let step = depth * 1.5;
-        let mut m =
-            base * Mat4::from_translation(Vec3::new(0.0, 0.0, -(step * (n - 1) as f32 / 2.0)));
-        place(&m, out);
-        m *= Mat4::from_translation(Vec3::new(0.0, 0.0, step));
-        for k in 1..n as u32 {
-            let t = Vec3::new(jitter(k, 0) * 0.5, jitter(k, 1) * 0.5, 0.0);
-            place(&(m * Mat4::from_translation(t)), out);
-            m *= Mat4::from_translation(Vec3::new(0.0, 0.0, step));
-        }
-    }
-    true
-}
-
-/// An armour stand's part rotations in radians (`ArmorStand` `Pose`, with the
-/// vanilla defaults for an absent part).
-fn armor_stand_pose(e: &Entity) -> [(&'static str, [f32; 3]); 6] {
-    let get = |key: &str, d: [f32; 3]| -> [f32; 3] {
-        let deg = nbt::get(&e.nbt, &format!("Pose.{key}"))
-            .and_then(nbt::as_f64_list)
-            .filter(|v| v.len() == 3)
-            .map(|v| [v[0] as f32, v[1] as f32, v[2] as f32])
-            .unwrap_or(d);
-        deg.map(f32::to_radians)
-    };
-    [
-        ("head", get("Head", [0.0, 0.0, 0.0])),
-        ("body", get("Body", [0.0, 0.0, 0.0])),
-        ("left_arm", get("LeftArm", [-10.0, 0.0, -10.0])),
-        ("right_arm", get("RightArm", [-15.0, 0.0, 10.0])),
-        ("left_leg", get("LeftLeg", [-1.0, 0.0, -1.0])),
-        ("right_leg", get("RightLeg", [1.0, 0.0, 1.0])),
-    ]
-}
-
-fn fill_lights(quads: &[Quad], lights: &mut Vec<EntityLight>, light: EntityLight) {
-    let n = quads.len() - lights.len();
-    lights.extend(std::iter::repeat_n(light, n));
-}
-
-fn light_at(p: Vec3) -> EntityLight {
-    let p = p.floor();
-    EntityLight::shaded([p.x as i32, p.y as i32, p.z as i32])
-}
-
 pub fn build_entity_quads(
     scene: &mut Scene,
     models: &EntityModels,
@@ -1224,6 +938,292 @@ pub fn build_entity_quads(
     scene.entity_quads.extend(quads);
     scene.entity_quad_light.extend(lights);
     scene.entity_stats = stats;
+}
+
+/// An entity's equipment: `equipment` (1.21.5+), or the older `HandItems`
+/// (main, off) and `ArmorItems` (feet, legs, chest, head).
+#[derive(Default, Debug, Clone)]
+pub struct Equipment {
+    pub mainhand: Option<ItemStack>,
+    pub offhand: Option<ItemStack>,
+    pub head: Option<ItemStack>,
+    pub chest: Option<ItemStack>,
+    pub legs: Option<ItemStack>,
+    pub feet: Option<ItemStack>,
+}
+
+pub fn equipment(e: &Entity) -> Equipment {
+    let slot = |k: &str| nbt::get(&e.nbt, &format!("equipment.{k}")).and_then(ItemStack::from_nbt);
+    let list = |k: &str, i: usize| match nbt::get(&e.nbt, k) {
+        Some(fastnbt::Value::List(l)) => l.get(i).and_then(ItemStack::from_nbt),
+        _ => None,
+    };
+    Equipment {
+        mainhand: slot("mainhand").or_else(|| list("HandItems", 0)),
+        offhand: slot("offhand").or_else(|| list("HandItems", 1)),
+        feet: slot("feet").or_else(|| list("ArmorItems", 0)),
+        legs: slot("legs").or_else(|| list("ArmorItems", 1)),
+        chest: slot("chest").or_else(|| list("ArmorItems", 2)),
+        head: slot("head").or_else(|| list("ArmorItems", 3)),
+    }
+}
+
+/// Entities whose renderer has the armour, held-item and head-item layers: the
+/// armour mesh family they wear, and the x shift (pixels, outward) their
+/// `translateToHand` gives an arm (`SkeletonModel` moves it by one).
+fn holder_kind(id: &str) -> Option<(&'static str, f32)> {
+    Some(match id {
+        "armor_stand" => ("armor_stand_armor", 0.0),
+        "mannequin" | "player" | "zombie" | "husk" | "drowned" | "giant" | "zombie_villager"
+        | "zombified_piglin" | "piglin" | "piglin_brute" => ("humanoid_armor", 0.0),
+        "skeleton" | "stray" | "wither_skeleton" | "bogged" => ("humanoid_armor", 1.0),
+        _ => return None,
+    })
+}
+
+/// A stack an entity carries, with how it is drawn.
+#[derive(Clone, Debug)]
+pub enum Carried {
+    /// Drawn through its item model in a display context.
+    Item(ItemStack, DisplayContext),
+    /// Worn: drawn through its equipment asset on the armour mesh.
+    Armor(ItemStack),
+}
+
+/// Every stack an entity draws.
+pub fn carried(e: &Entity) -> Vec<Carried> {
+    let id = e.short_id();
+    let mut out = Vec::new();
+    match id {
+        "item" => {
+            if let Some(s) = nbt::get(&e.nbt, "Item").and_then(ItemStack::from_nbt) {
+                out.push(Carried::Item(s, DisplayContext::Ground));
+            }
+        }
+        "item_display" => {
+            if let Some(s) = nbt::get(&e.nbt, "item").and_then(ItemStack::from_nbt) {
+                out.push(Carried::Item(s, item_display_context(e)));
+            }
+        }
+        "item_frame" | "glow_item_frame" => {
+            if let Some(s) = nbt::get(&e.nbt, "Item").and_then(ItemStack::from_nbt) {
+                out.push(Carried::Item(s, DisplayContext::Fixed));
+            }
+        }
+        _ if holder_kind(id).is_some() => {
+            let eq = equipment(e);
+            let left_handed = e.flag("LeftHanded");
+            let (right, left) = if left_handed {
+                (eq.offhand, eq.mainhand)
+            } else {
+                (eq.mainhand, eq.offhand)
+            };
+            if let Some(s) = right {
+                out.push(Carried::Item(s, DisplayContext::ThirdPersonRightHand));
+            }
+            if let Some(s) = left {
+                out.push(Carried::Item(s, DisplayContext::ThirdPersonLeftHand));
+            }
+            if let Some(s) = eq.head {
+                if super::items::armor_of(&s).is_some() {
+                    out.push(Carried::Armor(s));
+                } else {
+                    out.push(Carried::Item(s, DisplayContext::Head));
+                }
+            }
+            // Only armour is drawn from the body slots, as in vanilla.
+            for s in [eq.chest, eq.legs, eq.feet].into_iter().flatten() {
+                if super::items::armor_of(&s).is_some() {
+                    out.push(Carried::Armor(s));
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+fn item_display_context(e: &Entity) -> DisplayContext {
+    e.str_field("item_display")
+        .and_then(DisplayContext::parse)
+        .unwrap_or(DisplayContext::None)
+}
+
+/// Registers the textures of every stack the entities carry.
+pub fn register_item_textures(bakery: &mut ItemBakery, entities: &[Entity], ab: &mut AtlasBuilder) {
+    for e in entities {
+        for c in carried(e) {
+            match c {
+                Carried::Item(stack, ctx) => {
+                    let p = bakery.prepare(&stack, ctx);
+                    bakery.register_textures(&p, ab);
+                }
+                Carried::Armor(stack) => {
+                    if let Some((_, layers)) = bakery.armor_layers(&stack) {
+                        bakery.register_armor(&layers, ab);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn bump(m: &mut BTreeMap<String, usize>, k: &str) {
+    *m.entry(k.to_string()).or_default() += 1;
+}
+
+fn short(id: &str) -> &str {
+    id.strip_prefix("minecraft:").unwrap_or(id)
+}
+
+/// Resolves and draws one stack posed by `m`; counts it either way.
+#[allow(clippy::too_many_arguments)]
+fn draw_item(
+    bakery: &mut ItemBakery,
+    scene: &Scene,
+    stats: &mut EntityStats,
+    holder: &str,
+    stack: &ItemStack,
+    ctx: DisplayContext,
+    m: &Mat4,
+    out: &mut Vec<Quad>,
+) -> bool {
+    let p = bakery.prepare(stack, ctx);
+    count_item(stats, holder, stack, &p);
+    if p.drawn() {
+        bakery.emit(scene, &p, ctx, m, out);
+    }
+    p.drawn()
+}
+
+fn count_item(stats: &mut EntityStats, holder: &str, stack: &ItemStack, p: &Prepared) {
+    if p.drawn() {
+        bump(&mut stats.items_rendered, short(&stack.id));
+        if !p.undrawn.is_empty() {
+            log::debug!("{holder}: part of {} not drawn: {}", stack.id, p.reason());
+        }
+    } else {
+        bump(&mut stats.items_skipped, short(&stack.id));
+        log::debug!("{holder}: {} not drawn: {}", stack.id, p.reason());
+    }
+}
+
+/// A float in [0, 1) from a hash of `seed` and `k`.
+fn unit(seed: u32, k: u32) -> f32 {
+    (pos_hash(seed as i32, k as i32, 0x17, 0x5EED) >> 8) as f32 / (1u32 << 24) as f32
+}
+
+fn str_hash(s: &str) -> u32 {
+    s.bytes().fold(0x811C_9DC5u32, |h, b| {
+        (h ^ b as u32).wrapping_mul(0x0100_0193)
+    })
+}
+
+/// A dropped item (`ItemEntityRenderer`): lifted so its model's lowest point
+/// floats 1/16 above the entity, bobbing and spun by its phase, and drawn as a
+/// cluster of up to five copies for a large stack. The phase vanilla draws at
+/// random when the entity loads comes from its UUID here, and the clock is the
+/// first frame after loading (age 0), so a frame is reproducible.
+#[allow(clippy::too_many_arguments)]
+fn draw_dropped(
+    bakery: &mut ItemBakery,
+    scene: &Scene,
+    stats: &mut EntityStats,
+    e: &Entity,
+    stack: &ItemStack,
+    rel: Vec3,
+    out: &mut Vec<Quad>,
+) -> bool {
+    let p = bakery.prepare(stack, DisplayContext::Ground);
+    count_item(stats, "item", stack, &p);
+    if !p.drawn() {
+        return false;
+    }
+    let mut probe = Vec::new();
+    bakery.emit(
+        scene,
+        &p,
+        DisplayContext::Ground,
+        &Mat4::IDENTITY,
+        &mut probe,
+    );
+    let Some((lo, hi)) = bounds(&probe) else {
+        return false;
+    };
+    let uuid = match nbt::get(&e.nbt, "UUID") {
+        Some(fastnbt::Value::IntArray(a)) => a.iter().fold(0u32, |h, &x| {
+            pos_hash(h as i32, x, 0x55, 0x1D) ^ h.rotate_left(7)
+        }),
+        _ => str_hash(&format!("{:?}", e.pos)),
+    };
+    let phase = unit(uuid, 0) * std::f32::consts::TAU;
+    let age = 0.0f32;
+    let bob = (age / 10.0 + phase).sin() * 0.1 + 0.1;
+    let lift = -lo.y + 0.0625;
+    let spin = age / 20.0 + phase;
+    let base =
+        Mat4::from_translation(rel + Vec3::new(0.0, bob + lift, 0.0)) * Mat4::from_rotation_y(spin);
+    let place = |m: &Mat4, out: &mut Vec<Quad>| {
+        for q in &probe {
+            let mut q = *q;
+            transform_quad(&mut q, m);
+            out.push(q);
+        }
+    };
+    let n = rendered_amount(stack.count);
+    let seed = str_hash(&stack.id);
+    let jitter = |k: u32, axis: u32| (unit(seed, k * 3 + axis) * 2.0 - 1.0) * 0.15;
+    let depth = hi.z - lo.z;
+    if depth > 0.0625 {
+        place(&base, out);
+        for k in 1..n as u32 {
+            let t = Vec3::new(jitter(k, 0), jitter(k, 1), jitter(k, 2));
+            place(&(base * Mat4::from_translation(t)), out);
+        }
+    } else {
+        let step = depth * 1.5;
+        let mut m =
+            base * Mat4::from_translation(Vec3::new(0.0, 0.0, -(step * (n - 1) as f32 / 2.0)));
+        place(&m, out);
+        m *= Mat4::from_translation(Vec3::new(0.0, 0.0, step));
+        for k in 1..n as u32 {
+            let t = Vec3::new(jitter(k, 0) * 0.5, jitter(k, 1) * 0.5, 0.0);
+            place(&(m * Mat4::from_translation(t)), out);
+            m *= Mat4::from_translation(Vec3::new(0.0, 0.0, step));
+        }
+    }
+    true
+}
+
+/// An armour stand's part rotations in radians (`ArmorStand` `Pose`, with the
+/// vanilla defaults for an absent part).
+fn armor_stand_pose(e: &Entity) -> [(&'static str, [f32; 3]); 6] {
+    let get = |key: &str, d: [f32; 3]| -> [f32; 3] {
+        let deg = nbt::get(&e.nbt, &format!("Pose.{key}"))
+            .and_then(nbt::as_f64_list)
+            .filter(|v| v.len() == 3)
+            .map(|v| [v[0] as f32, v[1] as f32, v[2] as f32])
+            .unwrap_or(d);
+        deg.map(f32::to_radians)
+    };
+    [
+        ("head", get("Head", [0.0, 0.0, 0.0])),
+        ("body", get("Body", [0.0, 0.0, 0.0])),
+        ("left_arm", get("LeftArm", [-10.0, 0.0, -10.0])),
+        ("right_arm", get("RightArm", [-15.0, 0.0, 10.0])),
+        ("left_leg", get("LeftLeg", [-1.0, 0.0, -1.0])),
+        ("right_leg", get("RightLeg", [1.0, 0.0, 1.0])),
+    ]
+}
+
+fn fill_lights(quads: &[Quad], lights: &mut Vec<EntityLight>, light: EntityLight) {
+    let n = quads.len() - lights.len();
+    lights.extend(std::iter::repeat_n(light, n));
+}
+
+fn light_at(p: Vec3) -> EntityLight {
+    let p = p.floor();
+    EntityLight::shaded([p.x as i32, p.y as i32, p.z as i32])
 }
 
 #[cfg(test)]
