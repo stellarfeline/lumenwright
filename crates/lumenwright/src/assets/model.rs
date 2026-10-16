@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use glam::{Mat3, Vec3};
 use serde::Deserialize;
 
-use super::source::{ResourceStore, norm_loc};
+use super::source::{ResourceStore, norm_loc, split_loc};
 
 /// The six face directions, in vanilla order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -84,6 +84,65 @@ pub struct ModelJson {
     pub textures: HashMap<String, String>,
     pub elements: Option<Vec<ElementJson>>,
     pub ambientocclusion: Option<bool>,
+    /// Item display transforms by context name (`ground`, `fixed`, ...).
+    #[serde(default)]
+    pub display: HashMap<String, TransformJson>,
+}
+
+/// One entry of a model's `display` block (vanilla `ItemTransform`).
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+pub struct TransformJson {
+    pub rotation: Option<[f32; 3]>,
+    pub translation: Option<[f32; 3]>,
+    pub scale: Option<[f32; 3]>,
+}
+
+/// A display transform as vanilla applies it: degrees, block units (translation
+/// / 16, clamped to ±5) and a scale clamped to ±4 (`ItemTransform.Deserializer`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ItemTransform {
+    pub rotation: Vec3,
+    pub translation: Vec3,
+    pub scale: Vec3,
+}
+
+impl ItemTransform {
+    pub const IDENTITY: ItemTransform = ItemTransform {
+        rotation: Vec3::ZERO,
+        translation: Vec3::ZERO,
+        scale: Vec3::ONE,
+    };
+
+    fn from_json(j: &TransformJson) -> ItemTransform {
+        let v = |a: Option<[f32; 3]>, d: f32| a.map(Vec3::from).unwrap_or(Vec3::splat(d));
+        ItemTransform {
+            rotation: v(j.rotation, 0.0),
+            translation: (v(j.translation, 0.0) * 0.0625)
+                .clamp(Vec3::splat(-5.0), Vec3::splat(5.0)),
+            scale: v(j.scale, 1.0).clamp(Vec3::splat(-4.0), Vec3::splat(4.0)),
+        }
+    }
+
+    /// The pose vanilla's `ItemTransform.apply` multiplies in, followed by the
+    /// `translate(-0.5)` that centres the 0..1 model: a left-hand context mirrors
+    /// the x translation and the y and z rotations.
+    pub fn matrix(&self, left_hand: bool) -> glam::Mat4 {
+        use glam::{Mat4, Quat};
+        let (mut r, mut t) = (self.rotation, self.translation);
+        if left_hand {
+            r.y = -r.y;
+            r.z = -r.z;
+            t.x = -t.x;
+        }
+        // JOML `rotationXYZ(x, y, z)` is Rx * Ry * Rz.
+        let q = Quat::from_rotation_x(r.x.to_radians())
+            * Quat::from_rotation_y(r.y.to_radians())
+            * Quat::from_rotation_z(r.z.to_radians());
+        Mat4::from_translation(t)
+            * Mat4::from_quat(q)
+            * Mat4::from_scale(self.scale)
+            * Mat4::from_translation(Vec3::splat(-0.5))
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -143,6 +202,11 @@ pub struct ResolvedModel {
     pub elements: Vec<ElementJson>,
     pub textures: HashMap<String, String>,
     pub ambient_occlusion: bool,
+    /// The `builtin/...` parent the chain ends in (`builtin/generated` for flat items).
+    pub builtin: Option<String>,
+    /// Item display transforms by context name, the nearest model in the chain
+    /// winning per context.
+    pub display: HashMap<String, ItemTransform>,
 }
 
 pub const MISSING_TEXTURE: &str = "lumenwright:missing";
@@ -163,9 +227,31 @@ impl ResolvedModel {
     }
 }
 
+/// One model file's display transforms. Within one file a missing left-hand
+/// transform takes the right hand's (vanilla `ItemTransforms.Deserializer`).
+fn model_display(m: &ModelJson) -> Vec<(String, ItemTransform)> {
+    let mut out: Vec<(String, ItemTransform)> = m
+        .display
+        .iter()
+        .map(|(k, v)| (k.clone(), ItemTransform::from_json(v)))
+        .collect();
+    for (left, right) in [
+        ("thirdperson_lefthand", "thirdperson_righthand"),
+        ("firstperson_lefthand", "firstperson_righthand"),
+    ] {
+        if !m.display.contains_key(left)
+            && let Some(r) = m.display.get(right)
+        {
+            out.push((left.to_string(), ItemTransform::from_json(r)));
+        }
+    }
+    out
+}
+
 /// Loads and resolves a model with its parent chain.
 pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> {
     let mut chain: Vec<ModelJson> = Vec::new();
+    let mut builtin = None;
     let mut cur = Some(loc.to_string());
     while let Some(name) = cur.take() {
         if chain.len() > 32 {
@@ -173,6 +259,7 @@ pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> 
         }
         // "builtin/..." parents have no JSON.
         if name.contains("builtin/") {
+            builtin = Some(split_loc(&name).1.to_string());
             break;
         }
         let bytes = store.resolve("models", &name, "json")?;
@@ -195,6 +282,7 @@ pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> 
             textures.insert(k.clone(), v.clone());
         }
     }
+    let mut display = HashMap::new();
     for m in &chain {
         if elements.is_none() {
             elements = m.elements.clone();
@@ -202,11 +290,16 @@ pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> 
         if ao.is_none() {
             ao = m.ambientocclusion;
         }
+        for (ctx, t) in model_display(m) {
+            display.entry(ctx).or_insert(t);
+        }
     }
     Some(ResolvedModel {
         elements: elements.unwrap_or_default(),
         textures,
         ambient_occlusion: ao.unwrap_or(true),
+        builtin,
+        display,
     })
 }
 
@@ -513,6 +606,8 @@ pub fn cube_all(texture: &str) -> BakedModel {
             elements: vec![el],
             textures,
             ambient_occlusion: true,
+            builtin: None,
+            display: HashMap::new(),
         },
         0,
         0,
@@ -582,6 +677,8 @@ mod tests {
             elements: vec![el],
             textures,
             ambient_occlusion: true,
+            builtin: None,
+            display: HashMap::new(),
         };
         let b = bake(&m, 0, 90, false);
         assert_eq!(b.quads[0].dir(), Some(Dir::East));

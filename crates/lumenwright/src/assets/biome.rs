@@ -166,6 +166,11 @@ impl BiomeColors {
         }
     }
 
+    /// The grass colormap at a climate (an item's `minecraft:grass` tint).
+    pub fn grass_climate(&self, temperature: f32, downfall: f32) -> u32 {
+        self.grass.sample(temperature, downfall)
+    }
+
     pub fn foliage(&self, biome: &str) -> u32 {
         let i = biome_info(biome);
         i.foliage
