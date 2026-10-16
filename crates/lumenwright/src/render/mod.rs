@@ -1,7 +1,7 @@
 //! Rendering backends and the inputs they share.
 //!
 //! Every backend implements [`Backend`]. Quick mode consumes a [`Mesh`] (rasterized),
-//! HQ mode consumes a [`voxel::HqScene`] (path traced). Shading formulas are kept
+//! HQ mode consumes a [`HqScene`] (path traced). Shading formulas are kept
 //! identical between the Rust and WGSL implementations so backends agree.
 
 pub mod cpu;
