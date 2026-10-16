@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use clap::Parser;
-use lumenwright::assets::jar;
-use lumenwright::fixture;
-use lumenwright::job::{self, RenderArgs};
+use lumenwright_cli::fixture;
+use lumenwright_cli::jar;
+use lumenwright_cli::job::{self, RenderArgs};
 
 #[derive(Parser)]
 struct Wrap {

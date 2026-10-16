@@ -20,7 +20,7 @@ use glam::{Mat4, Vec3};
 use crate::scene::mesh::Mesh;
 use crate::scene::voxel::HqScene;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     /// Vanilla-client look: rasterized, no ray tracing.
     Quick,
@@ -28,7 +28,7 @@ pub enum Mode {
     Hq,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendKind {
     /// Best available: Metal/Vulkan/DX12 GPU, then CPU.
     Auto,

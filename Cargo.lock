@@ -795,9 +795,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
- "clap",
  "cudarc",
- "env_logger",
  "fastnbt",
  "flate2",
  "glam",
@@ -809,9 +807,27 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "wgpu",
+ "zip",
+]
+
+[[package]]
+name = "lumenwright-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "env_logger",
+ "fastnbt",
+ "flate2",
+ "image",
+ "log",
+ "lumenwright",
+ "rayon",
+ "serde",
+ "serde_json",
  "sha1_smol",
  "ureq",
- "wgpu",
  "zip",
 ]
 
