@@ -362,6 +362,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
         unknown_entities_as_boxes: policy.unknown == UnknownEntities::Box,
         block_entities: policy.block_entities,
         eye: Some([cam.pos.x, cam.pos.y, cam.pos.z]),
+        view: Some([cam.yaw, cam.pitch]),
     };
     let block_entities = block_entities::parse_all(&area.block_entities);
     let scene = Scene::build(
@@ -562,6 +563,6 @@ pub fn hq_params(
         ],
         frame: [width, height, 0, o.max_bounces],
         misc_u: [o.seed, 1, hq.models.len() as u32, 0],
-        _reserved: [0; 4],
+        see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
     }
 }

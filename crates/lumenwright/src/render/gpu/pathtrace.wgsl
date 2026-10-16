@@ -17,7 +17,7 @@ struct Params {
     off2: vec4<u32>,
     frame: vec4<u32>,
     misc_u: vec4<u32>,
-    reserved: vec4<u32>,
+    see_through: vec4<u32>,
 }
 
 // Quads are read as raw words: the w lanes of p0/eu carry bit-cast integers
@@ -52,6 +52,7 @@ const NO_QUAD: u32 = 0xFFFFFFFFu;
 const ALPHA_CUTOUT: u32 = 1u;
 const ALPHA_TRANSLUCENT: u32 = 2u;
 const FLAG_WATER: u32 = 4u;
+const FLAG_FRONT_ONLY: u32 = 16u;
 const PI: f32 = 3.14159265358979;
 const INF: f32 = 1e30;
 const MAX_EVENTS: u32 = 48u;
@@ -143,6 +144,7 @@ fn texel_at(u: f32, v: f32) -> u32 {
 
 fn test_quad(qi: u32, o: vec3<f32>, d: vec3<f32>, tmin: f32, best: ptr<function, Hit>) {
     let q = quads[qi];
+    if ((q_flags(q) & FLAG_FRONT_ONLY) != 0u && dot(q_normal(q), d) >= 0.0) { return; }
     let eu = q_eu(q);
     let ev = q_ev(q);
     let n = cross(eu, ev);
@@ -165,6 +167,18 @@ fn test_quad(qi: u32, o: vec3<f32>, d: vec3<f32>, tmin: f32, best: ptr<function,
     let mode = q_flags(q) & 3u;
     if ((mode == ALPHA_CUTOUT && alpha < 128u) || (mode == ALPHA_TRANSLUCENT && alpha == 0u)) { return; }
     (*best) = Hit(t, qi, tex);
+}
+
+fn is_see_through(qi: u32) -> bool {
+    return qi >= P.see_through.x && qi - P.see_through.x < P.see_through.y;
+}
+
+fn see_through_hit(o: vec3<f32>, d: vec3<f32>, tmin: f32) -> Hit {
+    var best = Hit(INF, NO_QUAD, 0u);
+    for (var i = 0u; i < P.see_through.y; i++) {
+        test_quad(P.see_through.x + i, o, d, tmin, &best);
+    }
+    return best;
 }
 
 fn trace(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> Hit {
@@ -382,7 +396,21 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
     let sigma = P.water_color.xyz;
 
     for (var ev = 0u; ev < MAX_EVENTS; ev++) {
-        let h = trace(o, d, tmin, INF);
+        var h = trace(o, d, tmin, INF);
+        var forced = false;
+        if (bounces == 0u && P.see_through.y > 0u && h.quad != NO_QUAD && !is_see_through(h.quad)) {
+            let s = see_through_hit(o, d, h.t);
+            if (s.quad != NO_QUAD) {
+                if ((q_flags(quads[s.quad]) & 3u) == ALPHA_TRANSLUCENT) {
+                    if (rnd() < f32(s.texel >> 24u) / 255.0) {
+                        h = s;
+                        forced = true;
+                    }
+                } else {
+                    h = s;
+                }
+            }
+        }
         if (h.quad == NO_QUAD) {
             if (!in_water) {
                 radiance += beta * sky_radiance(d);
@@ -427,7 +455,7 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
             continue;
         }
 
-        if ((flags & 3u) == ALPHA_TRANSLUCENT && rnd() >= alpha) {
+        if (!forced && (flags & 3u) == ALPHA_TRANSLUCENT && rnd() >= alpha) {
             beta = beta * mix(vec3<f32>(1.0), albedo, alpha);
             o = pos + d * eps;
             tmin = 0.0;

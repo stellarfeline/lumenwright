@@ -134,6 +134,9 @@ fn fallback_hitbox(id: &str) -> [f32; 2] {
     }
 }
 
+/// Text displays: laid out and placed before the atlas is packed, drawn after.
+pub mod text_display;
+
 fn texture_exists(store: &ResourceStore, loc: &str) -> bool {
     store.resolve("textures", loc, "png").is_some()
 }
@@ -457,11 +460,25 @@ fn box_quads(m: &Mat4, sprite: &crate::assets::atlas::Sprite, tint: [u8; 4], out
     }
 }
 
-fn display_transform(e: &Entity) -> Mat4 {
-    let rot = Mat4::from_quat(
-        Quat::from_rotation_y((-e.yaw).to_radians()) * Quat::from_rotation_x(e.pitch.to_radians()),
-    );
-    let t = match nbt::get(&e.nbt, "transformation") {
+/// A display entity's orientation (`DisplayRenderer.calculateOrientation`):
+/// its own yaw and pitch, or the camera's for the axes its `billboard` frees.
+fn display_orientation(e: &Entity, view: Option<[f32; 2]>) -> Mat4 {
+    let [cam_yaw, cam_pitch] = view.unwrap_or([e.yaw + 180.0, -e.pitch]);
+    let (yaw, pitch) = match e.str_field("billboard").unwrap_or("fixed") {
+        "vertical" => (cam_yaw - 180.0, e.pitch),
+        "horizontal" => (e.yaw, -cam_pitch),
+        "center" => (cam_yaw - 180.0, -cam_pitch),
+        _ => (e.yaw, e.pitch),
+    };
+    // JOML rotationYXZ(-yaw, pitch, 0).
+    Mat4::from_quat(
+        Quat::from_rotation_y((-yaw).to_radians()) * Quat::from_rotation_x(pitch.to_radians()),
+    )
+}
+
+/// A display entity's `transformation` (a matrix, or the decomposed form).
+fn display_transformation(e: &Entity) -> Mat4 {
+    match nbt::get(&e.nbt, "transformation") {
         Some(fastnbt::Value::List(l)) if l.len() == 16 => {
             let f: Vec<f32> = l.iter().filter_map(nbt::as_f64).map(|v| v as f32).collect();
             if let Ok(a) = <[f32; 16]>::try_from(f.as_slice()) {
@@ -508,8 +525,11 @@ fn display_transform(e: &Entity) -> Mat4 {
                 * Mat4::from_quat(quat("right_rotation"))
         }
         _ => Mat4::IDENTITY,
-    };
-    rot * t
+    }
+}
+
+fn display_transform(e: &Entity, view: Option<[f32; 2]>) -> Mat4 {
+    display_orientation(e, view) * display_transformation(e)
 }
 
 /// 3D direction from painting/item-frame NBT.
@@ -628,7 +648,7 @@ pub fn build_entity_quads(
             else {
                 continue;
             };
-            let m = Mat4::from_translation(rel) * display_transform(e);
+            let m = Mat4::from_translation(rel) * display_transform(e, opts.view);
             push_block_model(scene, &state, &m, rel, &mut scratch, &mut quads);
             light_pos = m.transform_point3(Vec3::splat(0.5));
             *stats.rendered.entry(id.clone()).or_default() += 1;
