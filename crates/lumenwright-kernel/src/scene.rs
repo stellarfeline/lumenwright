@@ -12,15 +12,22 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::math::{V3, v3};
 
+/// A top-level or overlay entry for a brick that holds nothing.
 pub const EMPTY: u32 = 0xFFFF_FFFF;
+/// Set on a top-level entry whose whole brick is one model; the low bits are the model id.
 pub const UNIFORM: u32 = 0x8000_0000;
+/// Words per brick in the `bricks` region: 4096 u16 model ids, two per word.
 pub const BRICK_WORDS: u32 = 2048;
+/// Words per overlay brick in the `ov_cells` region: an `(offset, count)` pair per voxel.
 pub const OV_CELL_WORDS: u32 = 8192;
 
 /// Alpha handling for a quad (bits 0-1 of the flags).
 pub const ALPHA_OPAQUE: u32 = 0;
+/// Alpha mode: texels with alpha below 128 are holes.
 pub const ALPHA_CUTOUT: u32 = 1;
+/// Alpha mode: texels are blended by their alpha (stochastically in HQ mode).
 pub const ALPHA_TRANSLUCENT: u32 = 2;
+/// Mask for the alpha mode bits of a quad's flags.
 pub const FLAG_ALPHA_MASK: u32 = 3;
 /// Water surface: dielectric with Fresnel reflection/refraction.
 pub const FLAG_WATER: u32 = 1 << 2;
@@ -48,26 +55,32 @@ pub struct GpuQuad {
 }
 
 impl GpuQuad {
+    /// The flag bits: alpha mode (`FLAG_ALPHA_MASK`), [`FLAG_WATER`], [`FLAG_SHADE`].
     #[inline(always)]
     pub fn flags(&self) -> u32 {
         self.p0[3].to_bits()
     }
+    /// The tint colour, RGBA8 sRGB packed little-endian (red in the low byte).
     #[inline(always)]
     pub fn tint(&self) -> u32 {
         self.eu[3].to_bits()
     }
+    /// Emission strength: the block's light level divided by 15.
     #[inline(always)]
     pub fn emission(&self) -> f32 {
         self.ev[3]
     }
+    /// The corner `p0`.
     #[inline(always)]
     pub fn origin(&self) -> V3 {
         V3::from4(self.p0)
     }
+    /// The edge along `s`.
     #[inline(always)]
     pub fn edge_u(&self) -> V3 {
         V3::from4(self.eu)
     }
+    /// The edge along `t`.
     #[inline(always)]
     pub fn edge_v(&self) -> V3 {
         V3::from4(self.ev)
@@ -79,12 +92,18 @@ impl GpuQuad {
     }
 }
 
+/// A block model: a run of consecutive quads in [`SceneView::quads`],
+/// in block-local coordinates. Model id 0 is air and is never traced.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pod, Zeroable)]
 pub struct GpuModel {
+    /// Index of the model's first quad.
     pub quad_offset: u32,
+    /// Number of quads in the model.
     pub quad_count: u32,
+    /// Reserved, written as 0.
     pub flags: u32,
+    /// Padding to 16 bytes.
     pub _pad: u32,
 }
 
@@ -96,7 +115,9 @@ pub struct Params {
     pub cam_pos: [f32; 4],
     /// w = aspect ratio (width / height).
     pub cam_fwd: [f32; 4],
+    /// Camera right unit vector; w unused.
     pub cam_right: [f32; 4],
+    /// Camera up unit vector; w unused.
     pub cam_up: [f32; 4],
     /// Unit vector towards the sun; w = cos(angular radius).
     pub sun_dir: [f32; 4],
@@ -120,20 +141,27 @@ pub struct Params {
     pub frame: [u32; 4],
     /// x = seed, y = samples per dispatch, z = model count, w = unused.
     pub misc_u: [u32; 4],
+    /// Reserved; pads the struct to 16 vec4 slots.
     pub _reserved: [u32; 4],
 }
 
 /// Borrowed view of all scene buffers.
 #[derive(Clone, Copy)]
 pub struct SceneView<'a> {
+    /// Per-frame parameters.
     pub params: &'a Params,
+    /// The grid buffer, laid out as the module documentation describes.
     pub grid: &'a [u32],
+    /// Block models, indexed by the model ids in the grid.
     pub models: &'a [GpuModel],
+    /// Every quad: block-model quads first, then world-space entity quads.
     pub quads: &'a [GpuQuad],
+    /// The texture atlas, RGBA8 sRGB, row-major, `off2.y` wide and `off2.z` high.
     pub atlas: &'a [u32],
 }
 
 impl SceneView<'_> {
+    /// The grid's extent in voxels (blocks).
     #[inline(always)]
     pub fn grid_size(&self) -> V3 {
         let d = self.params.grid_dims;
@@ -168,6 +196,7 @@ impl SceneView<'_> {
     }
 }
 
+/// Unpacks RGBA8 (red in the low byte) into four `[0, 1]` floats, without colour conversion.
 #[inline(always)]
 pub fn unpack_rgba(c: u32) -> [f32; 4] {
     [

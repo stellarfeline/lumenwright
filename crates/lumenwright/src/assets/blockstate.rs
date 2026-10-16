@@ -9,15 +9,21 @@ use super::model::{self, BakedModel};
 use super::source::{ResourceStore, norm_loc};
 use crate::world::BlockState;
 
+/// One model reference in a blockstate file, as vanilla writes it.
 #[derive(Deserialize, Clone, Debug)]
 pub struct VariantJson {
+    /// Model location, such as `minecraft:block/oak_stairs`.
     pub model: String,
+    /// Rotation about the x axis in degrees (0, 90, 180 or 270).
     #[serde(default)]
     pub x: i32,
+    /// Rotation about the y axis in degrees (0, 90, 180 or 270).
     #[serde(default)]
     pub y: i32,
+    /// Keeps the textures fixed in world space when the model rotates.
     #[serde(default)]
     pub uvlock: bool,
+    /// Relative weight among the alternatives of a weighted list (default 1).
     #[serde(default = "one")]
     pub weight: u32,
 }
@@ -26,14 +32,18 @@ fn one() -> u32 {
     1
 }
 
+/// A JSON value that is either one `T` or an array of them.
 #[derive(Deserialize, Clone, Debug)]
 #[serde(untagged)]
 pub enum OneOrMany<T> {
+    /// A single value.
     One(T),
+    /// An array of values.
     Many(Vec<T>),
 }
 
 impl<T: Clone> OneOrMany<T> {
+    /// The values as a vector, one element for [`OneOrMany::One`].
     pub fn to_vec(&self) -> Vec<T> {
         match self {
             OneOrMany::One(t) => vec![t.clone()],
@@ -42,15 +52,21 @@ impl<T: Clone> OneOrMany<T> {
     }
 }
 
+/// One case of a `multipart` blockstate.
 #[derive(Deserialize, Clone, Debug)]
 pub struct MultipartCase {
+    /// The condition; `None` always applies.
     pub when: Option<Value>,
+    /// The model, or weighted alternatives, applied when the case matches.
     pub apply: OneOrMany<VariantJson>,
 }
 
+/// A blockstate file: `variants`, `multipart`, or both.
 #[derive(Deserialize, Clone, Debug)]
 pub struct BlockStateJson {
+    /// Variant keys (such as `facing=east,half=bottom`) to their models.
     pub variants: Option<serde_json::Map<String, Value>>,
+    /// Cases, each applied when its condition matches.
     pub multipart: Option<Vec<MultipartCase>>,
 }
 
@@ -98,10 +114,15 @@ pub fn variant_key_matches(key: &str, state: &BlockState) -> bool {
 /// Models making up one block state: each part is a weighted list of baked models.
 #[derive(Clone, Debug, Default)]
 pub struct BlockModelSet {
+    /// One entry per part: alternatives as `(baked model id, weight)`.
     pub parts: Vec<Vec<(u32, u32)>>,
+    /// No blockstate or no matching case was found; the set holds the missing
+    /// model.
     pub missing: bool,
 }
 
+/// Deterministic hash of a block position and a salt, used to pick weighted
+/// variants and other per-position choices.
 #[inline]
 pub fn pos_hash(x: i32, y: i32, z: i32, salt: u32) -> u32 {
     let mut h = (x as u32).wrapping_mul(0x8DA6_B343)
@@ -137,6 +158,8 @@ impl BlockModelSet {
         }
     }
 
+    /// Every part has a single alternative, so the choice does not depend on
+    /// position.
     pub fn is_deterministic(&self) -> bool {
         self.parts.iter().all(|p| p.len() == 1)
     }
@@ -144,14 +167,17 @@ impl BlockModelSet {
 
 /// Caches resolved and baked models.
 pub struct ModelBakery<'a> {
+    /// The resources models and blockstates are read from.
     pub store: &'a ResourceStore,
     resolved: HashMap<String, Option<model::ResolvedModel>>,
     baked_ids: HashMap<(String, i32, i32, bool), u32>,
+    /// Baked models, indexed by baked id; id 0 is [`ModelBakery::MISSING`].
     pub baked: Vec<BakedModel>,
     blockstates: HashMap<String, Option<BlockStateJson>>,
 }
 
 impl<'a> ModelBakery<'a> {
+    /// A bakery reading from `store`, holding only the missing model.
     pub fn new(store: &'a ResourceStore) -> ModelBakery<'a> {
         let mut b = ModelBakery {
             store,
@@ -165,8 +191,12 @@ impl<'a> ModelBakery<'a> {
         b
     }
 
+    /// Baked id of the vanilla magenta and black missing cube.
     pub const MISSING: u32 = 0;
 
+    /// Resolves and bakes a model with an x/y rotation in degrees and returns its
+    /// baked id, cached by its arguments. A model that cannot be resolved returns
+    /// [`ModelBakery::MISSING`].
     pub fn bake(&mut self, loc: &str, x: i32, y: i32, uvlock: bool) -> u32 {
         let loc = norm_loc(loc);
         let key = (loc.clone(), x, y, uvlock);

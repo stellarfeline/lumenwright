@@ -5,29 +5,37 @@ use fastnbt::Value;
 use super::nbt::{self, Compound};
 
 #[derive(Clone, Debug)]
+/// One entity read from the save.
 pub struct Entity {
     /// Namespaced id, e.g. `minecraft:pig`.
     pub id: String,
+    /// Position in world coordinates (blocks).
     pub pos: [f64; 3],
+    /// Yaw in degrees, Minecraft convention (0 = south, 90 = west).
     pub yaw: f32,
+    /// Pitch in degrees; positive looks down.
     pub pitch: f32,
     /// The full entity compound, for model-specific fields (variants, facing...).
     pub nbt: Compound,
 }
 
 impl Entity {
+    /// The id without the `minecraft:` namespace.
     pub fn short_id(&self) -> &str {
         self.id.strip_prefix("minecraft:").unwrap_or(&self.id)
     }
 
+    /// A string field of the entity compound; `key` may be a dotted path.
     pub fn str_field(&self, key: &str) -> Option<&str> {
         nbt::get_str(&self.nbt, key)
     }
 
+    /// A numeric field of the entity compound as `f64`; `key` may be a dotted path.
     pub fn num_field(&self, key: &str) -> Option<f64> {
         nbt::get_f64(&self.nbt, key)
     }
 
+    /// Whether a numeric field is present and non-zero; `key` may be a dotted path.
     pub fn flag(&self, key: &str) -> bool {
         nbt::get_bool(&self.nbt, key)
     }

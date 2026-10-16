@@ -35,6 +35,7 @@ pub fn daylight(angle: f32) -> f32 {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 pub struct QuickSky {
+    /// Sky colour, sRGB `0..1` in xyz.
     pub sky_color: [f32; 4],
     /// w = fog start
     pub fog_color: [f32; 4],
@@ -42,8 +43,11 @@ pub struct QuickSky {
     pub sun_dir: [f32; 4],
     /// Sun sprite rect in the atlas (x, y, w, h) in pixels; w = 0 disables it.
     pub sun_rect: [f32; 4],
+    /// Camera forward vector in xyz.
     pub cam_forward: [f32; 4],
+    /// Camera right vector in xyz.
     pub cam_right: [f32; 4],
+    /// Camera up vector in xyz.
     pub cam_up: [f32; 4],
     /// x = tan(fov/2), y = aspect, z = width, w = height
     pub cam_misc: [f32; 4],
@@ -51,6 +55,10 @@ pub struct QuickSky {
 
 impl QuickSky {
     #[allow(clippy::too_many_arguments)]
+    /// Packs the quick-mode sky for a camera and an output size. `sky` and `fog`
+    /// are sRGB `0..1`, `sun` is the unit vector towards the sun, `fog_range` is
+    /// the (start, end) fog distance in blocks, and `sun_rect` is the sun sprite's
+    /// atlas rectangle (x, y, w, h) in texels, with w = 0 for no sun.
     pub fn new(
         cam: &CameraRays,
         width: u32,
@@ -131,12 +139,19 @@ impl QuickSky {
 /// Physically-motivated sky and sun parameters for HQ mode (linear RGB).
 #[derive(Clone, Copy, Debug)]
 pub struct HqSky {
+    /// Unit vector towards the sun.
     pub sun_dir: Vec3,
+    /// Sun radiance, linear RGB.
     pub sun_color: Vec3,
+    /// Sky radiance straight up, linear RGB.
     pub zenith: Vec3,
+    /// Sky radiance at the horizon, linear RGB.
     pub horizon: Vec3,
 }
 
+/// Derives the HQ sun and sky for a sun direction: the sun warms and dims
+/// towards the horizon and the sky darkens below it. `sun_intensity` and
+/// `sky_intensity` scale the sun and sky radiance.
 pub fn hq_sky(sun_dir: Vec3, sun_intensity: f32, sky_intensity: f32) -> HqSky {
     let alt = sun_dir.y;
     let day = (alt * 4.0 + 0.4).clamp(0.0, 1.0);

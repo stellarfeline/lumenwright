@@ -11,26 +11,44 @@ use super::{Fluid, Scene};
 use crate::assets::model::Dir;
 use crate::world::StateId;
 
+/// The HQ-mode scene, flattened into the buffers every path-tracing backend reads
+/// (layout in `lumenwright_kernel::scene`).
 pub struct HqScene {
+    /// The grid buffer: top-level brick entries, brick voxels and the entity overlay,
+    /// at the word offsets in `offsets`.
     pub grid: Vec<u32>,
+    /// Block model instances; voxels hold indices into this list.
     pub models: Vec<GpuModel>,
+    /// Every quad: block-model quads in block-local coordinates, then entity quads
+    /// in grid-relative world coordinates.
     pub quads: Vec<GpuQuad>,
+    /// The texture atlas, one RGBA8 texel per word, row by row.
     pub atlas: Vec<u32>,
+    /// Atlas width and height in texels.
     pub atlas_size: [u32; 2],
     /// Grid size in bricks.
     pub dims: [u32; 3],
     /// Word offsets: top, bricks, ov_top, ov_cells, ov_quads.
     pub offsets: [u32; 5],
+    /// What the grid holds, for logging.
     pub stats: HqStats,
 }
 
 #[derive(Debug, Default, Clone)]
+/// Counts of what [`build_hq`] put in the grid.
 pub struct HqStats {
+    /// Bricks stored voxel by voxel.
     pub bricks: usize,
+    /// Bricks whose voxels are all one instance, stored as a single entry.
     pub uniform_bricks: usize,
+    /// Bricks of occluding blocks whose six neighbour bricks also occlude, collapsed
+    /// to one entry.
     pub buried_bricks: usize,
+    /// Distinct block model instances.
     pub instances: usize,
+    /// Bricks that hold entity geometry.
     pub overlay_bricks: usize,
+    /// Entity and block-entity quads.
     pub entity_quads: usize,
 }
 
@@ -53,6 +71,7 @@ struct SectionKeys {
 }
 
 impl HqScene {
+    /// Approximate GPU memory the buffers take, in bytes.
     pub fn memory_bytes(&self) -> usize {
         self.grid.len() * 4 + self.models.len() * 16 + self.quads.len() * 80 + self.atlas.len() * 4
     }
@@ -62,6 +81,12 @@ fn dir_bit(d: Dir) -> u8 {
     1 << d.index()
 }
 
+/// Builds the HQ-mode buffers from `scene`.
+///
+/// # Errors
+///
+/// Fails when the view holds more than 65535 distinct block model instances,
+/// the most a voxel's 16-bit id can name.
 pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
     let t = std::time::Instant::now();
     let v = &scene.volume;

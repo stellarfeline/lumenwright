@@ -10,9 +10,11 @@ use crate::world::nbt;
 /// A run of characters with one style.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Span {
+    /// The characters of the run.
     pub text: String,
     /// RGB colour set by the component's style; `None` takes the caller's colour.
     pub color: Option<u32>,
+    /// Drawn in the bold face (each glyph struck twice, one pixel apart).
     pub bold: bool,
 }
 
@@ -216,9 +218,13 @@ fn json_style(o: &serde_json::Map<String, serde_json::Value>, parent: Style) -> 
 /// A character placed on a line, in font pixels from the line's left edge.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Placed {
+    /// The character.
     pub c: char,
+    /// Left edge of the glyph, in font pixels from the line's left edge.
     pub x: f32,
+    /// RGB colour set by the style; `None` takes the caller's colour.
     pub color: Option<u32>,
+    /// Drawn in the bold face.
     pub bold: bool,
 }
 
