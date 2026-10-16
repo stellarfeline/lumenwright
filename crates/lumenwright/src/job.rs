@@ -1,20 +1,18 @@
-//! End-to-end render job: world -> scene -> backend -> image.
+//! The CLI's render job: flags -> [`Request`] -> [`crate::render`] -> image file.
 
 use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
-use glam::{DVec3, Vec3};
-use lumenwright_kernel::Params;
+use glam::DVec3;
 
-use crate::assets::{self, jar};
+use crate::assets::jar;
 use crate::render::post::{self, Tonemap};
-use crate::render::sky::{self, QuickSky};
-use crate::render::{self, BackendKind, CameraRays, HqFrame, Mode, QuickFrame};
+use crate::render::sky;
+use crate::render::{BackendKind, Mode};
+use crate::request::{ChunkRect, EntityPolicy, HqOptions, QuickOptions, Request, Sky, WorldSource};
 use crate::scene::camera::Camera;
-use crate::scene::mesh::{self, Lighting, MeshParams};
-use crate::scene::{BuildOptions, Scene, voxel};
-use crate::world::{Dimension, Entity, World};
+use crate::world::{Dimension, World};
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct RenderArgs {
@@ -120,11 +118,7 @@ pub struct RenderArgs {
     pub players: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-pub enum UnknownEntities {
-    Box,
-    Skip,
-}
+pub use crate::request::UnknownEntities;
 
 pub fn parse_vec3(s: &str) -> Result<DVec3> {
     let v: Vec<f64> = s
@@ -182,16 +176,10 @@ fn camera_from_args(a: &RenderArgs, world: &World) -> Result<Camera> {
     })
 }
 
+/// The CLI's `render`: resolves the jar, derives the camera and the chunk
+/// square from the flags, calls [`crate::render`], and writes the image.
 pub fn run(a: &RenderArgs) -> Result<RenderReport> {
-    let mut timings = Vec::new();
-    let mut t = Instant::now();
-    let mut lap = |name: &'static str, t: &mut Instant| {
-        timings.push((name, t.elapsed().as_secs_f64()));
-        *t = Instant::now();
-    };
-    if a.width == 0 || a.height == 0 {
-        bail!("image size must be positive");
-    }
+    let t = Instant::now();
     let dimension = Dimension::parse(&a.dimension)?;
     let world = World::open(&a.world, dimension)?;
     let cam = camera_from_args(a, &world)?;
@@ -205,53 +193,6 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
         cam.yaw,
         cam.pitch
     );
-
-    // 1. World.
-    let cc = [
-        (cam.pos.x.floor() as i32) >> 4,
-        (cam.pos.z.floor() as i32) >> 4,
-    ];
-    let r = a.render_distance.max(1);
-    let mut area = world.load_area(
-        [cc[0] - r, cc[1] - r],
-        [cc[0] + r, cc[1] + r],
-        !a.no_entities,
-    )?;
-    if area.chunks_loaded == 0 {
-        bail!(
-            "no chunks found around ({:.0}, {:.0}) in {}",
-            cam.pos.x,
-            cam.pos.z,
-            world.region_dir().display()
-        );
-    }
-    let mut entities: Vec<Entity> = std::mem::take(&mut area.entities);
-    if a.players && !a.no_entities {
-        let mut players: Vec<_> = world.player().cloned().into_iter().collect();
-        players.extend(world.other_players());
-        for p in players {
-            let mut nbt = crate::world::nbt::Compound::new();
-            nbt.insert(
-                "id".into(),
-                fastnbt::Value::String("minecraft:player".into()),
-            );
-            entities.push(Entity {
-                id: "minecraft:player".into(),
-                pos: p.pos,
-                yaw: p.yaw,
-                pitch: p.pitch,
-                nbt,
-            });
-        }
-    }
-    log::info!(
-        "loaded {} chunks, {} entities",
-        area.chunks_loaded,
-        entities.len()
-    );
-    lap("load world", &mut t);
-
-    // 2. Assets (Chunky-style: the official client jar).
     let version = a
         .mc_version
         .clone()
@@ -261,182 +202,67 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
         version: version.as_deref(),
         allow_download: !a.offline,
     })?;
-    let store = assets::load_resources(&jar_path, &a.resource_packs)?;
-    lap("load assets", &mut t);
-
-    // 3. Scene.
-    let opts = BuildOptions {
-        entities: !a.no_entities,
-        unknown_entities_as_boxes: a.unknown_entities == UnknownEntities::Box,
-        block_entities: !a.no_block_entities,
-        eye: Some([cam.pos.x, cam.pos.y, cam.pos.z]),
+    let opening = t.elapsed().as_secs_f64();
+    let r = a.render_distance.max(1);
+    let req = Request {
+        world: WorldSource::Opened(&world),
+        chunks: ChunkRect::around(cam.pos, r),
+        jar: &jar_path,
+        resource_packs: &a.resource_packs,
+        camera: cam,
+        mode: a.mode,
+        backend: a.backend,
+        width: a.width,
+        height: a.height,
+        entities: EntityPolicy {
+            entities: !a.no_entities,
+            unknown: a.unknown_entities,
+            block_entities: !a.no_block_entities,
+            players: a.players,
+        },
+        quick: QuickOptions {
+            ssaa: a.ssaa,
+            draw_distance: (r * 16) as f32,
+            brightness: a.brightness,
+            smooth: !a.flat_lighting,
+        },
+        hq: HqOptions {
+            spp: a.spp,
+            max_bounces: a.max_bounces,
+            seed: a.seed,
+            emitter_intensity: a.emitter_intensity,
+            exposure: a.exposure,
+            tonemap: a.tonemap,
+        },
+        sky: Sky::Vanilla {
+            time: a.time,
+            sun_dir: a
+                .sun_altitude
+                .map(|alt| sky::sun_direction(alt, a.sun_azimuth)),
+            sun_intensity: a.sun_intensity,
+            sky_intensity: a.sky_intensity,
+        },
     };
-    let block_entities = crate::scene::block_entities::parse_all(&area.block_entities);
-    let scene = Scene::build(
-        &store,
-        area.registry,
-        area.volume,
-        &entities,
-        &block_entities,
-        &opts,
-    );
-    lap("build scene", &mut t);
-
-    let mut backend = render::create_backend(a.backend)?;
-    log::info!("backend: {}", backend.name());
-    let eye = Vec3::new(
-        (cam.pos.x - scene.origin[0] as f64) as f32,
-        (cam.pos.y - scene.origin[1] as f64) as f32,
-        (cam.pos.z - scene.origin[2] as f64) as f32,
-    );
-    let ticks = a.time.unwrap_or(world.level.day_time);
-    let angle = sky::celestial_angle(ticks);
-    let sun_dir = match a.sun_altitude {
-        Some(alt) => sky::sun_direction(alt, a.sun_azimuth),
-        None => sky::sun_direction_from_angle(angle),
-    };
-    let (f, r_, u) = cam.basis();
-    let aspect = a.width as f32 / a.height as f32;
-    let rays = CameraRays {
-        forward: f,
-        right: r_,
-        up: u,
-        tan_half_fov: (cam.fov_y.to_radians() * 0.5).tan(),
-        aspect,
-    };
-
-    let (pixels, w, h) = match a.mode {
-        Mode::Quick => {
-            let k = a.ssaa.clamp(1, 4);
-            let (w, h) = (a.width * k, a.height * k);
-            let max_dist = (r * 16) as f32;
-            let view_proj =
-                cam.projection(aspect, 0.05, max_dist * 2.0 + 512.0) * cam.view(Vec3::ZERO);
-            let day = sky::daylight(angle);
-            let lighting = Lighting {
-                sky_factor: day,
-                gamma: a.brightness.clamp(0.0, 1.0),
-                smooth: !a.flat_lighting,
-            };
-            let mesh = mesh::build_mesh(
-                &scene,
-                &MeshParams {
-                    eye,
-                    view_proj,
-                    max_distance: max_dist,
-                    lighting,
-                },
-            );
-            lap("build mesh", &mut t);
-            let biome = scene.registry.biomes[scene.volume.biome(
-                cam.pos.x.floor() as i32,
-                cam.pos.y.floor() as i32,
-                cam.pos.z.floor() as i32,
-            ) as usize]
-                .clone();
-            let temp = crate::assets::biome::biome_info(&biome).temperature;
-            let sky_c = Vec3::from(crate::assets::biome::sky_color(temp)) * day;
-            let fog_c = Vec3::new(0.753, 0.847, 1.0) * (day * 0.94 + 0.06);
-            let fog_range = (max_dist - (max_dist / 10.0).clamp(4.0, 64.0), max_dist);
-            let sun_rect = crate::scene::SUN_TEXTURES
-                .iter()
-                .find_map(|t| scene.atlas.id(t))
-                .map(|id| {
-                    let s = scene.atlas.sprites[id as usize];
-                    [s.x as f32, s.y as f32, s.w as f32, s.h as f32]
-                })
-                .filter(|_| sun_dir.y > -0.2)
-                .unwrap_or([0.0; 4]);
-            let qs = QuickSky::new(&rays, w, h, sky_c, fog_c, sun_dir, fog_range, sun_rect);
-            let frame = QuickFrame {
-                mesh: &mesh,
-                atlas_pixels: &scene.atlas.pixels,
-                atlas_size: [scene.atlas.width, scene.atlas.height],
-                width: w,
-                height: h,
-                view_proj,
-                sky: qs,
-            };
-            let px = backend.render_quick(&frame)?;
-            lap("render", &mut t);
-            (post::downsample(&px, w, h, k), a.width, a.height)
-        }
-        Mode::Hq => {
-            let hq = voxel::build_hq(&scene)?;
-            lap("build voxel scene", &mut t);
-            let params = hq_params(a, &hq, eye, &rays, sun_dir);
-            let frame = HqFrame {
-                scene: &hq,
-                params,
-                spp: a.spp,
-            };
-            let started = Instant::now();
-            let progress = |done: u32, total: u32| {
-                log::debug!("{done}/{total} ({:.1?})", started.elapsed());
-            };
-            let hdr = backend.render_hq(&frame, &progress)?;
-            lap("render", &mut t);
-            if let Some(p) = &a.hdr_output {
-                post::write_pfm(p, &hdr, a.width, a.height)?;
-            }
-            (
-                post::tonemap(&hdr, a.exposure, a.tonemap),
-                a.width,
-                a.height,
-            )
-        }
-    };
-    post::write_png(&a.output, &pixels, w, h)?;
-    lap("write image", &mut t);
+    let out = crate::render(&req)?;
+    if let Some(why) = &out.backend_fallback {
+        log::warn!("{why}; falling back to the CPU backend");
+    }
+    let mut timings = vec![("open world", opening)];
+    timings.extend(out.timings);
+    let t = Instant::now();
+    if let (Some(p), Some(hdr)) = (&a.hdr_output, &out.hdr) {
+        post::write_pfm(p, hdr, out.width, out.height)?;
+    }
+    post::write_png_rgba(&a.output, &out.rgba, out.width, out.height)?;
+    timings.push(("write image", t.elapsed().as_secs_f64()));
     Ok(RenderReport {
         output: a.output.clone(),
-        width: w,
-        height: h,
-        backend: backend.name(),
+        width: out.width,
+        height: out.height,
+        backend: out.backend,
         timings,
-        entity_stats: scene.entity_stats.clone(),
-        block_entity_stats: scene.block_entity_stats.clone(),
+        entity_stats: out.entity_stats,
+        block_entity_stats: out.block_entity_stats,
         camera: cam,
     })
-}
-
-pub fn hq_params(
-    a: &RenderArgs,
-    hq: &voxel::HqScene,
-    eye: Vec3,
-    rays: &CameraRays,
-    sun_dir: Vec3,
-) -> Params {
-    let s = sky::hq_sky(sun_dir, a.sun_intensity, a.sky_intensity);
-    let sun_radius: f32 = 0.03;
-    let solid_angle = std::f32::consts::TAU * (1.0 - sun_radius.cos());
-    let f4 = |v: Vec3, w: f32| [v.x, v.y, v.z, w];
-    Params {
-        cam_pos: f4(eye, rays.tan_half_fov),
-        cam_fwd: f4(rays.forward, rays.aspect),
-        cam_right: f4(rays.right, 0.0),
-        cam_up: f4(rays.up, 0.0),
-        sun_dir: f4(s.sun_dir, sun_radius.cos()),
-        sun_color: f4(s.sun_color, sun_radius),
-        sky_zenith: f4(s.zenith, 1.0),
-        sky_horizon: f4(s.horizon, 0.25),
-        water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
-        misc_f: [a.emitter_intensity, 1e-3, 1.0 / solid_angle, 0.0],
-        grid_dims: [
-            hq.dims[0],
-            hq.dims[1],
-            hq.dims[2],
-            hq.dims[0] * hq.dims[1] * hq.dims[2],
-        ],
-        off: [hq.offsets[0], hq.offsets[1], hq.offsets[2], hq.offsets[3]],
-        off2: [
-            hq.offsets[4],
-            hq.atlas_size[0],
-            hq.atlas_size[1],
-            hq.quads.len() as u32,
-        ],
-        frame: [a.width, a.height, 0, a.max_bounces],
-        misc_u: [a.seed, 1, hq.models.len() as u32, 0],
-        _reserved: [0; 4],
-    }
 }

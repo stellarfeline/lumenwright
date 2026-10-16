@@ -82,9 +82,15 @@ pub fn downsample(px: &[u32], w: u32, h: u32, k: u32) -> Vec<u32> {
     out
 }
 
+/// Writes packed RGBA8 pixels (red in the low byte) as a PNG.
 pub fn write_png(path: &Path, px: &[u32], w: u32, h: u32) -> Result<()> {
     let bytes: Vec<u8> = px.iter().flat_map(|c| c.to_le_bytes()).collect();
-    let img = image::RgbaImage::from_raw(w, h, bytes).context("image size mismatch")?;
+    write_png_rgba(path, &bytes, w, h)
+}
+
+/// Writes RGBA8 bytes, row major and top row first, as a PNG.
+pub fn write_png_rgba(path: &Path, rgba: &[u8], w: u32, h: u32) -> Result<()> {
+    let img = image::RgbaImage::from_raw(w, h, rgba.to_vec()).context("image size mismatch")?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir)?;
     }

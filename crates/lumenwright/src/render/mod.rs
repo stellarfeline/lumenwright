@@ -72,14 +72,26 @@ pub trait Backend {
     ) -> Result<Vec<[f32; 3]>>;
 }
 
-/// Creates a backend, falling back from GPU to CPU for `Auto`.
-pub fn create_backend(kind: BackendKind) -> Result<Box<dyn Backend>> {
+/// A backend and, for [`BackendKind::Auto`], why it is not a GPU.
+pub struct OpenedBackend {
+    pub backend: Box<dyn Backend>,
+    /// Set when `Auto` found no usable GPU and took the CPU: the reason.
+    pub fallback: Option<String>,
+}
+
+/// Opens a backend, falling back from GPU to CPU for `Auto` and saying so in
+/// [`OpenedBackend::fallback`]. A named backend that is unavailable is an error.
+pub fn open_backend(kind: BackendKind) -> Result<OpenedBackend> {
+    let named = |backend: Box<dyn Backend>| OpenedBackend {
+        backend,
+        fallback: None,
+    };
     match kind {
-        BackendKind::Cpu => Ok(Box::new(cpu::CpuBackend::new())),
+        BackendKind::Cpu => Ok(named(Box::<cpu::CpuBackend>::default())),
         BackendKind::Cuda => {
             #[cfg(feature = "cuda")]
             {
-                Ok(Box::new(cuda::CudaBackend::new()?))
+                Ok(named(Box::new(cuda::CudaBackend::new()?)))
             }
             #[cfg(not(feature = "cuda"))]
             {
@@ -91,16 +103,21 @@ pub fn create_backend(kind: BackendKind) -> Result<Box<dyn Backend>> {
         }
         BackendKind::Auto => {
             #[cfg(feature = "gpu")]
-            match gpu::GpuBackend::new(BackendKind::Gpu) {
-                Ok(b) => return Ok(Box::new(b)),
-                Err(e) => log::warn!("no usable GPU ({e:#}); falling back to the CPU backend"),
-            }
-            Ok(Box::new(cpu::CpuBackend::new()))
+            let fallback = match gpu::GpuBackend::new(BackendKind::Gpu) {
+                Ok(b) => return Ok(named(Box::new(b))),
+                Err(e) => format!("no usable GPU ({e:#})"),
+            };
+            #[cfg(not(feature = "gpu"))]
+            let fallback = "built without the `gpu` feature".to_string();
+            Ok(OpenedBackend {
+                backend: Box::<cpu::CpuBackend>::default(),
+                fallback: Some(fallback),
+            })
         }
         other => {
             #[cfg(feature = "gpu")]
             {
-                Ok(Box::new(gpu::GpuBackend::new(other)?))
+                Ok(named(Box::new(gpu::GpuBackend::new(other)?)))
             }
             #[cfg(not(feature = "gpu"))]
             {
@@ -108,6 +125,15 @@ pub fn create_backend(kind: BackendKind) -> Result<Box<dyn Backend>> {
             }
         }
     }
+}
+
+/// [`open_backend`], logging a fallback as a warning.
+pub fn create_backend(kind: BackendKind) -> Result<Box<dyn Backend>> {
+    let opened = open_backend(kind)?;
+    if let Some(why) = &opened.fallback {
+        log::warn!("{why}; falling back to the CPU backend");
+    }
+    Ok(opened.backend)
 }
 
 /// Camera basis passed to background shading.
