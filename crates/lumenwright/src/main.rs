@@ -59,6 +59,7 @@ enum Cmd {
 #[derive(Subcommand)]
 enum AssetsCmd {
     /// Download a client jar from Mojang into the cache ("latest" for the latest release).
+    #[cfg(feature = "download")]
     Fetch { version: String },
     /// Show which jar would be used for a version.
     Which { version: Option<String> },
@@ -97,6 +98,7 @@ fn main() -> Result<()> {
             block_entities,
         } => info(&world, &dimension, entities, block_entities.as_deref())?,
         Cmd::Assets { cmd } => match cmd {
+            #[cfg(feature = "download")]
             AssetsCmd::Fetch { version } => {
                 let p = jar::download_client_jar(&version)?;
                 println!("{}", p.display());

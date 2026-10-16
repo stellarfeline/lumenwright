@@ -7,8 +7,11 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+#[cfg(feature = "download")]
+use anyhow::Context;
+use anyhow::{Result, bail};
 
+#[cfg(feature = "download")]
 const MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
 pub fn cache_dir() -> PathBuf {
@@ -93,6 +96,7 @@ pub struct JarRequest<'a> {
     pub explicit: Option<&'a Path>,
     /// Version wanted (from the CLI or the world's level.dat).
     pub version: Option<&'a str>,
+    /// Fall back to a download from Mojang. Has no effect without the `download` feature.
     pub allow_download: bool,
 }
 
@@ -116,6 +120,7 @@ pub fn resolve_jar(req: &JarRequest) -> Result<PathBuf> {
             log::info!("using Chunky's client jar {} ({v})", chunky.display());
             return Ok(chunky);
         }
+        #[cfg(feature = "download")]
         if req.allow_download {
             match download_client_jar(v) {
                 Ok(p) => return Ok(p),
@@ -140,12 +145,14 @@ pub fn resolve_jar(req: &JarRequest) -> Result<PathBuf> {
     {
         return Ok(p);
     }
+    #[cfg(feature = "download")]
     if req.allow_download {
         return download_client_jar("latest");
     }
     bail!("no Minecraft client jar found; pass --minecraft-jar or allow downloading")
 }
 
+#[cfg(feature = "download")]
 fn http_get(url: &str) -> Result<Vec<u8>> {
     let mut resp = ureq::get(url)
         .call()
@@ -157,6 +164,7 @@ fn http_get(url: &str) -> Result<Vec<u8>> {
         .read_to_vec()?)
 }
 
+#[cfg(feature = "download")]
 /// Downloads the client jar for `version` ("latest" = latest release) from
 /// Mojang into the cache, verifying its SHA-1. Returns the cached path.
 pub fn download_client_jar(version: &str) -> Result<PathBuf> {
