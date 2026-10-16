@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/lumenwright", "crates/lumenwright-kernel"]
+members = ["crates/lumenwright", "crates/lumenwright-cli", "crates/lumenwright-kernel"]
 # The PTX crate only builds for nvptx64-nvidia-cuda; see scripts/build-ptx.sh.
 exclude = ["crates/lumenwright-ptx"]
 

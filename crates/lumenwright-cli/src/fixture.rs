@@ -10,9 +10,9 @@ use anyhow::Result;
 use fastnbt::{ByteArray, IntArray, LongArray, Value};
 use serde::Serialize;
 
-use crate::world::BlockState;
-use crate::world::chunk::block_bits;
-use crate::world::region::write_region;
+use lumenwright::world::BlockState;
+use lumenwright::world::chunk::block_bits;
+use lumenwright::world::region::write_region;
 
 pub const DATA_VERSION: i32 = 4671;
 pub const VERSION_NAME: &str = "1.21.11";
@@ -183,7 +183,7 @@ impl FixtureWorld {
         spread(&mut sky, &mut queue);
         let mut block: HashMap<[i32; 3], u8> = HashMap::new();
         for (p, s) in &self.blocks {
-            let e = crate::assets::blockinfo::light_emission(s);
+            let e = lumenwright::assets::blockinfo::light_emission(s);
             if e > 0 {
                 block.insert(*p, e);
                 queue.push_back(*p);
@@ -517,7 +517,7 @@ pub fn showcase() -> FixtureWorld {
                 w.set(x, y, z, props("water", &[("level", "0")]));
             }
             // Vegetation.
-            let hash = crate::assets::blockstate::pos_hash(x, 0, z, 99) % 100;
+            let hash = lumenwright::assets::blockstate::pos_hash(x, 0, z, 99) % 100;
             if h > water_level
                 && w.get(x, h, z)
                     .is_some_and(|s| s.short_name() == "grass_block")
@@ -556,7 +556,8 @@ pub fn showcase() -> FixtureWorld {
                     if dx.abs() == rad
                         && dz.abs() == rad
                         && (dy == 1
-                            || crate::assets::blockstate::pos_hash(dx, dy, dz, 5).is_multiple_of(2))
+                            || lumenwright::assets::blockstate::pos_hash(dx, dy, dz, 5)
+                                .is_multiple_of(2))
                     {
                         continue;
                     }
@@ -1277,7 +1278,7 @@ pub fn block_entity_gallery() -> FixtureWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::{Dimension, World};
+    use lumenwright::world::{Dimension, World};
 
     #[test]
     fn roundtrip_through_reader() {

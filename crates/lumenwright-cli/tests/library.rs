@@ -6,8 +6,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use lumenwright::assets::jar;
-use lumenwright::fixture;
 use lumenwright::glam::{DVec3, Vec3};
 use lumenwright::render::sky;
 use lumenwright::render::{BackendKind, Mode};
@@ -17,6 +15,8 @@ use lumenwright::{
     ChunkRect, EntityPolicy, HqOptions, QuickOptions, Rendered, Request, RequestError, Sky,
     WorldSource,
 };
+use lumenwright_cli::fixture;
+use lumenwright_cli::jar;
 
 fn client_jar() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("LUMENWRIGHT_MC_JAR") {

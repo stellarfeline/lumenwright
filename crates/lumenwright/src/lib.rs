@@ -18,24 +18,21 @@
 //! On the CPU backend a request gives byte-identical pixels for any rayon
 //! thread count.
 //!
-//! An embedding crate depends on Lumenwright with `default-features = false,
-//! features = ["gpu"]`: the `download` feature (the CLI's client-jar
-//! downloader and its TLS stack) stays off, and no C build script is reached.
-//! [`glam`] is re-exported for the camera and sky vectors.
+//! The crate holds no command-line code, no jar resolver and no downloader: the
+//! `lumenwright` command is the `lumenwright-cli` crate, a caller of this API.
+//! The default feature, `gpu`, adds the Metal, Vulkan and DX12 backends; `cuda`
+//! adds the CUDA backend. With the default features no C build script is
+//! reached. [`glam`] is re-exported for the camera and sky vectors.
 //!
 //! # Pipeline
 //!
 //! [`world`] (read the save) → [`assets`] (vanilla client jar) →
 //! [`scene`] (baked quads, quick-mode mesh, HQ voxel grid) → [`mod@render`]
-//! (CPU / Metal / Vulkan / DX12 / CUDA backends) → pixels. [`job`] is the
-//! CLI's `render` subcommand over [`render()`]: it resolves the jar, derives the
-//! camera and chunk square from the flags, and writes the PNG.
+//! (CPU / Metal / Vulkan / DX12 / CUDA backends) → pixels.
 
 pub use glam;
 
 pub mod assets;
-pub mod fixture;
-pub mod job;
 pub mod render;
 pub mod request;
 pub mod scene;

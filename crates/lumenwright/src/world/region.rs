@@ -123,8 +123,9 @@ pub fn parse_region_name(path: &Path) -> Option<(i32, i32)> {
     Some((x, z))
 }
 
-/// Writes a region file containing the given chunks (zlib). Used by tests and
-/// fixture generation.
+/// Encodes a region file holding the given chunks, each `(local x, local z,
+/// uncompressed chunk NBT)`, zlib-compressed. The inverse of the region reader,
+/// for programs that write worlds (the CLI's `demo-world`, tests).
 pub fn write_region(chunks: &[(usize, usize, Vec<u8>)]) -> Vec<u8> {
     use std::io::Write;
     let mut header = vec![0u8; 8192];

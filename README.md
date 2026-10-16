@@ -1,9 +1,9 @@
 # Lumenwright
 
 An offline, headless renderer for Minecraft Java Edition worlds. You give it a world save and
-a camera, and it draws the blocks and entities: the `lumenwright` command writes a PNG, and
-the `lumenwright` library returns the pixels to your program (see [Library](#library)). It has
-two looks:
+a camera, and it draws the blocks and entities. It comes as two crates: the `lumenwright`
+command (crate `lumenwright-cli`) writes a PNG, and the `lumenwright` library returns the
+pixels to your program (see [Library](#library)). It has two looks:
 
 * **quick**: rasterized to look like the vanilla Java client, with no ray tracing.
 * **hq**: a Chunky-style path tracer with sun and sky light, soft shadows, emissive blocks
@@ -66,8 +66,9 @@ resolved in this order:
 3. Chunky's `~/.chunky/resources/minecraft.jar`, if its version matches
 4. A download from Mojang's version manifest (`piston-meta.mojang.com`), SHA-1 verified, into
    the cache (`~/Library/Caches/lumenwright` or `$XDG_CACHE_HOME/lumenwright`). `--offline`
-   disables this; `lumenwright assets fetch <version|latest>` downloads ahead of time. The
-   downloader is the `download` cargo feature, on by default.
+   disables this; `lumenwright assets fetch <version|latest>` downloads ahead of time.
+
+This resolution and the downloader belong to the command. The library takes the jar as a path.
 
 `--resource-pack` (zip or directory, repeatable) layers packs on top of the vanilla assets.
 
@@ -138,27 +139,34 @@ request before drawing (a missing jar, an empty image, no chunks in the rectangl
 error holds a `RequestError` you can match with `err.downcast_ref::<RequestError>()`. On the
 CPU backend the same request gives the same bytes whatever the thread count.
 
-To embed Lumenwright without the downloader, depend on it with
-`default-features = false, features = ["gpu"]`. That build compiles no C code, so it
-cross-checks for Linux, macOS and Windows targets without a cross C compiler. The
-`lumenwright render` command calls the same function, so the CLI and the library draw the
-same pixels.
+The library crate holds no command-line code, no jar resolver and no downloader. Its default
+feature, `gpu`, adds the Metal, Vulkan and DX12 backends; `cuda` adds the CUDA backend. With
+the default features it compiles no C code, so it cross-checks for Linux, macOS and Windows
+targets without a cross C compiler. The `lumenwright render` command calls the same
+function, so the command and the library draw the same pixels.
 
 ## Architecture
 
 ```
-world/      Anvil regions, paletted chunk sections, light, biomes, entities, level.dat
-assets/     client-jar resolution, blockstate variants/multipart, model baking, atlas, biome tints
-scene/      material-resolved quads; quick mesh (culling, smooth light + AO);
-            HQ brick grid (16³ bricks, u16 model instances, entity overlay cells); entity models
-request.rs  the library entry: Request -> render() -> Rendered
-job.rs      the CLI's render: flags -> Request, jar resolution, PNG/PFM output
-render/     Backend trait
-  cpu/        tile-binned software rasterizer + lumenwright-kernel on rayon
-  gpu/        wgpu: quick.wgsl (raster pipeline), pathtrace.wgsl (compute port of the kernel)
-  cuda.rs     lumenwright-kernel compiled to PTX, launched via cudarc
-lumenwright-kernel/  #![no_std] path tracer shared by CPU and CUDA (same source)
-lumenwright-ptx/     CUDA entry point (builds for nvptx64-nvidia-cuda)
+crates/lumenwright/        the library
+  world/      Anvil regions, paletted chunk sections, light, biomes, entities, level.dat
+  assets/     blockstate variants/multipart, model baking, atlas, biome tints, font, lang
+  scene/      material-resolved quads; quick mesh (culling, smooth light + AO);
+              HQ brick grid (16³ bricks, u16 model instances, entity overlay cells); entity models
+  request.rs  the entry point: Request -> render() -> Rendered
+  render/     Backend trait
+    cpu/        tile-binned software rasterizer + lumenwright-kernel on rayon
+    gpu/        wgpu: quick.wgsl (raster pipeline), pathtrace.wgsl (compute port of the kernel)
+    cuda.rs     lumenwright-kernel compiled to PTX, launched via cudarc
+crates/lumenwright-cli/    the `lumenwright` command, over the library's public API
+  main.rs     subcommands, logging
+  job.rs      render: flags -> Request -> render() -> PNG/PFM
+  jar.rs      client-jar resolution and download
+  output.rs   PNG and PFM writers
+  values.rs   flag values for the library's option enums
+  fixture.rs  generated worlds for demo-world and the tests
+crates/lumenwright-kernel/ #![no_std] path tracer shared by CPU and CUDA (same source)
+crates/lumenwright-ptx/    CUDA entry point (builds for nvptx64-nvidia-cuda)
 ```
 
 Both modes share one scene build. Quick mode turns visible quads into a triangle mesh, the
@@ -211,7 +219,7 @@ The CUDA backend needs the PTX built first:
 
 ```sh
 scripts/build-ptx.sh                       # rustup target nvptx64-nvidia-cuda + llvm-bitcode-linker
-cargo build --release --features cuda
+cargo build --release -p lumenwright-cli --features cuda
 lumenwright render ... --mode hq --backend cuda
 ```
 
@@ -228,13 +236,14 @@ cargo test --workspace --release
   lightmap, the tonemapper, and entity box-UV and orientation.
 * **Kernel tests** use hand-built buffers to check brick skipping, uniform bricks, entity
   overlay cells, cutout alpha, the sky, and pinned RNG values.
-* **Integration tests** write fixture worlds and render them end to end. They check terrain
+* **Integration tests** (in `lumenwright-cli`, which owns the fixture worlds) write fixture
+  worlds and render them end to end. They check terrain
   colours seen from above, entity coverage, block entities in both modes, sign text, HQ
   sanity, CPU-vs-GPU parity in both modes (showcase and block-entity gallery), determinism,
   and the CLI. The library tests check that the CLI's PNG and the library's pixels are
   byte-equal in both modes, that a missing jar is refused by name, that a stated sky is drawn
-  as given, and that CPU pixels are bit-identical on 1, 3 and 8 threads. Tests that need the client jar or a GPU skip with a message when
-  it is missing. `LUMENWRIGHT_MC_JAR` points the tests at a jar.
+  as given, and that CPU pixels are bit-identical on 1, 3 and 8 threads. Tests that need the
+  client jar or a GPU skip with a message when it is missing. `LUMENWRIGHT_MC_JAR` points the tests at a jar.
 
 ## Measured on an M2 Pro (10 CPU cores, 16 GPU cores)
 

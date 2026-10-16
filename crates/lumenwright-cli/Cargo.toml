@@ -1,0 +1,37 @@
+[package]
+name = "lumenwright-cli"
+description = "Offline headless Minecraft world renderer"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+name = "lumenwright_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "lumenwright"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+env_logger = "0.11.11"
+fastnbt = "2.6.3"
+flate2 = "1.1.10"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+log = "0.4.34"
+lumenwright = { version = "0.1.0", path = "../lumenwright", default-features = false }
+rayon = "1.12.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha1_smol = "1.0.1"
+ureq = "3.4.2"
+zip = { version = "9.0.3", default-features = false, features = ["deflate-flate2"] }
+
+[features]
+default = ["gpu"]
+# Metal / Vulkan / DX12 backends via wgpu.
+gpu = ["lumenwright/gpu"]
+# CUDA backend: needs the PTX from scripts/build-ptx.sh.
+cuda = ["lumenwright/cuda"]

@@ -1,18 +1,20 @@
-//! The CLI's render job: flags -> [`Request`] -> [`crate::render()`] -> image file.
+//! The CLI's render job: flags -> [`Request`] -> [`lumenwright::render()`] -> image file.
 
 use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
-use glam::DVec3;
+use lumenwright::glam::DVec3;
+use lumenwright::render::sky;
+use lumenwright::scene::block_entities::BlockEntityStats;
+use lumenwright::scene::camera::Camera;
+use lumenwright::scene::entities::EntityStats;
+use lumenwright::world::{Dimension, World};
+use lumenwright::{ChunkRect, EntityPolicy, HqOptions, QuickOptions, Request, Sky, WorldSource};
 
-use crate::assets::jar;
-use crate::render::post::{self, Tonemap};
-use crate::render::sky;
-use crate::render::{BackendKind, Mode};
-use crate::request::{ChunkRect, EntityPolicy, HqOptions, QuickOptions, Request, Sky, WorldSource};
-use crate::scene::camera::Camera;
-use crate::world::{Dimension, World};
+use crate::jar;
+use crate::output;
+use crate::values::{BackendArg, ModeArg, TonemapArg, UnknownEntitiesArg};
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct RenderArgs {
@@ -25,10 +27,10 @@ pub struct RenderArgs {
     /// Also write the linear HDR image (HQ mode) as a .pfm file.
     #[arg(long)]
     pub hdr_output: Option<PathBuf>,
-    #[arg(long, value_enum, default_value_t = Mode::Quick)]
-    pub mode: Mode,
-    #[arg(long, value_enum, default_value_t = BackendKind::Auto)]
-    pub backend: BackendKind,
+    #[arg(long, value_enum, default_value_t = ModeArg::Quick)]
+    pub mode: ModeArg,
+    #[arg(long, value_enum, default_value_t = BackendArg::Auto)]
+    pub backend: BackendArg,
     #[arg(long, default_value = "overworld")]
     pub dimension: String,
     #[arg(long, default_value_t = 1280)]
@@ -84,8 +86,8 @@ pub struct RenderArgs {
     pub emitter_intensity: f32,
     #[arg(long, default_value_t = 1.0)]
     pub exposure: f32,
-    #[arg(long, value_enum, default_value_t = Tonemap::Aces)]
-    pub tonemap: Tonemap,
+    #[arg(long, value_enum, default_value_t = TonemapArg::Aces)]
+    pub tonemap: TonemapArg,
     /// Quick: vanilla brightness option (0 = moody, 0.5 = default, 1 = bright).
     #[arg(long, default_value_t = 0.5)]
     pub brightness: f32,
@@ -111,14 +113,12 @@ pub struct RenderArgs {
     #[arg(long)]
     pub no_block_entities: bool,
     /// How to draw entities without a model.
-    #[arg(long, value_enum, default_value_t = UnknownEntities::Box)]
-    pub unknown_entities: UnknownEntities,
+    #[arg(long, value_enum, default_value_t = UnknownEntitiesArg::Box)]
+    pub unknown_entities: UnknownEntitiesArg,
     /// Render players from level.dat / playerdata (default skin).
     #[arg(long)]
     pub players: bool,
 }
-
-pub use crate::request::UnknownEntities;
 
 pub fn parse_vec3(s: &str) -> Result<DVec3> {
     let v: Vec<f64> = s
@@ -138,8 +138,8 @@ pub struct RenderReport {
     pub height: u32,
     pub backend: String,
     pub timings: Vec<(&'static str, f64)>,
-    pub entity_stats: crate::scene::entities::EntityStats,
-    pub block_entity_stats: crate::scene::block_entities::BlockEntityStats,
+    pub entity_stats: EntityStats,
+    pub block_entity_stats: BlockEntityStats,
     pub camera: Camera,
 }
 
@@ -177,7 +177,7 @@ fn camera_from_args(a: &RenderArgs, world: &World) -> Result<Camera> {
 }
 
 /// The CLI's `render`: resolves the jar, derives the camera and the chunk
-/// square from the flags, calls [`crate::render()`], and writes the image.
+/// square from the flags, calls [`lumenwright::render()`], and writes the image.
 pub fn run(a: &RenderArgs) -> Result<RenderReport> {
     let t = Instant::now();
     let dimension = Dimension::parse(&a.dimension)?;
@@ -210,13 +210,13 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
         jar: &jar_path,
         resource_packs: &a.resource_packs,
         camera: cam,
-        mode: a.mode,
-        backend: a.backend,
+        mode: a.mode.into(),
+        backend: a.backend.into(),
         width: a.width,
         height: a.height,
         entities: EntityPolicy {
             entities: !a.no_entities,
-            unknown: a.unknown_entities,
+            unknown: a.unknown_entities.into(),
             block_entities: !a.no_block_entities,
             players: a.players,
         },
@@ -232,7 +232,7 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             seed: a.seed,
             emitter_intensity: a.emitter_intensity,
             exposure: a.exposure,
-            tonemap: a.tonemap,
+            tonemap: a.tonemap.into(),
         },
         sky: Sky::Vanilla {
             time: a.time,
@@ -243,7 +243,7 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             sky_intensity: a.sky_intensity,
         },
     };
-    let out = crate::render(&req)?;
+    let out = lumenwright::render(&req)?;
     if let Some(why) = &out.backend_fallback {
         log::warn!("{why}; falling back to the CPU backend");
     }
@@ -251,9 +251,9 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
     timings.extend(out.timings);
     let t = Instant::now();
     if let (Some(p), Some(hdr)) = (&a.hdr_output, &out.hdr) {
-        post::write_pfm(p, hdr, out.width, out.height)?;
+        output::write_pfm(p, hdr, out.width, out.height)?;
     }
-    post::write_png_rgba(&a.output, &out.rgba, out.width, out.height)?;
+    output::write_png_rgba(&a.output, &out.rgba, out.width, out.height)?;
     timings.push(("write image", t.elapsed().as_secs_f64()));
     Ok(RenderReport {
         output: a.output.clone(),

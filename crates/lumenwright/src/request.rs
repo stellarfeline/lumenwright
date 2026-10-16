@@ -3,7 +3,6 @@
 //! [`render()`] takes every input from the request. It resolves no client jar,
 //! performs no network access, writes no file and prints nothing (it emits
 //! `log` records, which reach no output unless the caller installs a logger).
-//! The CLI's `render` subcommand ([`crate::job::run`]) is a caller of it.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -56,7 +55,7 @@ impl ChunkRect {
 }
 
 /// How entities without a model are drawn.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnknownEntities {
     /// A box the size of the entity's hitbox.
     Box,
