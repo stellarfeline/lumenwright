@@ -202,6 +202,15 @@ pub fn text_display_gallery(with_displays: bool) -> FixtureWorld {
         }
     }
     for c in TEXT_DISPLAYS {
+        if matches!(c.name, "shadow" | "no_shadow") {
+            // A light backdrop, so the dark shadow shows.
+            let bx = c.pos[0].floor() as i32;
+            for x in bx - 2..=bx + 2 {
+                for y in 65..69 {
+                    w.set(x, y, -1, bs("light_gray_concrete"));
+                }
+            }
+        }
         if matches!(c.name, "see_through" | "hidden") {
             // A wall between the display and a camera in the south.
             let bx = c.pos[0].floor() as i32;
