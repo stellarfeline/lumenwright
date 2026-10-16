@@ -48,6 +48,14 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
   placement and per-block data come from the chunk's `block_entities`. The quads join the
   entity quads, so both modes and every backend draw the same geometry.
   `--no-block-entities` leaves them out.
+* **Text displays.** The `text` component (colour, bold, italic, `translate`) in the jar's
+  `minecraft:default` font, split as `Font.split` splits it at `line_width`, `alignment`,
+  `background` or `default_background`, `shadow`, `see_through`, `billboard` (turned to the
+  camera) and `transformation`, placed as `TextDisplayRenderer` places them. They are
+  one-sided; a see-through display is drawn last with no depth test in quick mode, and in HQ
+  mode the camera path meets it behind whatever hid it. Not read: `text_opacity`,
+  `brightness`. Characters outside the jar's bitmap fonts are left out, since the jar's
+  `include/unifont` reference has no providers.
 * **Lighting controls.** `--time` (ticks), or `--sun-altitude` and `--sun-azimuth`.
   `--exposure`, `--tonemap`, `--spp`, `--max-bounces`, `--ssaa` (quick mode).
 * **Tooling.** An `info` subcommand prints the world version, spawn, player position, and

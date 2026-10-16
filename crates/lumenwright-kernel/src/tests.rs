@@ -4,10 +4,10 @@
 
 use crate::math::{V3, v3};
 use crate::scene::{
-    ALPHA_CUTOUT, ALPHA_OPAQUE, BRICK_WORDS, EMPTY, GpuModel, GpuQuad, OV_CELL_WORDS, Params,
-    SceneView, UNIFORM,
+    ALPHA_CUTOUT, ALPHA_OPAQUE, BRICK_WORDS, EMPTY, FLAG_FRONT_ONLY, GpuModel, GpuQuad,
+    OV_CELL_WORDS, Params, SceneView, UNIFORM,
 };
-use crate::trace::trace;
+use crate::trace::{is_see_through, see_through_hit, trace};
 
 fn quad(p0: V3, eu: V3, ev: V3, flags: u32) -> GpuQuad {
     GpuQuad {
@@ -209,6 +209,43 @@ fn entity_overlay_quads_are_hit_and_alpha_tested() {
     )
     .expect("hit");
     assert!((h.t - 19.5).abs() < 1e-3, "t = {}", h.t);
+}
+
+#[test]
+fn front_only_quads_are_met_from_the_front_only() {
+    let mut s = TestScene::new(true);
+    // The entity quad faces -x.
+    s.quads[6].p0[3] = f32::from_bits(ALPHA_CUTOUT | FLAG_FRONT_ONLY);
+    let v = s.view();
+    let front = trace(&v, v3(0.5, 5.5, 5.25), v3(1.0, 0.0, 0.0), 0.0, 16.0);
+    assert_eq!(front.map(|h| h.quad), Some(6));
+    let back = trace(
+        &v,
+        v3(12.0, 5.5, 5.25),
+        v3(-1.0, 0.0, 0.0),
+        0.0,
+        f32::INFINITY,
+    );
+    assert!(back.is_none(), "{back:?}");
+}
+
+#[test]
+fn a_see_through_quad_is_found_behind_what_hides_it() {
+    let mut s = TestScene::new(true);
+    s.params.see_through = [6, 1, 0, 0];
+    let v = s.view();
+    assert!(is_see_through(&v, 6) && !is_see_through(&v, 5) && !is_see_through(&v, 7));
+    // Looking -x from x = 25.5: the cube's east face (x = 21) hides the quad at 8.5.
+    let (o, d) = (v3(25.5, 5.5, 5.25), v3(-1.0, 0.0, 0.0));
+    let h = trace(&v, o, d, 0.0, f32::INFINITY).expect("hit");
+    assert_eq!(h.quad, 2);
+    let st = see_through_hit(&v, o, d, h.t).expect("see-through");
+    assert_eq!(st.quad, 6);
+    assert!((st.t - 17.0).abs() < 1e-3, "t = {}", st.t);
+    // Through its transparent texel there is nothing to find.
+    assert!(see_through_hit(&v, v3(25.5, 5.5, 5.75), d, h.t).is_none());
+    s.params.see_through = [0, 0, 0, 0];
+    assert!(see_through_hit(&s.view(), o, d, h.t).is_none());
 }
 
 #[test]

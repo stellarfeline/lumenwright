@@ -509,4 +509,42 @@ mod tests {
         }];
         assert_eq!(layout_line(&font, &one, 30.0).0.len(), 5);
     }
+
+    #[test]
+    fn lines_split_like_string_splitter() {
+        let font = Font::default(); // every character advances 6
+        let span = |t: &str| {
+            vec![Span {
+                text: t.into(),
+                color: None,
+                bold: false,
+                italic: false,
+            }]
+        };
+        let text = |lines: Vec<(Vec<Placed>, f32)>| -> Vec<String> {
+            lines
+                .into_iter()
+                .map(|(p, _)| p.iter().map(|c| c.c).collect())
+                .collect()
+        };
+        // A newline ends a line; the space a line breaks at is dropped.
+        assert_eq!(
+            text(layout_lines(&font, &span("aaa bbb\ncc"), 30.0)),
+            ["aaa", "bbb", "cc"]
+        );
+        // The space that passes the width is itself the break.
+        assert_eq!(
+            text(layout_lines(&font, &span("aaaaa bb"), 30.0)),
+            ["aaaaa", "bb"]
+        );
+        // No space: mid-word; a line keeps one character however narrow.
+        assert_eq!(
+            text(layout_lines(&font, &span("abcdefg"), 30.0)),
+            ["abcde", "fg"]
+        );
+        assert_eq!(text(layout_lines(&font, &span("ab"), 1.0)), ["a", "b"]);
+        let (_, w) = &layout_lines(&font, &span("aaa bbb"), 100.0)[0];
+        assert_eq!(*w, 42.0);
+        assert!(layout_lines(&font, &span(""), 100.0).is_empty());
+    }
 }
