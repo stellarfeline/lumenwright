@@ -204,6 +204,8 @@ pub struct BuildOptions {
     /// Camera yaw and pitch in degrees (Minecraft's convention), when known:
     /// billboarded display entities turn to it.
     pub view: Option<[f32; 2]>,
+    /// Mip levels built for block textures, 0 to 4 (the client's *Mipmap Levels*).
+    pub mipmap_levels: u32,
 }
 
 /// The world baked against a resource set.
@@ -313,6 +315,7 @@ impl Scene {
         }
 
         let mut ab = AtlasBuilder::new();
+        ab.max_mip_levels = opts.mipmap_levels;
         for t in EXTRA_TEXTURES {
             ab.add(t);
         }

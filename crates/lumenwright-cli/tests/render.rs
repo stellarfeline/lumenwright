@@ -319,6 +319,136 @@ fn hq_cpu_produces_a_lit_image() {
     assert!(top_blue.count() > 80);
 }
 
+/// A 192×192 plane of gravel, the texture with the most fine detail, under
+/// an empty sky.
+fn gravel_plane() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = tmp("gravel-plane");
+        let mut w = fixture::FixtureWorld::new();
+        for x in -96..96 {
+            for z in -96..96 {
+                w.set(
+                    x,
+                    64,
+                    z,
+                    lumenwright::world::BlockState::new("minecraft:gravel"),
+                );
+            }
+        }
+        w.write(&d).unwrap();
+        d
+    })
+}
+
+/// Luma (0..255) of every pixel in rows `rows`.
+fn luma_rows(img: &image::RgbaImage, rows: std::ops::Range<u32>) -> Vec<Vec<f32>> {
+    rows.map(|y| {
+        (0..img.width())
+            .map(|x| {
+                let p = img.get_pixel(x, y).0;
+                0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32
+            })
+            .collect()
+    })
+    .collect()
+}
+
+/// Mean squared 4-neighbour Laplacian: the image's high-frequency energy.
+fn laplacian_energy(l: &[Vec<f32>]) -> f32 {
+    let (mut sum, mut n) = (0f64, 0u64);
+    for y in 1..l.len() - 1 {
+        for x in 1..l[y].len() - 1 {
+            let v = 4.0 * l[y][x] - l[y - 1][x] - l[y + 1][x] - l[y][x - 1] - l[y][x + 1];
+            sum += (v * v) as f64;
+            n += 1;
+        }
+    }
+    (sum / n as f64) as f32
+}
+
+/// Mean absolute luma difference between two renders.
+fn mean_abs_diff(a: &[Vec<f32>], b: &[Vec<f32>]) -> f32 {
+    let (mut sum, mut n) = (0f64, 0u64);
+    for (ra, rb) in a.iter().zip(b) {
+        for (p, q) in ra.iter().zip(rb) {
+            sum += (p - q).abs() as f64;
+            n += 1;
+        }
+    }
+    (sum / n as f64) as f32
+}
+
+#[test]
+fn mipmaps_calm_distant_textures() {
+    let jar = require_jar!();
+    let dir = tmp("mipmaps");
+    // Three blocks over the plane, looking north 5.7° down: the horizon sits
+    // at row ~77 and rows 79..100 see the plane from about 140 down to 17
+    // blocks away, where one pixel spans 2 to 17 gravel texels across and
+    // several times that along the view.
+    let view = |x: f64, levels: u32, name: &str| {
+        let out = dir.join(format!("{name}.png"));
+        let cam = format!("{x},68.0,70.0");
+        let at = format!("{x},62.0,10.0");
+        let lv = levels.to_string();
+        render(
+            gravel_plane(),
+            &jar,
+            &out,
+            &[
+                "--backend",
+                "cpu",
+                "--width",
+                "320",
+                "--height",
+                "180",
+                "--camera",
+                &cam,
+                "--look-at",
+                &at,
+                "--render-distance",
+                "10",
+                "--time",
+                "6000",
+                "--mipmap-levels",
+                &lv,
+            ],
+        )
+        .unwrap();
+        load(&out)
+    };
+    let band = 79..100;
+    let mut measured = Vec::new();
+    for levels in [0u32, 4] {
+        let a = luma_rows(&view(0.5, levels, &format!("l{levels}")), band.clone());
+        // A sideways step of 0.05 blocks: under a pixel everywhere in the band.
+        let shifted = luma_rows(
+            &view(0.55, levels, &format!("l{levels}-shift")),
+            band.clone(),
+        );
+        let energy = laplacian_energy(&a);
+        let shimmer = mean_abs_diff(&a, &shifted);
+        eprintln!(
+            "mipmap levels {levels}: high-frequency energy {energy:.1}, mean |luma change| under a 0.05-block shift {shimmer:.2}/255 (rows {band:?}, 320 px wide)"
+        );
+        measured.push((energy, shimmer));
+    }
+    let (off, on) = (measured[0], measured[1]);
+    assert!(
+        on.0 < off.0 * 0.5,
+        "mipmaps should at least halve the far plane's high-frequency energy: {:.1} vs {:.1}",
+        on.0,
+        off.0
+    );
+    assert!(
+        on.1 < off.1 * 0.5,
+        "mipmaps should at least halve the shimmer under a sub-pixel move: {:.2} vs {:.2}",
+        on.1,
+        off.1
+    );
+}
+
 #[test]
 fn gpu_matches_cpu_in_quick_mode() {
     let jar = require_jar!();

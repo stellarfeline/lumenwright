@@ -102,6 +102,9 @@ pub struct QuickOptions {
     pub brightness: f32,
     /// Smooth lighting and ambient occlusion.
     pub smooth: bool,
+    /// Mip levels for block textures, 0 (off) to 4: the client's *Mipmap Levels*
+    /// option, default 4.
+    pub mipmap_levels: u32,
 }
 
 impl Default for QuickOptions {
@@ -111,6 +114,7 @@ impl Default for QuickOptions {
             draw_distance: 128.0,
             brightness: 0.5,
             smooth: true,
+            mipmap_levels: crate::assets::atlas::MIPMAP_LEVELS,
         }
     }
 }
@@ -397,6 +401,11 @@ pub fn render(req: &Request) -> Result<Rendered> {
         block_entities: policy.block_entities,
         eye: Some([cam.pos.x, cam.pos.y, cam.pos.z]),
         view: Some([cam.yaw, cam.pitch]),
+        // The path tracer reads level 0 only: it gets the unpadded atlas.
+        mipmap_levels: match req.mode {
+            Mode::Quick => req.quick.mipmap_levels,
+            Mode::Hq => 0,
+        },
     };
     let block_entities = block_entities::parse_all(&area.block_entities);
     let scene = Scene::build(

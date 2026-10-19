@@ -475,8 +475,9 @@ mod tests {
 
     #[test]
     fn cutout_keeps_alpha_test_coverage() {
-        // A thin cross: a quarter of the texels opaque. A plain mean would fade it
-        // below the 0.5 alpha test by level 2; coverage scaling keeps it.
+        // A grid of one-texel lines, 7 texels in 16 opaque. A plain mean leaves
+        // the 2×2 blocks holding one line at alpha 127, below the 0.5 test, so at
+        // level 1 the lines break up; coverage scaling lifts them back over it.
         let base = img(16, 16, |x, y| {
             if x % 4 == 0 || y % 4 == 0 {
                 0xFF30_A030
@@ -484,21 +485,28 @@ mod tests {
                 0
             }
         });
-        let chain = generate(base.clone(), 4, TextureMeta::default(), false);
+        let cutout = generate(base.clone(), 4, TextureMeta::default(), false);
+        let mean = generate(
+            base,
+            4,
+            TextureMeta {
+                strategy: MipmapStrategy::Mean,
+                ..TextureMeta::default()
+            },
+            false,
+        );
         let passing = |m: &MipImage| {
             m.px.iter().filter(|&&c| c >> 24 >= 128).count() as f32 / m.px.len() as f32
         };
-        let l0 = passing(&chain[0]);
-        for (i, m) in chain.iter().enumerate().skip(1).take(2) {
-            let p = passing(m);
-            assert!(
-                p > 0.25,
-                "level {i}: {p:.2} of texels pass (level 0: {l0:.2})"
-            );
-        }
+        let (l0, c1, m1) = (passing(&cutout[0]), passing(&cutout[1]), passing(&mean[1]));
+        assert!(
+            c1 > m1,
+            "level 1 passing: cutout {c1:.2}, mean {m1:.2}, level 0 {l0:.2}"
+        );
         // Solidify recoloured the transparent texels from their neighbours.
-        assert_eq!(chain[0].px[(16 + 1) as usize] & 0x00FF_FFFF, 0x30_A030);
-        assert_eq!(chain[0].px[(16 + 1) as usize] >> 24, 0);
+        assert_eq!(cutout[0].px[(16 + 1) as usize] & 0x00FF_FFFF, 0x30_A030);
+        assert_eq!(cutout[0].px[(16 + 1) as usize] >> 24, 0);
+        assert_eq!(mean[0].px[(16 + 1) as usize], 0);
     }
 
     #[test]

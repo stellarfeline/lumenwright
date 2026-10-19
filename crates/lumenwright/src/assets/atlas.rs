@@ -75,6 +75,8 @@ pub struct AtlasBuilder {
     ids: HashMap<String, u32>,
     /// Images made in code (composited banners), by location.
     generated: HashMap<String, Image>,
+    /// The most mip levels built (the client's *Mipmap Levels* option, 0 to 4).
+    pub max_mip_levels: u32,
 }
 
 /// Every sprite the scene uses, packed into one image.
@@ -267,7 +269,10 @@ fn load_png(store: &ResourceStore, loc: &str) -> Option<Image> {
 impl AtlasBuilder {
     /// An empty builder holding only the magenta and black missing texture.
     pub fn new() -> AtlasBuilder {
-        let mut b = AtlasBuilder::default();
+        let mut b = AtlasBuilder {
+            max_mip_levels: MIPMAP_LEVELS,
+            ..AtlasBuilder::default()
+        };
         b.add(MISSING_TEXTURE);
         b
     }
@@ -335,7 +340,7 @@ impl AtlasBuilder {
             .filter(|(_, m)| **m)
             .map(|(i, _)| (i.w | i.h).trailing_zeros())
             .min()
-            .map_or(0, |l| l.min(MIPMAP_LEVELS));
+            .map_or(0, |l| l.min(self.max_mip_levels.min(MIPMAP_LEVELS)));
         let align = 1u32 << levels;
         let pad = if levels > 0 {
             align << MAX_ANISOTROPY_BIT.saturating_sub(1).min(4)
