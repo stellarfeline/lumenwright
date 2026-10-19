@@ -1109,9 +1109,9 @@ fn emitter_calibration() {
             (13 - (d as i32 - 1)) as f32 + at_one[d - 1]
         );
     }
-    // The power multiplier that would fit best, on a log grid from 1/8 to 8.
+    // The power multiplier that would fit best, on a log grid from 1/32 to 32.
     let (mut best_k, mut best_e) = (1.0f32, f32::MAX);
-    for i in -30..=30 {
+    for i in -50..=50 {
         let k = 2f32.powf(i as f32 / 10.0);
         let e = mean_abs(&errors(k));
         if e < best_e {

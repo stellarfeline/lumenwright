@@ -123,7 +123,9 @@ This resolution and the downloader belong to the command. The library takes the 
 | `--sun-altitude`, `--sun-azimuth` | from time, 135 | degrees (azimuth 0 = north, 90 = east); an altitude overrides `--time` for the sun |
 | `--spp`, `--max-bounces`, `--seed` | 64, 4, 0 | HQ sampling; the same seed gives the same image |
 | `--exposure`, `--tonemap aces\|gamma\|filmic` | 1.0, aces | HQ post-processing |
-| `--sun-intensity`, `--sky-intensity`, `--emitter-intensity` | 1.5, 1, 6 | HQ lighting |
+| `--sun-intensity`, `--sky-intensity` | 1.5, 1 | HQ lighting |
+| `--emitter-intensity`, `--emitter-glow` | 1, 1.5 | HQ: the light emissive blocks cast (1 is calibrated to the game's block light), and how bright their faces look |
+| `--no-light-sampling` | | HQ: no next-event estimation towards emissive blocks (a noisier reference) |
 | `--ssaa N` | 1 | quick-mode supersampling |
 | `--mipmap-levels N` | 4 | quick-mode mip levels for block textures, 0 (off) to 4, as the client's option |
 | `--brightness`, `--flat-lighting` | 0.5 | vanilla brightness slider, and smooth lighting off |
@@ -367,7 +369,11 @@ See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
   mode the End's sky box is drawn as its fog colour, the dark disc vanilla draws below the
   horizon for a camera under sea level is not drawn, and the lightmap's daylight still
   follows the pre-1.21.11 day curve.
-* There is no next-event estimation for emitters, so night scenes need many samples.
+* Light sampling picks emitters by power alone, not by where they are: with many emitters
+  in view, most samples go to lights far from the surface being lit.
+* Emitter light falls off by the inverse square of distance, not by the game's one level per
+  block: near a lamp HQ is brighter than the game, far from it darker
+  (`docs/research/emitters.md`).
 * The CUDA backend has not been run on NVIDIA hardware yet.
 
 ## License

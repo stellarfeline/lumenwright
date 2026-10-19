@@ -632,7 +632,7 @@ fn light_list(
 /// Radiant power of a light-level-15 block, in the kernel's units (the sun's
 /// irradiance is `sun_color`). Calibrated by `emitter_calibration` in
 /// `lumenwright-cli/tests/render.rs`; see docs/research/emitters.md.
-pub const LEVEL_15_POWER: f32 = 1.0;
+pub const LEVEL_15_POWER: f32 = 64.0;
 
 /// The radiant power of a block of light level `level`: `LEVEL_15_POWER × (level/15)²`.
 /// Under inverse-square falloff the distance at which a light's irradiance falls to
