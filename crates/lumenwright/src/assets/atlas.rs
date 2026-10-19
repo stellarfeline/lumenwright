@@ -8,11 +8,16 @@ use crate::assets::model::MISSING_TEXTURE;
 /// A plain white sprite, tinted per quad (entity fallback boxes).
 pub const WHITE_TEXTURE: &str = "lumenwright:white";
 
+/// One texture's rectangle in the [`Atlas`], in atlas pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Sprite {
+    /// Left edge.
     pub x: u32,
+    /// Top edge.
     pub y: u32,
+    /// Width.
     pub w: u32,
+    /// Height.
     pub h: u32,
     /// Some texel has alpha < 255.
     pub transparent: bool,
@@ -46,16 +51,22 @@ pub struct AtlasBuilder {
     generated: HashMap<String, Image>,
 }
 
+/// Every sprite the scene uses, packed into one image.
 pub struct Atlas {
+    /// Image width in pixels.
     pub width: u32,
+    /// Image height in pixels.
     pub height: u32,
     /// RGBA8, red in the low byte, straight (non-premultiplied) alpha, sRGB.
     pub pixels: Vec<u32>,
+    /// Sprite rectangles, indexed by the id [`AtlasBuilder::add`] returned.
     pub sprites: Vec<Sprite>,
     ids: HashMap<String, u32>,
 }
 
 impl Atlas {
+    /// The sprite for a texture location, or the missing texture's sprite when
+    /// `loc` was never added.
     pub fn sprite(&self, loc: &str) -> Sprite {
         let id = self
             .ids
@@ -66,6 +77,7 @@ impl Atlas {
         self.sprites[id as usize]
     }
 
+    /// The sprite id of a texture location, if it was added.
     pub fn id(&self, loc: &str) -> Option<u32> {
         self.ids.get(loc).copied()
     }
@@ -143,6 +155,7 @@ fn load_png(store: &ResourceStore, loc: &str) -> Option<Image> {
 }
 
 impl AtlasBuilder {
+    /// An empty builder holding only the magenta and black missing texture.
     pub fn new() -> AtlasBuilder {
         let mut b = AtlasBuilder::default();
         b.add(MISSING_TEXTURE);
@@ -156,6 +169,9 @@ impl AtlasBuilder {
         self.add(loc)
     }
 
+    /// Registers a texture location (`namespace:path`, read from
+    /// `assets/<ns>/textures/<path>.png`) and returns its sprite id. Adding a
+    /// location twice returns the same id.
     pub fn add(&mut self, loc: &str) -> u32 {
         if let Some(&id) = self.ids.get(loc) {
             return id;
@@ -166,6 +182,8 @@ impl AtlasBuilder {
         id
     }
 
+    /// Loads every registered texture from `store` and packs them. A texture that
+    /// cannot be read is drawn as the missing texture.
     pub fn build(mut self, store: &ResourceStore) -> Atlas {
         let mut images: Vec<Image> = self
             .names

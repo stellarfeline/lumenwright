@@ -150,6 +150,8 @@ fn pack(c: Vec3) -> u32 {
 
 // The open depth comparisons reject a NaN; `RangeInclusive::contains` would not.
 #[allow(clippy::manual_range_contains)]
+/// Rasterizes a quick-mode frame on the CPU and returns packed RGBA8 pixels
+/// (red in the low byte), row major, top row first.
 pub fn rasterize(f: &QuickFrame) -> Vec<u32> {
     let (w, h) = (f.width as f32, f.height as f32);
     let mesh = f.mesh;

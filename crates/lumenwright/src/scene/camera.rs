@@ -3,6 +3,7 @@
 use glam::{DVec3, Mat4, Vec3, Vec4};
 
 #[derive(Clone, Copy, Debug)]
+/// A pinhole camera: an eye position, Minecraft yaw and pitch, and a vertical field of view.
 pub struct Camera {
     /// Absolute world position (eye).
     pub pos: DVec3,
@@ -15,6 +16,7 @@ pub struct Camera {
 }
 
 impl Camera {
+    /// Unit view direction for the yaw and pitch, in world axes (+Y up, +Z south).
     pub fn forward(&self) -> Vec3 {
         let (y, p) = (self.yaw.to_radians(), self.pitch.to_radians());
         Vec3::new(-y.sin() * p.cos(), -p.sin(), y.cos() * p.cos()).normalize()

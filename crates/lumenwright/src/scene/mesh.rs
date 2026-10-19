@@ -10,6 +10,7 @@ use crate::assets::model::Dir;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+/// One quick-mode vertex, laid out for the GPU vertex buffer.
 pub struct Vertex {
     /// Camera-relative position.
     pub pos: [f32; 3],
@@ -20,7 +21,10 @@ pub struct Vertex {
 }
 
 #[derive(Default)]
+/// The quick-mode triangle mesh: a shared vertex list and two index lists,
+/// three indices per triangle.
 pub struct Mesh {
+    /// Every vertex the index lists refer to.
     pub vertices: Vec<Vertex>,
     /// Opaque + cutout triangles (alpha tested).
     pub opaque: Vec<u32>,
@@ -29,17 +33,20 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    /// Number of triangles in both index lists.
     pub fn triangle_count(&self) -> usize {
         (self.opaque.len() + self.translucent.len()) / 3
     }
 }
 
 #[derive(Clone, Copy, Debug)]
+/// Lighting inputs to the quick-mode vertex colours.
 pub struct Lighting {
     /// Daylight factor (vanilla `skyDarken`): 1 at noon, ~0.2 at midnight.
     pub sky_factor: f32,
     /// Vanilla brightness option: 0 = moody, 0.5 = default, 1 = bright.
     pub gamma: f32,
+    /// Smooth lighting and ambient occlusion; `false` is vanilla's flat lighting.
     pub smooth: bool,
 }
 
@@ -280,6 +287,7 @@ fn aabb_visible(planes: &[Vec4; 6], lo: Vec3, hi: Vec3) -> bool {
     })
 }
 
+/// What [`build_mesh`] needs to know about the view.
 pub struct MeshParams {
     /// Eye position in scene coordinates.
     pub eye: Vec3,
@@ -287,9 +295,15 @@ pub struct MeshParams {
     pub view_proj: Mat4,
     /// Horizontal render distance in blocks.
     pub max_distance: f32,
+    /// Daylight, brightness and smooth-lighting settings.
     pub lighting: Lighting,
 }
 
+/// Builds the quick-mode mesh for `scene`, blocks and entity quads together:
+/// sections outside the frustum or beyond `max_distance` are skipped, hidden
+/// faces are culled, vertex colours carry tint, directional shade, ambient
+/// occlusion and the lightmap, and translucent triangles are sorted back to
+/// front from `eye`.
 pub fn build_mesh(scene: &Scene, p: &MeshParams) -> Mesh {
     let t = std::time::Instant::now();
     let v = &scene.volume;

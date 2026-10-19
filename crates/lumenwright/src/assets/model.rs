@@ -10,15 +10,22 @@ use super::source::{ResourceStore, norm_loc};
 /// The six face directions, in vanilla order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Dir {
+    /// −y.
     Down,
+    /// +y.
     Up,
+    /// −z.
     North,
+    /// +z.
     South,
+    /// −x.
     West,
+    /// +x.
     East,
 }
 
 impl Dir {
+    /// Every direction, in vanilla order.
     pub const ALL: [Dir; 6] = [
         Dir::Down,
         Dir::Up,
@@ -28,6 +35,8 @@ impl Dir {
         Dir::East,
     ];
 
+    /// Parses a model or blockstate face name (`down`/`bottom`, `up`/`top`,
+    /// `north`, `south`, `west`, `east`).
     pub fn parse(s: &str) -> Option<Dir> {
         Some(match s {
             "down" | "bottom" => Dir::Down,
@@ -40,6 +49,7 @@ impl Dir {
         })
     }
 
+    /// The unit block offset towards this direction.
     pub fn offset(self) -> [i32; 3] {
         match self {
             Dir::Down => [0, -1, 0],
@@ -51,15 +61,18 @@ impl Dir {
         }
     }
 
+    /// The unit vector towards this direction.
     pub fn normal(self) -> Vec3 {
         let o = self.offset();
         Vec3::new(o[0] as f32, o[1] as f32, o[2] as f32)
     }
 
+    /// Position in [`Dir::ALL`] (0..6).
     pub fn index(self) -> usize {
         self as usize
     }
 
+    /// The opposite direction.
     pub fn opposite(self) -> Dir {
         match self {
             Dir::Down => Dir::Up,
@@ -77,24 +90,37 @@ impl Dir {
     }
 }
 
+/// A block model file as vanilla writes it, before parent resolution.
 #[derive(Deserialize, Clone, Debug)]
 pub struct ModelJson {
+    /// Parent model location.
     pub parent: Option<String>,
+    /// Texture variables to texture locations or `#variable` references.
     #[serde(default)]
     pub textures: HashMap<String, String>,
+    /// Cuboid elements; `None` inherits the parent's.
     pub elements: Option<Vec<ElementJson>>,
+    /// Ambient occlusion switch; `None` inherits the parent's.
     pub ambientocclusion: Option<bool>,
 }
 
+/// One cuboid element of a block model. Coordinates are in model units, 16
+/// to a block.
 #[derive(Deserialize, Clone, Debug)]
 pub struct ElementJson {
+    /// Minimum corner.
     pub from: [f32; 3],
+    /// Maximum corner.
     pub to: [f32; 3],
+    /// Rotation of the element about an origin.
     pub rotation: Option<ElementRotation>,
+    /// Applies directional face shading (default true).
     #[serde(default = "yes")]
     pub shade: bool,
+    /// Minimum light level of the element's faces, 0..=15.
     #[serde(default)]
     pub light_emission: u8,
+    /// Faces by direction name.
     #[serde(default)]
     pub faces: HashMap<String, FaceJson>,
 }
@@ -103,17 +129,25 @@ fn yes() -> bool {
     true
 }
 
+/// An element's rotation, in model units and degrees.
 #[derive(Deserialize, Clone, Debug)]
 pub struct ElementRotation {
+    /// Pivot point (default the block centre, 8,8,8).
     #[serde(default = "center")]
     pub origin: [f32; 3],
+    /// Rotation axis: `x`, `y` or `z`.
     pub axis: Option<String>,
+    /// Angle about `axis` in degrees.
     #[serde(default)]
     pub angle: f32,
     // Newer formats may specify per-axis angles.
+    /// Angle about x in degrees, in the per-axis form.
     pub x: Option<f32>,
+    /// Angle about y in degrees, in the per-axis form.
     pub y: Option<f32>,
+    /// Angle about z in degrees, in the per-axis form.
     pub z: Option<f32>,
+    /// Scales the element back to the block's extent after rotating.
     #[serde(default)]
     pub rescale: bool,
 }
@@ -122,13 +156,20 @@ fn center() -> [f32; 3] {
     [8.0, 8.0, 8.0]
 }
 
+/// One face of a model element.
 #[derive(Deserialize, Clone, Debug)]
 pub struct FaceJson {
+    /// Texture rectangle `[u0, v0, u1, v1]` in sprite units (0..16); `None`
+    /// derives it from the element's position.
     pub uv: Option<[f32; 4]>,
+    /// Texture location or `#variable`.
     pub texture: String,
+    /// Face direction whose neighbour hides this face when it is solid.
     pub cullface: Option<String>,
+    /// Texture rotation in degrees (0, 90, 180 or 270).
     #[serde(default)]
     pub rotation: i32,
+    /// Tint index; −1 (the default) is untinted.
     #[serde(default = "no_tint")]
     pub tintindex: i32,
 }
@@ -140,11 +181,15 @@ fn no_tint() -> i32 {
 /// A fully resolved model: elements plus a flat texture variable map.
 #[derive(Clone, Debug)]
 pub struct ResolvedModel {
+    /// Cuboid elements, from the nearest model in the chain that has any.
     pub elements: Vec<ElementJson>,
+    /// Texture variables, children overriding parents.
     pub textures: HashMap<String, String>,
+    /// Ambient occlusion, from the nearest model that sets it (default true).
     pub ambient_occlusion: bool,
 }
 
+/// Location of the vanilla magenta and black missing texture.
 pub const MISSING_TEXTURE: &str = "lumenwright:missing";
 
 impl ResolvedModel {
@@ -213,18 +258,27 @@ pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> 
 /// A quad in block-local coordinates (0..1), ready for either renderer.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BakedQuad {
+    /// Corner at the texture's top left.
     pub p0: Vec3,
+    /// Edge from `p0` along the texture's u axis.
     pub eu: Vec3,
+    /// Edge from `p0` along the texture's v axis.
     pub ev: Vec3,
     /// Texture location (`ns:path`).
     pub texture: String,
     /// UV (0..16 sprite space) at p0, and its derivatives along eu / ev.
     pub uv0: [f32; 2],
+    /// UV change along `eu`.
     pub du: [f32; 2],
+    /// UV change along `ev`.
     pub dv: [f32; 2],
+    /// Hidden when the neighbour in this direction is a solid full face.
     pub cullface: Option<Dir>,
+    /// Tint index; −1 is untinted.
     pub tintindex: i32,
+    /// Applies directional face shading.
     pub shade: bool,
+    /// Minimum light level of the face, 0..=15.
     pub light_emission: u8,
 }
 
@@ -239,6 +293,8 @@ impl BakedQuad {
         Dir::from_normal(self.normal())
     }
 
+    /// The four corners in vanilla order: top left, bottom left, bottom right,
+    /// top right.
     pub fn corners(&self) -> [Vec3; 4] {
         // Vanilla order: TL, BL, BR, TR.
         [
@@ -258,9 +314,12 @@ impl BakedQuad {
     }
 }
 
+/// A block model baked into quads, rotated by its blockstate variant.
 #[derive(Clone, Debug, Default)]
 pub struct BakedModel {
+    /// The model's quads, in block-local coordinates.
     pub quads: Vec<BakedQuad>,
+    /// The model takes ambient occlusion.
     pub ambient_occlusion: bool,
     /// The model has a single element spanning the whole block with 6 faces.
     pub full_cube: bool,

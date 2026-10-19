@@ -16,13 +16,20 @@ use crate::world::{BlockState, Entity};
 const BUILTIN_MODELS: &str = include_str!("../../assets/entity_models.json");
 
 #[derive(Deserialize, Clone, Debug)]
+/// One cuboid of a model part, in vanilla's `CubeListBuilder` terms. Lengths are
+/// model pixels (1/16 block).
 pub struct CubeDef {
+    /// Top-left corner of the cube's box-UV layout, in texture pixels.
     pub uv: [f32; 2],
+    /// Minimum corner, relative to the part's pivot.
     pub origin: [f32; 3],
+    /// Extent along x, y and z.
     pub size: [f32; 3],
     #[serde(default)]
+    /// Grows the cube by this much on every side without changing its UVs.
     pub inflate: f32,
     #[serde(default)]
+    /// Mirrors the box-UV layout left to right.
     pub mirror: bool,
     /// Faces to emit (vanilla `addBox(..., Set<Direction>)`), by direction name in
     /// model space; all six when absent.
@@ -31,28 +38,38 @@ pub struct CubeDef {
 }
 
 #[derive(Deserialize, Clone, Debug)]
+/// A model part in vanilla's `PartDefinition` terms: a pose, cubes and child parts.
 pub struct PartDef {
+    /// Part name, as vanilla names it; poses address parts by it.
     pub name: String,
     #[serde(default)]
+    /// Pivot, in model pixels relative to the parent part.
     pub pivot: [f32; 3],
     #[serde(default)]
+    /// Rotation about the pivot in radians, x, y, z, applied in Z-Y-X order.
     pub rotation: [f32; 3],
     /// Part scale (vanilla `PartPose.scaled`), applied after the rotation.
     #[serde(default = "unit_scale")]
     pub scale: [f32; 3],
     #[serde(default)]
+    /// The part's cuboids.
     pub cubes: Vec<CubeDef>,
     #[serde(default)]
+    /// Parts posed relative to this one.
     pub children: Vec<PartDef>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
+/// Picks an entity's texture from one of its NBT fields.
 pub struct TextureVariants {
+    /// NBT field whose string value names the variant.
     pub field: String,
+    /// Texture location with `{name}` standing for the value's path (its namespace dropped).
     pub pattern: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
+/// One entity model: its texture, its scale and hitbox, and its parts.
 pub struct ModelDef {
     /// Vanilla class and method the geometry is transcribed from.
     #[serde(default)]
@@ -60,12 +77,18 @@ pub struct ModelDef {
     /// Default texture; block-entity models pick theirs in code and leave it empty.
     #[serde(default)]
     pub texture: String,
+    /// Texture picked from the entity's NBT; the default texture when absent or unset.
     pub texture_variants: Option<TextureVariants>,
+    /// Texture width and height in pixels, the space the cube UVs are in.
     pub texture_size: [f32; 2],
     #[serde(default = "one")]
+    /// Uniform scale of the whole model (halved again for babies and small armour stands).
     pub scale: f32,
     #[serde(default = "default_hitbox")]
+    /// Hitbox width and height in blocks; the quick-mode light sample sits at half
+    /// the height.
     pub hitbox: [f32; 2],
+    /// The root parts.
     pub parts: Vec<PartDef>,
 }
 
@@ -80,21 +103,29 @@ fn default_hitbox() -> [f32; 2] {
 }
 
 #[derive(Deserialize)]
+/// The entity models bundled with the crate (`assets/entity_models.json`), by entity id.
 pub struct EntityModels {
+    /// Version of the file format.
     pub format: u32,
+    /// Model definitions by namespaced entity id.
     pub models: HashMap<String, ModelDef>,
 }
 
 impl EntityModels {
+    /// Parses the bundled model file.
     pub fn load_builtin() -> EntityModels {
         serde_json::from_str(BUILTIN_MODELS).expect("bundled entity_models.json is valid")
     }
 }
 
 #[derive(Default, Debug, Clone)]
+/// Per-kind counts of the entities a scene drew.
 pub struct EntityStats {
+    /// Entities drawn from a model, as block displays, item frames or paintings.
     pub rendered: BTreeMap<String, usize>,
+    /// Entities with no model drawn as a box the size of their hitbox.
     pub fallback_boxes: BTreeMap<String, usize>,
+    /// Entities with no model left out, because fallback boxes are off.
     pub skipped: BTreeMap<String, usize>,
 }
 
@@ -241,6 +272,9 @@ fn block_state_from_nbt(c: &Compound) -> Option<BlockState> {
     Some(s)
 }
 
+/// Adds every texture the listed entities may sample to the atlas: model
+/// textures, NBT-picked variants, profile skins and painting art. Block-display
+/// textures come with the baked block models.
 pub fn register_textures(models: &EntityModels, entities: &[Entity], ab: &mut AtlasBuilder) {
     ab.add(WHITE_TEXTURE);
     ab.add("minecraft:painting/back");
@@ -381,14 +415,18 @@ fn orient_outward(q: &mut Quad, center: Vec3) {
 /// A part's animated pose: what vanilla's `setupAnim` writes into a `ModelPart`.
 #[derive(Clone, Copy, Debug)]
 pub struct PartPose {
+    /// Pivot, in model pixels relative to the parent part.
     pub pivot: [f32; 3],
+    /// Rotation about the pivot in radians, x, y, z.
     pub rotation: [f32; 3],
+    /// Whether the part and its children are drawn.
     pub visible: bool,
 }
 
 /// Sets a part's pose by name; the identity leaves the pose of the model file.
 pub type PoseFn<'a> = &'a dyn Fn(&str, &mut PartPose);
 
+/// The pose that leaves every part as the model file has it.
 pub fn rest_pose(_: &str, _: &mut PartPose) {}
 
 pub(crate) fn part_quads(
@@ -559,6 +597,9 @@ fn flat_quad(p0: Vec3, eu: Vec3, ev: Vec3, sprite: &crate::assets::atlas::Sprite
     }
 }
 
+/// Appends the quads of every visible entity inside the volume to
+/// `scene.entity_quads` (scene coordinates), with their quick-mode lighting in
+/// `scene.entity_quad_light`, and records the counts in `scene.entity_stats`.
 pub fn build_entity_quads(
     scene: &mut Scene,
     models: &EntityModels,

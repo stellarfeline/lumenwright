@@ -27,12 +27,16 @@ use crate::world::{BlockState, BlockVolume, Registry};
 const BUILTIN_MODELS: &str = include_str!("../../assets/block_entity_models.json");
 
 #[derive(Deserialize)]
+/// The block-entity models bundled with the crate (`assets/block_entity_models.json`).
 pub struct BlockEntityModels {
+    /// Version of the file format.
     pub format: u32,
+    /// Model definitions by name.
     pub models: HashMap<String, ModelDef>,
 }
 
 impl BlockEntityModels {
+    /// Parses the bundled model file.
     pub fn load_builtin() -> BlockEntityModels {
         serde_json::from_str(BUILTIN_MODELS).expect("bundled block_entity_models.json is valid")
     }
@@ -43,11 +47,15 @@ impl BlockEntityModels {
 pub struct BlockEntity {
     /// Namespaced id, e.g. `minecraft:sign`.
     pub id: String,
+    /// World block coordinates.
     pub pos: [i32; 3],
+    /// The whole record as read from the chunk.
     pub nbt: Compound,
 }
 
 impl BlockEntity {
+    /// Reads a record from a chunk's `block_entities` list; `None` when it has no
+    /// `id` or no integer `x`, `y`, `z`.
     pub fn from_nbt(v: &Value) -> Option<BlockEntity> {
         let c = nbt::compound(v)?;
         let id = norm_loc(nbt::get_str(c, "id")?);
@@ -59,6 +67,7 @@ impl BlockEntity {
         })
     }
 
+    /// The id without a `minecraft:` namespace.
     pub fn short_id(&self) -> &str {
         self.id.strip_prefix("minecraft:").unwrap_or(&self.id)
     }
@@ -78,6 +87,8 @@ impl BlockEntity {
     }
 }
 
+/// Reads every well-formed record of a chunk's `block_entities`, sorted by
+/// y, then z, then x.
 pub fn parse_all(values: &[Value]) -> Vec<BlockEntity> {
     let mut out: Vec<BlockEntity> = values.iter().filter_map(BlockEntity::from_nbt).collect();
     out.sort_by_key(|b| (b.pos[1], b.pos[2], b.pos[0]));
@@ -85,6 +96,7 @@ pub fn parse_all(values: &[Value]) -> Vec<BlockEntity> {
 }
 
 #[derive(Default, Debug, Clone)]
+/// Per-kind counts of the block entities a scene drew and skipped.
 pub struct BlockEntityStats {
     /// Drawn block entities by kind (`sign`, `bell`, `chest`...).
     pub rendered: BTreeMap<String, usize>,
@@ -92,6 +104,7 @@ pub struct BlockEntityStats {
     pub skipped: BTreeMap<String, usize>,
     /// Sign lines with text, and glyphs drawn for them.
     pub text_lines: usize,
+    /// Glyphs drawn for the sign lines.
     pub glyphs: usize,
 }
 
@@ -145,10 +158,13 @@ pub struct BlockEntityPlan {
     planned: Vec<Planned>,
     textures: Vec<String>,
     generated: Vec<(String, u32, u32, Vec<u32>)>,
+    /// What the plan draws and skips, by kind.
     pub stats: BlockEntityStats,
 }
 
 impl BlockEntityPlan {
+    /// Adds the textures the plan samples to the atlas, including the textures it
+    /// composited (banners).
     pub fn register_textures(&mut self, ab: &mut AtlasBuilder) {
         for t in &self.textures {
             ab.add(t);
@@ -158,6 +174,7 @@ impl BlockEntityPlan {
         }
     }
 
+    /// Whether the plan draws nothing.
     pub fn is_empty(&self) -> bool {
         self.planned.is_empty()
     }
@@ -165,15 +182,22 @@ impl BlockEntityPlan {
 
 /// Context for planning: where blocks are and who looks at them.
 pub struct PlanContext<'a> {
+    /// Resources the models, textures and font come from.
     pub store: &'a ResourceStore,
+    /// Block states by id.
     pub registry: &'a Registry,
+    /// The loaded blocks, read to match each block entity to its block.
     pub volume: &'a BlockVolume,
+    /// Integer world origin of the scene coordinates.
     pub origin: [i32; 3],
     /// Camera position in world coordinates (glowing-text outlines are drawn within
     /// 16 blocks, as in `AbstractSignRenderer`).
     pub eye: Option<[f64; 3]>,
 }
 
+/// Plans the geometry of every block entity in `list` that lies inside the
+/// volume, and records which kinds it draws or skips. Quads are emitted once
+/// the atlas exists.
 pub fn plan(ctx: &PlanContext, list: &[BlockEntity]) -> BlockEntityPlan {
     let mut font: Option<(Font, Lang)> = None;
     let mut out = BlockEntityPlan {

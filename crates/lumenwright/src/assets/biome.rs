@@ -4,13 +4,20 @@
 
 use super::source::ResourceStore;
 
+/// Vanilla's climate and colour values for one biome.
 #[derive(Clone, Copy, Debug)]
 pub struct BiomeInfo {
+    /// Climate temperature, as in the biome's datapack JSON.
     pub temperature: f32,
+    /// Climate downfall (humidity), as in the biome's datapack JSON.
     pub downfall: f32,
+    /// Water colour, `0xRRGGBB`.
     pub water: u32,
+    /// Grass colour override, `0xRRGGBB`; `None` samples the grass colormap.
     pub grass: Option<u32>,
+    /// Foliage colour override, `0xRRGGBB`; `None` samples the foliage colormap.
     pub foliage: Option<u32>,
+    /// Applies the dark forest grass modifier (averaged with `0x28340A`).
     pub dark_forest: bool,
 }
 
@@ -37,6 +44,8 @@ const fn bw(t: f32, d: f32, water: u32) -> BiomeInfo {
     }
 }
 
+/// The vanilla values for a biome id, with or without the `minecraft:`
+/// namespace. An unknown biome gets the plains climate.
 pub fn biome_info(name: &str) -> BiomeInfo {
     let n = name.strip_prefix("minecraft:").unwrap_or(name);
     match n {
@@ -110,6 +119,8 @@ pub struct Colormap {
 }
 
 impl Colormap {
+    /// Loads `assets/minecraft/textures/colormap/<path>.png`. When the image is
+    /// missing or not 256×256, every sample returns `fallback` (`0xRRGGBB`).
     pub fn load(store: &ResourceStore, path: &str, fallback: u32) -> Colormap {
         let px = store
             .get(&format!("assets/minecraft/textures/colormap/{path}.png"))
@@ -138,6 +149,8 @@ impl Colormap {
     }
 }
 
+/// Grass, foliage, dry-foliage and water tints per biome, from the jar's
+/// colormaps and the vanilla biome table. Every colour is `0xRRGGBB`.
 pub struct BiomeColors {
     grass: Colormap,
     foliage: Colormap,
@@ -145,6 +158,7 @@ pub struct BiomeColors {
 }
 
 impl BiomeColors {
+    /// Loads the grass, foliage and dry-foliage colormaps from `store`.
     pub fn new(store: &ResourceStore) -> BiomeColors {
         BiomeColors {
             grass: Colormap::load(store, "grass", 0x91BD59),
@@ -153,6 +167,7 @@ impl BiomeColors {
         }
     }
 
+    /// Grass tint for a biome id.
     pub fn grass(&self, biome: &str) -> u32 {
         let i = biome_info(biome);
         if let Some(g) = i.grass {
@@ -166,17 +181,20 @@ impl BiomeColors {
         }
     }
 
+    /// Foliage tint for a biome id.
     pub fn foliage(&self, biome: &str) -> u32 {
         let i = biome_info(biome);
         i.foliage
             .unwrap_or_else(|| self.foliage.sample(i.temperature, i.downfall))
     }
 
+    /// Dry-foliage tint (leaf litter) for a biome id.
     pub fn dry_foliage(&self, biome: &str) -> u32 {
         let i = biome_info(biome);
         self.dry_foliage.sample(i.temperature, i.downfall)
     }
 
+    /// Water tint for a biome id.
     pub fn water(&self, biome: &str) -> u32 {
         biome_info(biome).water
     }

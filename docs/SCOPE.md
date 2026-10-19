@@ -51,7 +51,9 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 * **Lighting controls.** `--time` (ticks), or `--sun-altitude` and `--sun-azimuth`.
   `--exposure`, `--tonemap`, `--spp`, `--max-bounces`, `--ssaa` (quick mode).
 * **Tooling.** An `info` subcommand prints the world version, spawn, player position, and
-  block and entity statistics. An `assets` subcommand fetches the client jar.
+  block and entity statistics. An `assets` subcommand fetches the client jar and shows which
+  jar a version resolves to. `backends` lists the backends available on the machine, and
+  `demo-world` writes generated worlds to try things on.
 
 ## 3. Out of scope (explicitly deferred)
 
@@ -134,7 +136,7 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 
 | Criterion | Result |
 |-----------|--------|
-| Tests | `cargo test --workspace`: 42 library unit, 2 CLI unit, 8 kernel and 13 integration tests (9 render, 4 library) pass. The integration tests ran for real (jar and Metal adapter present). |
+| Tests | `cargo test --workspace`: 42 library unit, 2 CLI unit, 8 kernel and 13 integration tests (9 render, 4 library) and 1 doc test pass. The integration tests ran for real (jar and Metal adapter present). |
 | One render path | The CLI's PNG equals the library's pixels in both modes on the block-entity gallery (integration test) and on the showcase at 1280×720 quick and 640×360 HQ, CPU and Metal. |
 | Embedding build | The library's default features (`gpu`): 96 packages in the normal tree on macOS, 98 on Linux gnu, 109 on Windows MSVC; `cargo check` passes for the five targets above. |
 | Real save, both modes, CPU + Metal | `datapack_test` (1.21.11) renders in all four combinations. Blocks, water, mannequins, an enderman, 68 rotated and scaled block displays, and glow squids (drawn as fallback boxes) all appear. |

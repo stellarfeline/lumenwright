@@ -20,6 +20,9 @@ const PTX: &str = include_str!(concat!(
 ));
 const TARGET_LAUNCH: Duration = Duration::from_millis(150);
 
+/// The CUDA backend: HQ mode runs the Rust kernel compiled to PTX through the
+/// CUDA driver API. Quick mode falls back to the CPU rasterizer. `libcuda` is
+/// loaded at run time.
 pub struct CudaBackend {
     ctx: Arc<CudaContext>,
     name: String,
@@ -39,6 +42,7 @@ fn open() -> Result<Arc<CudaContext>> {
     }
 }
 
+/// Describes device 0 and its compute capability, or says why CUDA is unavailable.
 pub fn probe() -> Result<String> {
     let ctx = open()?;
     let (major, minor) = ctx.compute_capability().map_err(|e| anyhow!("{e:?}"))?;
@@ -49,6 +53,7 @@ pub fn probe() -> Result<String> {
 }
 
 impl CudaBackend {
+    /// Opens CUDA device 0. Fails when the driver library is missing or reports an error.
     pub fn new() -> Result<CudaBackend> {
         let ctx = open()?;
         // The Rust kernel keeps its traversal state in local memory.

@@ -28,6 +28,8 @@ pub struct Glyph {
 /// Decoded font textures by location (`None` when missing).
 type TextureCache = BTreeMap<String, Option<(u32, u32, Vec<u32>)>>;
 
+/// A bitmap font from the jar and resource packs (`assets/<ns>/font/*.json`),
+/// as used for sign text.
 #[derive(Clone, Debug, Default)]
 pub struct Font {
     glyphs: HashMap<char, Glyph>,
@@ -48,6 +50,8 @@ impl Font {
         Font::load_id(store, "minecraft:default")
     }
 
+    /// Loads the font with id `id` (such as `minecraft:default`), following
+    /// `reference` providers.
     pub fn load_id(store: &ResourceStore, id: &str) -> Font {
         let mut font = Font::default();
         let mut textures = TextureCache::new();
@@ -179,6 +183,7 @@ impl Font {
         }
     }
 
+    /// The bitmap glyph for `c`, if the font has one.
     pub fn glyph(&self, c: char) -> Option<&Glyph> {
         self.glyphs.get(&c)
     }
@@ -193,6 +198,7 @@ impl Font {
         if bold { base + 1.0 } else { base }
     }
 
+    /// The font has no bitmap glyphs (its files were not found).
     pub fn is_empty(&self) -> bool {
         self.glyphs.is_empty()
     }
