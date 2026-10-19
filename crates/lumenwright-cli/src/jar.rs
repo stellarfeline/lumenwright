@@ -147,7 +147,7 @@ pub fn resolve_jar(req: &JarRequest) -> Result<PathBuf> {
     bail!("no Minecraft client jar found; pass --minecraft-jar or allow downloading")
 }
 
-fn http_get(url: &str) -> Result<Vec<u8>> {
+pub(crate) fn http_get(url: &str) -> Result<Vec<u8>> {
     let mut resp = ureq::get(url)
         .call()
         .with_context(|| format!("GET {url}"))?;
@@ -158,9 +158,9 @@ fn http_get(url: &str) -> Result<Vec<u8>> {
         .read_to_vec()?)
 }
 
-/// Downloads the client jar for `version` ("latest" = latest release) from
-/// Mojang into the cache, verifying its SHA-1. Returns the cached path.
-pub fn download_client_jar(version: &str) -> Result<PathBuf> {
+/// Mojang's metadata for a version (`"latest"` = latest release): its id and its
+/// `<version>.json` (downloads, asset index).
+pub(crate) fn version_meta(version: &str) -> Result<(String, serde_json::Value)> {
     log::info!("fetching Minecraft version manifest");
     let manifest: serde_json::Value = serde_json::from_slice(&http_get(MANIFEST_URL)?)?;
     let id = if version == "latest" {
@@ -171,16 +171,22 @@ pub fn download_client_jar(version: &str) -> Result<PathBuf> {
     } else {
         version.to_string()
     };
-    let dest = cache_dir().join("versions").join(&id).join("client.jar");
-    if dest.exists() {
-        return Ok(dest);
-    }
     let entry = manifest["versions"]
         .as_array()
         .and_then(|vs| vs.iter().find(|v| v["id"].as_str() == Some(&id)))
         .with_context(|| format!("version {id} not in Mojang's manifest"))?;
-    let meta: serde_json::Value =
-        serde_json::from_slice(&http_get(entry["url"].as_str().context("version url")?)?)?;
+    let meta = serde_json::from_slice(&http_get(entry["url"].as_str().context("version url")?)?)?;
+    Ok((id, meta))
+}
+
+/// Downloads the client jar for `version` ("latest" = latest release) from Mojang
+/// into the cache, verifying its SHA-1. Returns the cached path.
+pub fn download_client_jar(version: &str) -> Result<PathBuf> {
+    let (id, meta) = version_meta(version)?;
+    let dest = cache_dir().join("versions").join(&id).join("client.jar");
+    if dest.exists() {
+        return Ok(dest);
+    }
     let client = &meta["downloads"]["client"];
     let url = client["url"].as_str().context("no client download")?;
     let sha1 = client["sha1"].as_str().unwrap_or("");
