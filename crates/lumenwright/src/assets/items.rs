@@ -18,15 +18,25 @@ use crate::world::nbt::{self, Compound};
 /// model's `display` transform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DisplayContext {
+    /// No context: the model drawn untransformed (`none`).
     None,
+    /// Held in the left hand, seen from outside (`thirdperson_lefthand`).
     ThirdPersonLeftHand,
+    /// Held in the right hand, seen from outside (`thirdperson_righthand`).
     ThirdPersonRightHand,
+    /// Held in the left hand, seen by the holder (`firstperson_lefthand`).
     FirstPersonLeftHand,
+    /// Held in the right hand, seen by the holder (`firstperson_righthand`).
     FirstPersonRightHand,
+    /// Worn on the head (`head`).
     Head,
+    /// An inventory slot (`gui`).
     Gui,
+    /// Dropped on the ground as an item entity (`ground`).
     Ground,
+    /// Framed: an item frame or an `item_display` set to `fixed` (`fixed`).
     Fixed,
+    /// Resting on a shelf (`on_shelf`).
     OnShelf,
 }
 
@@ -47,6 +57,8 @@ impl DisplayContext {
         }
     }
 
+    /// The context named `s` in model JSON and `item_display` NBT (the inverse of
+    /// [`DisplayContext::name`]); `None` for any other string.
     pub fn parse(s: &str) -> Option<DisplayContext> {
         const ALL: [DisplayContext; 10] = [
             DisplayContext::None,
@@ -78,7 +90,9 @@ impl DisplayContext {
 pub struct ItemStack {
     /// Namespaced id, e.g. `minecraft:iron_sword`.
     pub id: String,
+    /// Number of items in the stack; at least 1 for a stack [`ItemStack::from_nbt`] returns.
     pub count: i32,
+    /// Data components by name, as stored (`dyed_color` or `minecraft:dyed_color`); read them with [`ItemStack::component`].
     pub components: Compound,
 }
 
@@ -128,23 +142,39 @@ pub enum Tint {
     /// 0xRRGGBB.
     Rgb(u32),
     /// `minecraft:grass`: the grass colormap at a climate.
-    Grass { temperature: f32, downfall: f32 },
+    Grass {
+        /// Climate temperature, 0..=1 after clamping when sampled.
+        temperature: f32,
+        /// Climate downfall (rainfall), 0..=1 after clamping when sampled.
+        downfall: f32,
+    },
 }
 
 /// One drawable part of a resolved item.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ItemLayer {
     /// A JSON model (`models/<...>.json`) and the tints its tint indices take.
-    Model { model: String, tints: Vec<Tint> },
+    Model {
+        /// Model location, namespaced (`minecraft:item/iron_sword`).
+        model: String,
+        /// The tint each `tintindex` of the model's faces takes, by index; an index past the end is untinted.
+        tints: Vec<Tint>,
+    },
     /// A model vanilla draws in Java code (`minecraft:special`): its `type`
     /// (`minecraft:shield`, `minecraft:chest`, ...) and the `base` model that
     /// carries the display transforms.
-    Special { kind: String, base: String },
+    Special {
+        /// The special model type, namespaced (`minecraft:shield`).
+        kind: String,
+        /// The model whose `display` transforms pose it, namespaced.
+        base: String,
+    },
 }
 
 /// What a stack draws in one context.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ResolvedItem {
+    /// The parts to draw, in the order the definition lists them; empty when nothing resolves or the item draws nothing.
     pub layers: Vec<ItemLayer>,
     /// Why part of the item cannot be resolved (no definition, an unknown type).
     pub unresolved: Vec<String>,

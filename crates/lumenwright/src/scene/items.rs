@@ -29,7 +29,9 @@ const LAYERS: [&str; 5] = ["layer0", "layer1", "layer2", "layer3", "layer4"];
 /// An item model ready to pose: quads in model space (0..1) and its display transforms.
 #[derive(Debug)]
 pub struct BakedItem {
+    /// Quads in model space (0..1), as [`BakedQuad`]s with their `tintindex`.
     pub quads: Vec<BakedQuad>,
+    /// Display transforms by context name (see [`DisplayContext::name`]); a context with no entry draws untransformed.
     pub display: HashMap<String, ItemTransform>,
 }
 
@@ -47,17 +49,24 @@ impl BakedItem {
 /// One drawable part of a prepared stack.
 #[derive(Debug, Clone)]
 pub enum Piece {
+    /// A baked JSON model.
     Model {
+        /// The baked model.
         item: Rc<BakedItem>,
+        /// The tint each `tintindex` takes, by index; an index past the end is untinted.
         tints: Vec<Tint>,
     },
     /// `minecraft:shield`, posed by its base model's transforms.
-    Shield { base: Rc<BakedItem> },
+    Shield {
+        /// The base model whose `display` transforms pose the shield.
+        base: Rc<BakedItem>,
+    },
 }
 
 /// A stack resolved and baked for one display context.
 #[derive(Debug, Clone, Default)]
 pub struct Prepared {
+    /// The parts to draw, in order; empty when nothing is drawn.
     pub pieces: Vec<Piece>,
     /// What could not be drawn, in words.
     pub undrawn: Vec<String>,
@@ -90,9 +99,13 @@ pub struct ItemBakery<'a> {
 /// Humanoid armour slots (vanilla `EquipmentSlot`'s armour half).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArmorSlot {
+    /// Helmet slot.
     Head,
+    /// Chestplate slot.
     Chest,
+    /// Leggings slot.
     Legs,
+    /// Boots slot.
     Feet,
 }
 
@@ -337,6 +350,7 @@ fn generated_quads(store: &ResourceStore, model: &ResolvedModel) -> Vec<BakedQua
 }
 
 impl<'a> ItemBakery<'a> {
+    /// A bakery that resolves and bakes models from `store`, with nothing cached yet.
     pub fn new(store: &'a ResourceStore) -> ItemBakery<'a> {
         ItemBakery {
             store,
@@ -346,6 +360,7 @@ impl<'a> ItemBakery<'a> {
         }
     }
 
+    /// The resource store the bakery reads.
     pub fn store(&self) -> &'a ResourceStore {
         self.store
     }

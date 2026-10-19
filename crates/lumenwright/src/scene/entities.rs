@@ -985,14 +985,22 @@ pub fn build_entity_quads(
 /// (main, off) and `ArmorItems` (feet, legs, chest, head).
 #[derive(Default, Debug, Clone)]
 pub struct Equipment {
+    /// Main hand.
     pub mainhand: Option<ItemStack>,
+    /// Off hand.
     pub offhand: Option<ItemStack>,
+    /// Head slot (helmet, or any item worn on the head).
     pub head: Option<ItemStack>,
+    /// Chest slot.
     pub chest: Option<ItemStack>,
+    /// Legs slot.
     pub legs: Option<ItemStack>,
+    /// Feet slot.
     pub feet: Option<ItemStack>,
 }
 
+/// Reads an entity's equipment from its NBT: the `equipment` compound when present, else
+/// `HandItems` and `ArmorItems`. An empty slot is `None`.
 pub fn equipment(e: &Entity) -> Equipment {
     let slot = |k: &str| nbt::get(&e.nbt, &format!("equipment.{k}")).and_then(ItemStack::from_nbt);
     let list = |k: &str, i: usize| match nbt::get(&e.nbt, k) {

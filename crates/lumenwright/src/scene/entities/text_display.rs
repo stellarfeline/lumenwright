@@ -37,6 +37,7 @@ const BACKGROUND_TEXELS: u32 = 4;
 /// One quad of a text display, in scene coordinates.
 #[derive(Clone, Copy, Debug)]
 pub struct TextQuad {
+    /// The quad, in scene coordinates with atlas UVs.
     pub quad: Quad,
     /// Lit like the display: its block's light, no directional shading.
     pub light: EntityLight,
@@ -83,6 +84,7 @@ fn background_texture(argb: u32) -> String {
 }
 
 impl TextDisplayPlan {
+    /// Registers the plan's textures (glyph pages) and generated background colours with the atlas builder, before it is built.
     pub fn register_textures(&self, ab: &mut AtlasBuilder) {
         for t in &self.textures {
             ab.add(t);
@@ -101,6 +103,7 @@ impl TextDisplayPlan {
         }
     }
 
+    /// Whether the scene has no text display, so nothing is drawn.
     pub fn is_empty(&self) -> bool {
         self.planned.is_empty()
     }

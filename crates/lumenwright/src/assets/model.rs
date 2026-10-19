@@ -110,8 +110,11 @@ pub struct ModelJson {
 /// One entry of a model's `display` block (vanilla `ItemTransform`).
 #[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub struct TransformJson {
+    /// Rotation about x, y, z in degrees; `None` is 0.
     pub rotation: Option<[f32; 3]>,
+    /// Translation in sixteenths of a block; `None` is 0.
     pub translation: Option<[f32; 3]>,
+    /// Scale on x, y, z; `None` is 1.
     pub scale: Option<[f32; 3]>,
 }
 
@@ -119,12 +122,16 @@ pub struct TransformJson {
 /// / 16, clamped to ±5) and a scale clamped to ±4 (`ItemTransform.Deserializer`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ItemTransform {
+    /// Rotation about x, y, z in degrees.
     pub rotation: Vec3,
+    /// Translation in blocks, already divided by 16 and clamped to ±5.
     pub translation: Vec3,
+    /// Scale on x, y, z, clamped to ±4.
     pub scale: Vec3,
 }
 
 impl ItemTransform {
+    /// No rotation, no translation, unit scale: the pose of a context the model has no `display` entry for.
     pub const IDENTITY: ItemTransform = ItemTransform {
         rotation: Vec3::ZERO,
         translation: Vec3::ZERO,

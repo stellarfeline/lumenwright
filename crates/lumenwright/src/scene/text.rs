@@ -17,6 +17,7 @@ pub struct Span {
     pub color: Option<u32>,
     /// Drawn in the bold face (each glyph struck twice, one pixel apart).
     pub bold: bool,
+    /// Drawn in the italic face (sheared a quarter pixel per pixel of height).
     pub italic: bool,
 }
 
@@ -239,6 +240,7 @@ pub struct Placed {
     pub color: Option<u32>,
     /// Drawn in the bold face.
     pub bold: bool,
+    /// Drawn in the italic face.
     pub italic: bool,
 }
 
@@ -346,13 +348,19 @@ pub fn layout_lines(font: &Font, spans: &[Span], max_width: f32) -> Vec<(Vec<Pla
 /// One glyph quad in text space (x right, y down, in font pixels).
 #[derive(Clone, Debug, PartialEq)]
 pub struct GlyphQuad {
+    /// Texture of the glyph page, namespaced.
     pub texture: String,
+    /// Size of that texture in pixels (width, height).
     pub tex_size: [f32; 2],
     /// u0, v0, u1, v1 in texture pixels.
     pub uv: [f32; 4],
+    /// Top-left corner in text space (x right, y down, font pixels).
     pub p0: Vec3,
+    /// Edge from `p0` along the glyph's width.
     pub eu: Vec3,
+    /// Edge from `p0` along the glyph's height, including the italic shear.
     pub ev: Vec3,
+    /// RGB colour (0xRRGGBB) after shading.
     pub rgb: u32,
 }
 
