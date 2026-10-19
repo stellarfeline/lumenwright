@@ -123,6 +123,7 @@ This resolution and the downloader belong to the command. The library takes the 
 | `--exposure`, `--tonemap aces\|gamma\|filmic` | 1.0, aces | HQ post-processing |
 | `--sun-intensity`, `--sky-intensity`, `--emitter-intensity` | 1.5, 1, 6 | HQ lighting |
 | `--ssaa N` | 1 | quick-mode supersampling |
+| `--mipmap-levels N` | 4 | quick-mode mip levels for block textures, 0 (off) to 4, as the client's option |
 | `--brightness`, `--flat-lighting` | 0.5 | vanilla brightness slider, and smooth lighting off |
 | `--hdr-output out.pfm` | | also write the linear HDR image (HQ) |
 | `--no-entities`, `--players`, `--unknown-entities box\|skip` | | entity options |
@@ -211,6 +212,20 @@ Backend parity is by construction. The CPU and CUDA backends run the same Rust k
 WGSL kernel mirrors it line by line and uses the same RNG, so CPU and Metal draw the same
 random numbers for each pixel and sample. Builds are deterministic: identical inputs give
 bit-identical images.
+
+Quick mode samples block textures as the 1.21.11 client does: each sprite of the client's
+block atlas (`atlases/blocks.json`) gets a mip chain built like `MipmapGenerator` builds it
+(a linear-light 2×2 mean; cutout textures keep their alpha-test coverage; the `.mcmeta`
+`mipmap_strategy` and `alpha_cutoff_bias` apply), padded and aligned like the client's
+stitcher so no level bleeds into a neighbour, and read through `terrain.fsh`'s
+`sampleNearest` with trilinear, 4× anisotropic filtering. Pixel art stays sharp up close and
+distant terrain does not shimmer. Entities, items and text are read nearest, as the client
+reads its other atlases. The quick sky is the client's `SkyRenderer`: the fogged sky disc, the
+sunrise and sunset glow, the sun, this night's moon phase and the 1500 stars, with every
+colour and angle read from the jar's environment attributes and day timeline (dimension,
+biome at the camera, time of day). The world fog adds the client's environmental fog to the
+render-distance fog. HQ mode keeps its own sky model; both modes place the sun at the
+timeline's `sun_angle`.
 
 Mob geometry lives in Java code in vanilla, not in assets, so it ships as data in
 [`crates/lumenwright/assets/entity_models.json`](crates/lumenwright/assets/entity_models.json):
@@ -303,7 +318,9 @@ cargo test --workspace --release
 
 * **Unit tests** cover region and NBT decoding, the LZ4 framing, palette unpacking, multipart
   rules, model baking orientation and UVs, the camera convention, sky and day cycle, the
-  lightmap, the tonemapper, and entity box-UV and orientation.
+  environment attribute layering, mip chains (the client's lookup tables and cutout
+  coverage), quick-mode texture sampling, the lightmap, the tonemapper, and entity box-UV
+  and orientation.
 * **Kernel tests** use hand-built buffers to check brick skipping, uniform bricks, entity
   overlay cells, cutout alpha, the sky, and pinned RNG values.
 * **Integration tests** (in `lumenwright-cli`, which owns the fixture worlds) write fixture
@@ -314,8 +331,11 @@ cargo test --workspace --release
   parity in both modes (showcase, block-entity gallery and item gallery) and CPU-vs-CUDA
   parity in HQ mode, determinism, and the CLI. The library tests check that the CLI's PNG
   and the library's pixels are byte-equal in both modes, that a missing jar is refused by
-  name, that a stated sky is drawn as given, and that CPU pixels are bit-identical on 1, 3
-  and 8 threads (showcase and item gallery). Tests that need the
+  name, that a stated sky is drawn as given, that the vanilla sky's colour at noon, dusk and
+  midnight matches the jar's day timeline within 2/255, and that CPU pixels are
+  bit-identical on 1, 3 and 8 threads (showcase and item gallery). A far-plane test measures
+  the high-frequency energy and the change under a sub-pixel camera move with and without
+  mipmaps. Tests that need the
   client jar or a GPU skip with a message when it is missing. `LUMENWRIGHT_MC_JAR` points the tests at a jar.
 
 ## Measured on an M2 Pro (10 CPU cores, 16 GPU cores)
@@ -341,7 +361,10 @@ See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
   are counted in `items_skipped`. A filled map in a frame shows the map item, not its
   picture; armour trims and the elytra are not drawn.
 * Entity layers that need a second texture are missing (sheep wool, glowing eyes).
-* Smooth fluid surfaces, clouds, weather, biome blending and mipmaps are not implemented.
+* Smooth fluid surfaces, clouds, weather and biome blending are not implemented. In quick
+  mode the End's sky box is drawn as its fog colour, the dark disc vanilla draws below the
+  horizon for a camera under sea level is not drawn, and the lightmap's daylight still
+  follows the pre-1.21.11 day curve.
 * There is no next-event estimation for emitters, so night scenes need many samples.
 * The CUDA backend has not been run on NVIDIA hardware yet.
 
