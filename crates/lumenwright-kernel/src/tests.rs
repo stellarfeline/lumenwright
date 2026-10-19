@@ -39,6 +39,7 @@ struct TestScene {
     models: Vec<GpuModel>,
     quads: Vec<GpuQuad>,
     atlas: Vec<u32>,
+    lights: Vec<crate::scene::GpuLight>,
 }
 
 impl TestScene {
@@ -101,6 +102,7 @@ impl TestScene {
             models,
             quads,
             atlas: vec![0xFFFF_FFFF, 0x0000_0000],
+            lights: vec![crate::scene::GpuLight::default()],
         }
     }
 
@@ -111,6 +113,7 @@ impl TestScene {
             models: &self.models,
             quads: &self.quads,
             atlas: &self.atlas,
+            lights: &self.lights,
         }
     }
 }
@@ -273,4 +276,134 @@ fn rng_matches_reference_values() {
     // Pinned so the WGSL port (and any future change) can be checked against it.
     assert_eq!(crate::rng::pcg_hash(0), 129708002);
     assert_eq!(crate::rng::pcg_hash(1), 2831084092);
+}
+
+/// A 16³ room floor of white cubes at y = 0 and a 1×1 emissive quad at y = 4 facing
+/// down, lit by nothing else. `nee` puts the quad in the light list.
+fn lamp_scene(nee: bool) -> TestScene {
+    let mut quads: Vec<GpuQuad> = cube(ALPHA_OPAQUE).to_vec();
+    let mut lamp = quad(
+        v3(7.0, 4.0, 7.0),
+        v3(0.0, 0.0, 1.0),
+        v3(1.0, 0.0, 0.0),
+        ALPHA_OPAQUE,
+    );
+    lamp.ev[3] = 1.0; // visible emission
+    lamp.uvt[3] = 2.0; // light radiance scale
+    lamp.uvt[2] = if nee { 1.0 } else { 0.0 };
+    quads.push(lamp);
+    // White texels only: the second atlas texel is transparent.
+    for q in &mut quads {
+        q.uv[2] = 1.0;
+    }
+    let models = vec![
+        GpuModel::default(),
+        GpuModel {
+            quad_offset: 0,
+            quad_count: 6,
+            flags: 0,
+            _pad: 0,
+        },
+    ];
+    let mut brick = vec![0u32; BRICK_WORDS as usize];
+    for z in 0..16usize {
+        for x in 0..16usize {
+            let local = z * 16 + x;
+            brick[local >> 1] |= 1 << ((local & 1) * 16);
+        }
+    }
+    let mut ov_cells = vec![0u32; OV_CELL_WORDS as usize];
+    let mut ov_quads = Vec::new();
+    for y in 3..=4usize {
+        for z in 6..=8usize {
+            for x in 6..=8usize {
+                let cell = (y * 16 + z) * 16 + x;
+                ov_cells[cell * 2] = ov_quads.len() as u32;
+                ov_cells[cell * 2 + 1] = 1;
+                ov_quads.push(6u32);
+            }
+        }
+    }
+    let mut grid = vec![0u32]; // top: brick 0
+    let off_bricks = grid.len() as u32;
+    grid.append(&mut brick);
+    let off_ov_top = grid.len() as u32;
+    grid.push(0);
+    let off_ov_cells = grid.len() as u32;
+    grid.append(&mut ov_cells);
+    let off_ov_quads = grid.len() as u32;
+    grid.append(&mut ov_quads);
+    grid.push(0);
+    let mut params = Params::default();
+    params.grid_dims = [1, 1, 1, 1];
+    params.off = [0, off_bricks, off_ov_top, off_ov_cells];
+    params.off2 = [off_ov_quads, 2, 1, quads.len() as u32];
+    params.misc_f = [1.0, 1e-3, 0.0, 1.0];
+    params.misc_u = [7, 1, 2, if nee { 1 } else { 0 }];
+    params.frame = [8, 8, 0, 3];
+    params.cam_pos = [2.5, 7.0, 2.5, 0.8];
+    let fwd = v3(1.0, -1.2, 1.0).normalize();
+    let right = v3(1.0, 0.0, -1.0).normalize();
+    let up = right.cross(fwd);
+    params.cam_fwd = [fwd.x, fwd.y, fwd.z, 1.0];
+    params.cam_right = [right.x, right.y, right.z, 0.0];
+    params.cam_up = [up.x, up.y, up.z, 0.0];
+    params.sun_dir = [0.0, -1.0, 0.0, 1.0];
+    TestScene {
+        params,
+        grid,
+        models,
+        quads,
+        atlas: vec![0xFFFF_FFFF, 0x0000_0000],
+        lights: vec![crate::scene::GpuLight {
+            pos: [0.0, 0.0, 0.0, f32::from_bits(6)],
+            cdf: [1.0, 0.0, 0.0, 0.0],
+        }],
+    }
+}
+
+/// Mean radiance over the frame and the mean per-pixel variance of one sample.
+fn frame_stats(s: &TestScene, spp: u32) -> (f64, f64) {
+    let v = s.view();
+    let (mut mean, mut var) = (0.0f64, 0.0f64);
+    for y in 0..8 {
+        for x in 0..8 {
+            let (mut a, mut a2) = (0.0f64, 0.0f64);
+            for i in 0..spp {
+                let c = crate::render_sample(&v, x, y, i);
+                let l = (c.x + c.y + c.z) as f64 / 3.0;
+                a += l;
+                a2 += l * l;
+            }
+            let m = a / spp as f64;
+            mean += m;
+            var += a2 / spp as f64 - m * m;
+        }
+    }
+    (mean / 64.0, var / 64.0)
+}
+
+/// Light sampling with MIS is unbiased: the frame's mean matches BSDF sampling alone
+/// (16384 spp: one standard error of the difference is about 1.3% of the mean, so the
+/// bound is three of them) while one sample's variance falls.
+#[test]
+fn emitter_sampling_converges_to_the_same_light_with_less_noise() {
+    let (with, var_with) = frame_stats(&lamp_scene(true), 16384);
+    let (without, var_without) = frame_stats(&lamp_scene(false), 16384);
+    let rel = (with - without).abs() / without;
+    eprintln!(
+        "lamp room: mean {with:.5} with light sampling, {without:.5} without ({:.2}%); \
+         sample variance {var_with:.5} vs {var_without:.5}",
+        rel * 100.0
+    );
+    assert!(without > 0.005, "the lamp lights the floor: {without}");
+    assert!(
+        rel < 0.04,
+        "light sampling changes the mean by {:.2}%",
+        rel * 100.0
+    );
+    assert!(
+        var_with < var_without * 0.5,
+        "light sampling should at least halve the variance: {var_with} vs {var_without}"
+    );
 }

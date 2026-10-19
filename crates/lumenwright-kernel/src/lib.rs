@@ -40,7 +40,7 @@ pub mod scene;
 pub mod trace;
 
 pub use integrator::render_sample;
-pub use scene::{GpuModel, GpuQuad, Params, SceneView};
+pub use scene::{GpuLight, GpuModel, GpuQuad, Params, SceneView};
 
 #[cfg(test)]
 mod tests;

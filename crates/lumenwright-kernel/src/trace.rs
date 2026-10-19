@@ -299,4 +299,5 @@ fn _assert_layout() {
     const _: () = assert!(core::mem::size_of::<GpuQuad>() == 80);
     const _: () = assert!(core::mem::size_of::<crate::scene::Params>() == 256);
     const _: () = assert!(core::mem::size_of::<crate::scene::GpuModel>() == 16);
+    const _: () = assert!(core::mem::size_of::<crate::scene::GpuLight>() == 32);
 }

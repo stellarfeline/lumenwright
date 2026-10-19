@@ -103,12 +103,16 @@ impl Backend for CudaBackend {
             .clone_htod(bytemuck::cast_slice::<_, u32>(&s.quads))
             .map_err(e)?;
         let d_atlas = stream.clone_htod(&s.atlas).map_err(e)?;
+        let d_lights = stream
+            .clone_htod(bytemuck::cast_slice::<_, u32>(&s.lights))
+            .map_err(e)?;
         let mut d_accum = stream.alloc_zeros::<f32>((w * h * 4) as usize).map_err(e)?;
-        let (grid_len, models_len, quads_len, atlas_len) = (
+        let (grid_len, models_len, quads_len, atlas_len, lights_len) = (
             s.grid.len() as u32,
             s.models.len() as u32,
             s.quads.len() as u32,
             s.atlas.len() as u32,
+            s.lights.len() as u32,
         );
 
         let cfg = LaunchConfig {
@@ -131,6 +135,8 @@ impl Backend for CudaBackend {
             b.arg(&quads_len);
             b.arg(&d_atlas);
             b.arg(&atlas_len);
+            b.arg(&d_lights);
+            b.arg(&lights_len);
             b.arg(&mut d_accum);
             b.arg(&done);
             b.arg(&n);

@@ -1,13 +1,22 @@
 //! Unidirectional path tracer in the spirit of Chunky: diffuse surfaces lit by a
-//! sun (next-event estimation) and an analytic sky, emissive blocks, Fresnel
-//! water and stochastic translucency.
+//! sun and by emissive quads (both with next-event estimation; emitters combined
+//! with BSDF sampling by multiple importance sampling) and an analytic sky,
+//! Fresnel water and stochastic translucency.
+//!
+//! An emissive quad has two radiances. What a camera ray, or a chain of specular
+//! events from the camera, sees on it is its texel colour times
+//! [`GpuQuad::emission`] times `misc_f.x`; what lights a diffuse surface is its
+//! texel colour squared (Chunky's quadratic emitter mapping: a texel half as
+//! bright casts a quarter of the light, so a torch's flame lights the room and
+//! its stick barely does) times [`GpuQuad::light_scale`] times `misc_f.w`.
 
-use crate::math::{V3, clamp, cos, max, onb, sin, sqrt, srgb_to_linear, v3};
+use crate::math::{V3, abs, clamp, cos, max, onb, sin, sqrt, srgb_to_linear, v3};
 use crate::rng::Rng;
 use crate::scene::{
-    ALPHA_TRANSLUCENT, FLAG_ALPHA_MASK, FLAG_WATER, GpuQuad, SceneView, unpack_rgba,
+    ALPHA_CUTOUT, ALPHA_TRANSLUCENT, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY, FLAG_WATER, GpuQuad,
+    SceneView, unpack_rgba,
 };
-use crate::trace::{is_see_through, see_through_hit, trace};
+use crate::trace::{is_see_through, quad_texel, see_through_hit, trace};
 
 const PI: f32 = core::f32::consts::PI;
 /// Upper bound on surface interactions per path (diffuse + specular + pass-through).
@@ -93,12 +102,12 @@ fn shading_normal(q: &GpuQuad, d: V3) -> (V3, bool) {
     }
 }
 
-/// Transmittance from `o` towards the sun direction `d` (0 when blocked).
-fn shadow(scene: &SceneView, mut o: V3, d: V3) -> V3 {
+/// Transmittance from `o` along `d` up to distance `tmax` (0 when blocked).
+fn shadow(scene: &SceneView, mut o: V3, d: V3, mut tmax: f32) -> V3 {
     let eps = scene.params.misc_f[1];
     let mut tr = V3::ONE;
     for _ in 0..8 {
-        match trace(scene, o, d, eps, f32::INFINITY) {
+        match trace(scene, o, d, eps, tmax) {
             None => return tr,
             Some(h) => {
                 let q = &scene.quads[h.quad as usize];
@@ -116,10 +125,96 @@ fn shadow(scene: &SceneView, mut o: V3, d: V3) -> V3 {
                     return V3::ZERO;
                 }
                 o = o + d * (h.t + eps);
+                tmax -= h.t + eps;
             }
         }
     }
     tr
+}
+
+/// The index of the light whose cumulative pick probability first exceeds `u`.
+#[inline(always)]
+fn pick_light(scene: &SceneView, u: f32) -> u32 {
+    let (mut lo, mut hi) = (0u32, scene.params.misc_u[3] - 1);
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if scene.lights[mid as usize].cdf[0] > u {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    lo
+}
+
+/// Power heuristic (β = 2) weight of a strategy with density `a` against one with `b`.
+#[inline(always)]
+fn power_heuristic(a: f32, b: f32) -> f32 {
+    let (a2, b2) = (a * a, b * b);
+    if a2 + b2 > 0.0 { a2 / (a2 + b2) } else { 0.0 }
+}
+
+/// Solid-angle density with which light sampling picks a point on quad `q`
+/// at distance `dist` along `d` (unit) from the shading point.
+#[inline(always)]
+fn light_pdf(q: &GpuQuad, d: V3, dist: f32) -> f32 {
+    let nq = q.normal();
+    let area = nq.length();
+    let cos_l = abs(nq.dot(d)) / area;
+    if cos_l < 1e-6 {
+        0.0
+    } else {
+        q.light_pick() * dist * dist / (area * cos_l)
+    }
+}
+
+/// Next-event estimation towards one emissive quad, weighted by MIS against
+/// cosine-weighted BSDF sampling. Returns the radiance reflected towards the path
+/// by a diffuse surface of unit albedo at `origin` with normal `n`.
+fn sample_emitter(scene: &SceneView, origin: V3, n: V3, rng: &mut Rng) -> V3 {
+    let p = scene.params;
+    let u = rng.next();
+    let s = rng.next();
+    let t = rng.next();
+    let light = scene.lights[pick_light(scene, u) as usize];
+    let q = &scene.quads[light.quad() as usize];
+    let at = light.offset() + q.origin() + q.edge_u() * s + q.edge_v() * t;
+    let to = at - origin;
+    let dist = to.length();
+    if dist < 1e-6 {
+        return V3::ZERO;
+    }
+    let l = to / dist;
+    let cos_s = n.dot(l);
+    if cos_s <= 0.0 {
+        return V3::ZERO;
+    }
+    // A one-sided quad casts light from its front only.
+    if q.flags() & FLAG_FRONT_ONLY != 0 && q.normal().dot(l) >= 0.0 {
+        return V3::ZERO;
+    }
+    let pdf_l = light_pdf(q, l, dist);
+    if pdf_l <= 0.0 {
+        return V3::ZERO;
+    }
+    let texel = quad_texel(scene, q, s, t);
+    let alpha = (texel >> 24) as f32 / 255.0;
+    let mode = q.flags() & FLAG_ALPHA_MASK;
+    let cover = if mode == ALPHA_CUTOUT {
+        if texel >> 24 < 128 {
+            return V3::ZERO;
+        }
+        1.0
+    } else if mode == ALPHA_TRANSLUCENT {
+        alpha
+    } else {
+        1.0
+    };
+    let tr = shadow(scene, origin, l, dist * (1.0 - 1e-4) - p.misc_f[1]);
+    let c = linear_rgb(texel).mul(linear_rgb(q.tint()));
+    let le = c.mul(c) * (q.light_scale() * p.misc_f[3] * cover);
+    let pdf_b = cos_s / PI;
+    le.mul(tr) * (cos_s / PI * power_heuristic(pdf_l, pdf_b) / pdf_l)
 }
 
 /// Radiance estimate for one camera sample at pixel (px, py).
@@ -147,6 +242,12 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
     let mut bounces = 0u32;
     let mut specular = true; // camera rays see the sun disk
     let mut in_water = false;
+    // Since the last diffuse bounce: where it was, its BSDF density for the
+    // direction taken, and whether the path has crossed water since.
+    let mut last_diffuse = V3::ZERO;
+    let mut pdf_bsdf = 0.0f32;
+    let mut via_water = false;
+    let lights = p.misc_u[3];
     let mut tmin = 0.0f32;
     let sigma = V3::from4(p.water_color);
 
@@ -214,6 +315,7 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
                 o = pos - n * eps;
                 in_water = front;
             }
+            via_water = true;
             specular = true;
             tmin = 0.0;
             continue;
@@ -227,9 +329,23 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
             continue;
         }
 
-        let emission = q.emission();
-        if emission > 0.0 {
-            radiance = radiance + beta.mul(albedo) * (emission * p.misc_f[0]);
+        if bounces == 0 {
+            // Seen from the camera, directly or through specular events.
+            let emission = q.emission();
+            if emission > 0.0 {
+                radiance = radiance + beta.mul(albedo) * (emission * p.misc_f[0]);
+            }
+        } else if q.light_scale() > 0.0 && !via_water {
+            // Found by BSDF sampling; light sampling also finds it unless the path
+            // crossed water, whose light reaches diffuse surfaces by light sampling alone.
+            let w = if q.light_pick() > 0.0 && lights > 0 {
+                let dist = (pos - last_diffuse).length();
+                power_heuristic(pdf_bsdf, light_pdf(q, d, dist))
+            } else {
+                1.0
+            };
+            radiance =
+                radiance + beta.mul(albedo.mul(albedo)) * (q.light_scale() * p.misc_f[3] * w);
         }
 
         if bounces >= max_bounces {
@@ -244,9 +360,16 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
             let l = sample_sun(scene, &mut rng);
             let cos_l = n.dot(l);
             if cos_l > 0.0 {
-                let tr = shadow(scene, origin, l);
+                let tr = shadow(scene, origin, l, f32::INFINITY);
                 radiance = radiance + beta.mul(albedo).mul(V3::from4(p.sun_color)).mul(tr) * cos_l;
             }
+        }
+        // Next-event estimation towards an emissive quad.
+        if lights > 0 {
+            radiance = radiance
+                + beta
+                    .mul(albedo)
+                    .mul(sample_emitter(scene, origin, n, &mut rng));
         }
 
         beta = beta.mul(albedo);
@@ -261,6 +384,9 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
         o = origin;
         tmin = 0.0;
         specular = false;
+        last_diffuse = origin;
+        pdf_bsdf = n.dot(d) / PI;
+        via_water = false;
     }
     radiance
 }

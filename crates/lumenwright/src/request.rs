@@ -128,8 +128,12 @@ pub struct HqOptions {
     pub max_bounces: u32,
     /// Random seed; the same seed gives the same image.
     pub seed: u32,
-    /// Emissive block strength.
+    /// Scale of the light emissive blocks cast; 1 is calibrated to the game's block
+    /// light (see `docs/research/emitters.md`).
     pub emitter_intensity: f32,
+    /// Brightness of an emissive surface as the camera sees it: its texel colour
+    /// times its light level / 15 times this.
+    pub emitter_glow: f32,
     /// Linear multiplier applied to the radiance before tonemapping.
     pub exposure: f32,
     /// The tonemapping operator from linear radiance to sRGB.
@@ -142,7 +146,8 @@ impl Default for HqOptions {
             spp: 64,
             max_bounces: 4,
             seed: 0,
-            emitter_intensity: 6.0,
+            emitter_intensity: 1.0,
+            emitter_glow: 1.5,
             exposure: 1.0,
             tonemap: Tonemap::Aces,
         }
@@ -719,7 +724,7 @@ pub fn hq_params(
         sky_zenith: f4(s.zenith, 1.0),
         sky_horizon: f4(s.horizon, 0.25),
         water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
-        misc_f: [o.emitter_intensity, 1e-3, 1.0 / solid_angle, 0.0],
+        misc_f: [o.emitter_glow, 1e-3, 1.0 / solid_angle, o.emitter_intensity],
         grid_dims: [
             hq.dims[0],
             hq.dims[1],
@@ -734,7 +739,7 @@ pub fn hq_params(
             hq.quads.len() as u32,
         ],
         frame: [width, height, 0, o.max_bounces],
-        misc_u: [o.seed, 1, hq.models.len() as u32, 0],
+        misc_u: [o.seed, 1, hq.models.len() as u32, hq.light_count],
         see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
     }
 }
