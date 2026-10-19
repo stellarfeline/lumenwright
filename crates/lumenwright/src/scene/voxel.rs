@@ -513,6 +513,10 @@ fn add_instance(
     let mut lit = Vec::new();
     if level > 0 {
         let glowing: Vec<usize> = (0..buf.len()).filter(|&i| buf[i].emission > 0.0).collect();
+        for &i in &glowing {
+            let q = &mut quads[offset as usize + i];
+            *q = trim_to_opaque(q, &scene.atlas.pixels, scene.atlas.width);
+        }
         let power: Vec<f32> = glowing
             .iter()
             .map(|&i| {
@@ -650,4 +654,87 @@ fn light_scale(level: u8, unit_power: f32) -> f32 {
         return 0.0;
     }
     block_light_power(level) / unit_power
+}
+
+/// A cutout quad cut down to the smallest rectangle of whole texels that holds every
+/// texel it draws (alpha 128 or more). It draws exactly what the quad drew, since a ray
+/// passes through every texel outside; light sampling, uniform over a light's area,
+/// then lands on texels that emit (a torch's planes are 16 × 16 texels around a 2 × 10
+/// stick). Quads of other alpha modes, and quads with no drawn texel, are returned unchanged.
+fn trim_to_opaque(q: &GpuQuad, atlas: &[u32], atlas_w: u32) -> GpuQuad {
+    if q.flags() & FLAG_ALPHA_MASK != ALPHA_CUTOUT {
+        return *q;
+    }
+    let h = (atlas.len() as u32 / atlas_w.max(1)) as i32;
+    // Texels along each edge (atlas UVs are axis-aligned, so one of each pair is 0).
+    let ns = (q.uv[2].abs() + q.uv[3].abs()).round().max(1.0) as u32;
+    let nt = (q.uvt[0].abs() + q.uvt[1].abs()).round().max(1.0) as u32;
+    let (mut i0, mut i1, mut j0, mut j1) = (u32::MAX, 0u32, u32::MAX, 0u32);
+    for j in 0..nt {
+        for i in 0..ns {
+            let s = (i as f32 + 0.5) / ns as f32;
+            let t = (j as f32 + 0.5) / nt as f32;
+            let u = q.uv[0] + s * q.uv[2] + t * q.uvt[0];
+            let v = q.uv[1] + s * q.uv[3] + t * q.uvt[1];
+            let x = (u.floor() as i32).clamp(0, atlas_w as i32 - 1);
+            let y = (v.floor() as i32).clamp(0, h - 1);
+            if atlas[(y * atlas_w as i32 + x) as usize] >> 24 >= 128 {
+                (i0, i1, j0, j1) = (i0.min(i), i1.max(i), j0.min(j), j1.max(j));
+            }
+        }
+    }
+    if i0 == u32::MAX {
+        return *q;
+    }
+    let (s0, s1) = (i0 as f32 / ns as f32, (i1 + 1) as f32 / ns as f32);
+    let (t0, t1) = (j0 as f32 / nt as f32, (j1 + 1) as f32 / nt as f32);
+    if s0 == 0.0 && s1 == 1.0 && t0 == 0.0 && t1 == 1.0 {
+        return *q;
+    }
+    let mut r = *q;
+    let (p0, eu, ev) = (q.origin(), q.edge_u(), q.edge_v());
+    let o = p0 + eu * s0 + ev * t0;
+    let (eu2, ev2) = (eu * (s1 - s0), ev * (t1 - t0));
+    r.p0 = [o.x, o.y, o.z, q.p0[3]];
+    r.eu = [eu2.x, eu2.y, eu2.z, q.eu[3]];
+    r.ev = [ev2.x, ev2.y, ev2.z, q.ev[3]];
+    r.uv = [
+        q.uv[0] + s0 * q.uv[2] + t0 * q.uvt[0],
+        q.uv[1] + s0 * q.uv[3] + t0 * q.uvt[1],
+        q.uv[2] * (s1 - s0),
+        q.uv[3] * (s1 - s0),
+    ];
+    r.uvt[0] = q.uvt[0] * (t1 - t0);
+    r.uvt[1] = q.uvt[1] * (t1 - t0);
+    r
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_cutout_quad_is_trimmed_to_the_texels_it_draws() {
+        // 4×4 atlas, opaque only at column 1, rows 1..=2.
+        let mut atlas = vec![0u32; 16];
+        atlas[4 + 1] = 0xFFFF_FFFF;
+        atlas[8 + 1] = 0xFFFF_FFFF;
+        let q = GpuQuad {
+            p0: [0.0, 1.0, 0.0, f32::from_bits(ALPHA_CUTOUT)],
+            eu: [1.0, 0.0, 0.0, f32::from_bits(0xFFFF_FFFF)],
+            ev: [0.0, -1.0, 0.0, 1.0],
+            uv: [0.0, 0.0, 4.0, 0.0],
+            uvt: [0.0, 4.0, 0.0, 0.0],
+        };
+        let r = trim_to_opaque(&q, &atlas, 4);
+        assert_eq!(r.p0[..3], [0.25, 0.75, 0.0]);
+        assert_eq!(r.eu[..3], [0.25, 0.0, 0.0]);
+        assert_eq!(r.ev[..3], [0.0, -0.5, 0.0]);
+        assert_eq!(r.uv, [1.0, 1.0, 1.0, 0.0]);
+        assert_eq!(r.uvt[..2], [0.0, 2.0]);
+        // Opaque quads are left alone.
+        let mut o = q;
+        o.p0[3] = f32::from_bits(0);
+        assert_eq!(trim_to_opaque(&o, &atlas, 4), o);
+    }
 }
