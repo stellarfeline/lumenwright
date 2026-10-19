@@ -90,7 +90,10 @@ calibration rule below is therefore **authored**, not cited.
 1. **Next-event estimation with MIS** [cited practice: PBRT, Veach].
    * Each diffuse vertex samples one point on one light-casting quad instance. The quad is
      picked with probability proportional to its power.
-   * The point is uniform over the quad's area.
+   * Within the quad, a texel cell is picked by its share of the quad's power, then a
+     uniform point inside it [authored, after the piecewise-constant 2D distributions PBRT
+     samples environment maps with; not checked against a source for area lights]. A torch's flame texels get the samples, not its stick.
+   * A glowing cutout quad is trimmed to the texels it draws.
    * Its weight against cosine BSDF sampling uses the power heuristic, β = 2.
    * The kernel, the WGSL mirror and the CUDA build share one buffer layout and one random
      stream.
@@ -114,8 +117,27 @@ calibration rule below is therefore **authored**, not cited.
    * `--emitter-intensity` (default 1) scales all of it.
    * `P15` is calibrated by the `emitter_calibration` test: a torch on a white floor, compared
      with the quick render level by level.
-5. Falloff stays inverse-square, so the image is a physical light transport of the calibrated
-   powers. The calibration test states how far that falls from the game's straight line.
+5. **Falloff is `1 / max(d², 1)`** [ported from Chunky's emitter sampling,
+   `|cos θ| / max(d², 1)`].
+   * Beyond one block it is inverse-square, so the image is a physical light transport of the
+     calibrated powers.
+   * Within one block it stops growing, so a surface touching a lamp is lit like one a block
+     away. Without the clamp, the floor at a torch's foot became a hot spot whose bounced
+     light speckled every wall.
+   * Light sampling and BSDF hits apply the clamp alike, so MIS stays consistent.
+6. **Measured.** `emitter_calibration` (a torch on a white floor, 256 spp on the CPU) gives a
+   best fit at `P15 = 600`.
+   * The mean difference is 0.76 light levels over game levels 12 to 3; the worst is 2.11.
+   * Half the power gives 2.34 and double gives 3.19; the test fails both.
+   * HQ is brighter than the game within two blocks of the torch.
+   * The far floor reads about two levels high: light bounced off the white walls, which the
+     game does not model.
+   * Walls and ceilings that face a lamp read brighter than the game. Floors lit at grazing
+     angles read darker, because the game ignores a surface's angle to the light.
+
+Open: per-block power normalization divides by luminance, so a dark-coloured emitter (a red
+candle's wax) casts strongly saturated light of the same luminance as a white one. The game's
+block light has one colour whatever the emitter.
 
 Not adopted: a windowed falloff (it breaks MIS consistency), and a spatial light structure (light
 BVH, Chunky's grid, ReSTIR). With many emitters in view, power-proportional picking spends most
