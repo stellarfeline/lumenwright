@@ -15,7 +15,10 @@ The first release: `lumenwright`, `lumenwright-cli` and `lumenwright-kernel`.
   backend, size, options, entity policy, sky). It resolves no jar, uses no network, writes no
   file and prints nothing; a request refused before drawing carries a `RequestError`.
 - Quick mode: a rasterizer with the vanilla client's look, with smooth lighting, ambient
-  occlusion, biome tints, cutout and translucent layers, fog and the sky gradient.
+  occlusion, biome tints, cutout and translucent layers, the client's world fog, and the
+  client's sky (sky disc, sunrise glow, sun, moon phases and stars) from the jar's environment
+  attributes and day timeline. Block textures are read through the client's mip chains with
+  trilinear, 4× anisotropic filtering (`QuickOptions::mipmap_levels`, `--mipmap-levels`).
 - HQ mode: a path tracer in the style of Chunky, with sun and sky light, emissive blocks,
   diffuse bounces, Fresnel water with refraction, stochastic translucency and ACES, filmic or
   gamma tonemapping.

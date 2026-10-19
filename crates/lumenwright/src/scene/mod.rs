@@ -204,6 +204,8 @@ pub struct BuildOptions {
     /// Camera yaw and pitch in degrees (Minecraft's convention), when known:
     /// billboarded display entities turn to it.
     pub view: Option<[f32; 2]>,
+    /// Mip levels built for block textures, 0 to 4 (the client's *Mipmap Levels*).
+    pub mipmap_levels: u32,
 }
 
 /// The world baked against a resource set.
@@ -240,6 +242,10 @@ pub const SUN_TEXTURES: &[&str] = &[
     "minecraft:environment/celestial/sun",
     "minecraft:environment/sun",
 ];
+/// The moon's sprites, one per phase in `MoonPhase` order (1.21.11 and later).
+pub fn moon_texture(phase: &str) -> String {
+    format!("minecraft:environment/celestial/moon/{phase}")
+}
 const EXTRA_TEXTURES: &[&str] = &[
     "minecraft:block/water_still",
     "minecraft:block/water_flow",
@@ -309,12 +315,19 @@ impl Scene {
         }
 
         let mut ab = AtlasBuilder::new();
+        ab.max_mip_levels = opts.mipmap_levels;
         for t in EXTRA_TEXTURES {
             ab.add(t);
         }
         for t in SUN_TEXTURES {
             if store.resolve("textures", t, "png").is_some() {
                 ab.add(t);
+            }
+        }
+        for phase in crate::assets::environment::MOON_PHASES {
+            let t = moon_texture(phase);
+            if store.resolve("textures", &t, "png").is_some() {
+                ab.add(&t);
             }
         }
         for m in &bakery.baked {

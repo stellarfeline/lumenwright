@@ -27,7 +27,7 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
     let uniforms = Uniforms {
         view_proj: f.view_proj.to_cols_array_2d(),
         sky: f.sky,
-        atlas_size: [f.atlas_size[0], f.atlas_size[1], 0, 0],
+        atlas_size: [f.atlas_size[0], f.atlas_size[1], f.mip_levels, f.mip_rows],
     };
     let ubuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("quick uniforms"),
@@ -35,6 +35,18 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
         usage: wgpu::BufferUsages::UNIFORM,
     });
     let atlas = gpu.storage_buffer("atlas", bytemuck::cast_slice(f.atlas_pixels))?;
+    let mips = gpu.storage_buffer("atlas mips", bytemuck::cast_slice(f.atlas_mips))?;
+    let stars = gpu.storage_buffer("stars", bytemuck::cast_slice(f.stars))?;
+    let storage = |binding: u32| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    };
 
     let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("quick bgl"),
@@ -49,16 +61,9 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
                 },
                 count: None,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
+            storage(1),
+            storage(2),
+            storage(3),
         ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -72,6 +77,14 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: atlas.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: mips.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: stars.as_entire_binding(),
             },
         ],
     });

@@ -1,13 +1,16 @@
 //! Tile-binned software rasterizer for quick mode.
 //!
-//! Matches the WGSL quick shader: nearest texel fetch, alpha test at 0.5 for the
-//! opaque pass, alpha blending for the translucent pass and for the see-through pass
-//! (no depth test), vanilla fog.
+//! Matches the WGSL quick shader: the sky first, then texture sampling through
+//! [`AtlasView`] (block textures mipmapped, with `dpdxFine`/`dpdyFine`-style
+//! derivatives taken over each 2×2 pixel quad), alpha test at 0.5 for the opaque
+//! pass, alpha blending for the translucent pass and for the see-through pass (no
+//! depth test), vanilla fog.
 
-use glam::{Vec3, Vec4};
+use glam::{Vec2, Vec3, Vec4};
 use rayon::prelude::*;
 
 use crate::render::QuickFrame;
+use crate::render::texture::AtlasView;
 
 const TILE: u32 = 32;
 
@@ -246,7 +249,14 @@ pub fn rasterize(f: &QuickFrame) -> Vec<u32> {
     }
 
     let atlas = f.atlas_pixels;
-    let [aw, ah] = f.atlas_size;
+    let [aw, _] = f.atlas_size;
+    let view = AtlasView {
+        level0: atlas,
+        mips: f.atlas_mips,
+        size: f.atlas_size,
+        levels: f.mip_levels,
+        mip_rows: f.mip_rows,
+    };
     let sky = &f.sky;
     let fog = Vec3::from_slice(&sky.fog_color[..3]);
     let tile_pixels: Vec<(u32, Vec<u32>)> = (0..tiles_x * tiles_y)
@@ -255,9 +265,18 @@ pub fn rasterize(f: &QuickFrame) -> Vec<u32> {
             let (tx, ty) = (ti % tiles_x, ti / tiles_x);
             let (x0, y0) = (tx * TILE, ty * TILE);
             let (tw, th) = (TILE.min(f.width - x0), TILE.min(f.height - y0));
-            let mut color = vec![0u32; (tw * th) as usize];
+            let mut color = Vec::with_capacity((tw * th) as usize);
+            for py in 0..th {
+                for px in 0..tw {
+                    color.push(pack(sky.background(
+                        sky.pixel_dir((x0 + px) as f32, (y0 + py) as f32),
+                        atlas,
+                        aw,
+                        f.stars,
+                    )));
+                }
+            }
             let mut depth = vec![f32::INFINITY; (tw * th) as usize];
-            let mut covered = vec![false; (tw * th) as usize];
             for &i in &bins[ti as usize] {
                 let t = &tris[i as usize];
                 let bx0 = (t.bbox[0] as u32).max(x0);
@@ -286,10 +305,29 @@ pub fn rasterize(f: &QuickFrame) -> Vec<u32> {
                         let pw = 1.0 / iw;
                         let attr =
                             |k: usize| (b0 * t.a[0][k] + b1 * t.a[1][k] + b2 * t.a[2][k]) * pw;
-                        let (u, v) = (attr(0), attr(1));
-                        let tx = ((u * aw as f32).floor() as i32).clamp(0, aw as i32 - 1) as u32;
-                        let tyy = ((v * ah as f32).floor() as i32).clamp(0, ah as i32 - 1) as u32;
-                        let tex = unpack(atlas[(tyy * aw + tx) as usize]);
+                        let uv = Vec2::new(attr(0), attr(1));
+                        // The plane of the UVs at another pixel centre (a GPU helper lane).
+                        let uv_at = |x: f32, y: f32| {
+                            let (c0, c1, c2) = (
+                                edge(t.v[1], t.v[2], x, y) * t.area_inv,
+                                edge(t.v[2], t.v[0], x, y) * t.area_inv,
+                                edge(t.v[0], t.v[1], x, y) * t.area_inv,
+                            );
+                            let w = 1.0 / (c0 * t.v[0].w + c1 * t.v[1].w + c2 * t.v[2].w);
+                            Vec2::new(
+                                (c0 * t.a[0][0] + c1 * t.a[1][0] + c2 * t.a[2][0]) * w,
+                                (c0 * t.a[0][1] + c1 * t.a[1][1] + c2 * t.a[2][1]) * w,
+                            )
+                        };
+                        let tex = if view.is_mipmapped(uv) {
+                            // Fine derivatives: the difference across this pixel's 2×2 quad.
+                            let (qx, qy) = ((px & !1) as f32 + 0.5, (py & !1) as f32 + 0.5);
+                            let du = uv_at(qx + 1.0, fy) - uv_at(qx, fy);
+                            let dv = uv_at(fx, qy + 1.0) - uv_at(fx, qy);
+                            view.sample_block(uv, du, dv)
+                        } else {
+                            view.nearest(uv)
+                        };
                         let vc = Vec4::new(attr(2), attr(3), attr(4), attr(5));
                         let pos = Vec3::new(attr(6), attr(7), attr(8));
                         let mut rgb = tex.truncate() * vc.truncate();
@@ -299,33 +337,15 @@ pub fn rasterize(f: &QuickFrame) -> Vec<u32> {
                             if a <= 0.0 {
                                 continue;
                             }
-                            let dst = if covered[li] {
-                                unpack(color[li]).truncate()
-                            } else {
-                                sky.background(sky.pixel_dir(px as f32, py as f32), atlas, aw)
-                            };
+                            let dst = unpack(color[li]).truncate();
                             color[li] = pack(dst.lerp(rgb, a));
-                            covered[li] = true;
                         } else {
                             if tex.w < 0.5 {
                                 continue;
                             }
                             depth[li] = z;
                             color[li] = pack(rgb);
-                            covered[li] = true;
                         }
-                    }
-                }
-            }
-            for py in 0..th {
-                for px in 0..tw {
-                    let li = (py * tw + px) as usize;
-                    if !covered[li] {
-                        color[li] = pack(sky.background(
-                            sky.pixel_dir((x0 + px) as f32, (y0 + py) as f32),
-                            atlas,
-                            aw,
-                        ));
                     }
                 }
             }

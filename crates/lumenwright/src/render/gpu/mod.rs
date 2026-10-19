@@ -30,7 +30,9 @@ fn backends_for(kind: BackendKind) -> Result<wgpu::Backends> {
 
 fn request_adapter(kind: BackendKind) -> Result<wgpu::Adapter> {
     let backends = backends_for(kind)?;
-    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+    // wgpu's environment flags apply (`WGPU_VALIDATION`, `WGPU_DEBUG`,
+    // `WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER`, ...); the backends are ours.
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle_from_env();
     desc.backends = backends;
     let instance = wgpu::Instance::new(desc);
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

@@ -11,6 +11,7 @@ pub mod cuda;
 pub mod gpu;
 pub mod post;
 pub mod sky;
+pub mod texture;
 
 use anyhow::Result;
 #[cfg(any(not(feature = "cuda"), not(feature = "gpu")))]
@@ -57,6 +58,14 @@ pub struct QuickFrame<'a> {
     pub atlas_pixels: &'a [u32],
     /// Atlas width and height in texels.
     pub atlas_size: [u32; 2],
+    /// The atlas's mip levels above 0, concatenated (see [`crate::assets::atlas::Atlas::mips`]).
+    pub atlas_mips: &'a [u32],
+    /// Number of mip levels above 0.
+    pub mip_levels: u32,
+    /// Atlas rows `0..mip_rows` hold the mipmapped (block) textures.
+    pub mip_rows: u32,
+    /// The binned star table ([`sky::star_table`]).
+    pub stars: &'a [u32],
     /// Output width in pixels (after supersampling).
     pub width: u32,
     /// Output height in pixels (after supersampling).

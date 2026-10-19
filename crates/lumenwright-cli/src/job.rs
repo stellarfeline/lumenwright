@@ -94,6 +94,9 @@ pub struct RenderArgs {
     /// Quick: disable smooth lighting / ambient occlusion.
     #[arg(long)]
     pub flat_lighting: bool,
+    /// Quick: mip levels for block textures, 0 (off) to 4 (vanilla's default).
+    #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u32).range(0..=4))]
+    pub mipmap_levels: u32,
     /// Explicit Minecraft client jar (textures/models).
     #[arg(long)]
     pub minecraft_jar: Option<PathBuf>,
@@ -225,6 +228,7 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             draw_distance: (r * 16) as f32,
             brightness: a.brightness,
             smooth: !a.flat_lighting,
+            mipmap_levels: a.mipmap_levels,
         },
         hq: HqOptions {
             spp: a.spp,
