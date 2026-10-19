@@ -597,6 +597,6 @@ pub fn hq_params(
         ],
         frame: [width, height, 0, o.max_bounces],
         misc_u: [o.seed, 1, hq.models.len() as u32, 0],
-        _reserved: [0; 4],
+        see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
     }
 }

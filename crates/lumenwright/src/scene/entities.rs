@@ -177,6 +177,9 @@ fn fallback_hitbox(id: &str) -> [f32; 2] {
     }
 }
 
+/// Text displays: laid out and placed before the atlas is packed, drawn after.
+pub mod text_display;
+
 fn texture_exists(store: &ResourceStore, loc: &str) -> bool {
     store.resolve("textures", loc, "png").is_some()
 }

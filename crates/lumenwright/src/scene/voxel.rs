@@ -4,7 +4,9 @@
 use std::collections::HashMap;
 
 use glam::Vec3;
-use lumenwright_kernel::scene::{BRICK_WORDS, EMPTY, GpuModel, GpuQuad, OV_CELL_WORDS, UNIFORM};
+use lumenwright_kernel::scene::{
+    BRICK_WORDS, EMPTY, FLAG_FRONT_ONLY, GpuModel, GpuQuad, OV_CELL_WORDS, UNIFORM,
+};
 use rayon::prelude::*;
 
 use super::{Fluid, Scene};
@@ -30,6 +32,8 @@ pub struct HqScene {
     pub dims: [u32; 3],
     /// Word offsets: top, bricks, ov_top, ov_cells, ov_quads.
     pub offsets: [u32; 5],
+    /// First index and count of the see-through quads in `quads`.
+    pub see_through: [u32; 2],
     /// What the grid holds, for logging.
     pub stats: HqStats,
 }
@@ -313,8 +317,39 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
         dims[2] as i32 * 16,
     ];
     let mut cells: HashMap<usize, HashMap<u32, Vec<u32>>> = HashMap::new();
-    for (i, q) in scene.entity_quads.iter().enumerate() {
-        quads.push(q.to_gpu());
+    // Entity quads, then text-display quads (seen from the front only), the
+    // see-through ones last so they are one range.
+    let front_only = |q: &super::Quad| {
+        let mut g = q.to_gpu();
+        g.p0[3] = f32::from_bits(g.p0[3].to_bits() | FLAG_FRONT_ONLY);
+        g
+    };
+    let overlay: Vec<(GpuQuad, &super::Quad)> = scene
+        .entity_quads
+        .iter()
+        .map(|q| (q.to_gpu(), q))
+        .chain(
+            scene
+                .text_quads
+                .iter()
+                .filter(|t| !t.see_through)
+                .map(|t| (front_only(&t.quad), &t.quad)),
+        )
+        .chain(
+            scene
+                .text_quads
+                .iter()
+                .filter(|t| t.see_through)
+                .map(|t| (front_only(&t.quad), &t.quad)),
+        )
+        .collect();
+    let see_through_count = scene.text_quads.iter().filter(|t| t.see_through).count() as u32;
+    let see_through = [
+        entity_base + overlay.len() as u32 - see_through_count,
+        see_through_count,
+    ];
+    for (i, (g, q)) in overlay.iter().enumerate() {
+        quads.push(*g);
         let c = q.corners();
         let lo = c.iter().fold(Vec3::splat(f32::MAX), |m, p| m.min(*p)) - Vec3::splat(1e-3);
         let hi = c.iter().fold(Vec3::splat(f32::MIN), |m, p| m.max(*p)) + Vec3::splat(1e-3);
@@ -359,7 +394,7 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
         }
     }
     stats.overlay_bricks = ov_cells.len() / OV_CELL_WORDS as usize;
-    stats.entity_quads = scene.entity_quads.len();
+    stats.entity_quads = overlay.len();
 
     let mut grid =
         Vec::with_capacity(top.len() * 2 + bricks.len() + ov_cells.len() + ov_quads.len() + 1);
@@ -386,6 +421,7 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
         atlas_size: [scene.atlas.width, scene.atlas.height],
         dims,
         offsets: [off_top, off_bricks, off_ov_top, off_ov_cells, off_ov_quads],
+        see_through,
         stats,
     };
     log::info!(

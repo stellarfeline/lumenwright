@@ -379,12 +379,6 @@ pub fn dye_diffuse_color(name: &str) -> Option<u32> {
     })
 }
 
-/// `ARGB.scaleRGB(color, f)`.
-fn scale_rgb(c: u32, f: f32) -> u32 {
-    let ch = |s: u32| ((((c >> s) & 0xFF) as f32 * f) as u32) << s;
-    ch(16) | ch(8) | ch(0)
-}
-
 #[allow(clippy::too_many_arguments)]
 fn plan_sign(
     ctx: &PlanContext,
@@ -475,7 +469,7 @@ fn plan_sign(
         let dark = if color == "black" && glowing {
             0xF0EBCC
         } else {
-            scale_rgb(text_color, 0.4)
+            text::scale_rgb(text_color, 0.4)
         };
         let (main, outline) = if glowing {
             (text_color, (color == "black" || near).then_some(dark))
@@ -550,37 +544,27 @@ fn glyph_draws(
     forced: bool,
     draws: &mut Vec<Draw>,
 ) {
-    for p in placed {
-        let Some(g) = font.glyph(p.c) else {
-            continue;
-        };
-        let rgb = if forced {
-            color
-        } else {
-            p.color.unwrap_or(color)
-        };
-        let w = g.cell[2] * g.scale;
-        let h = g.cell[3] * g.scale;
-        let top = y + 7.0 - g.ascent;
-        let copies: &[f32] = if p.bold { &[0.0, 1.0] } else { &[0.0] };
-        for &bx in copies {
-            let left = x + p.x + bx;
-            draws.push(Draw::Glyph {
-                texture: g.texture.clone(),
-                tex_size: g.texture_size,
-                uv: [
-                    g.cell[0],
-                    g.cell[1],
-                    g.cell[0] + g.cell[2],
-                    g.cell[1] + g.cell[3],
-                ],
-                p0: m.transform_point3(Vec3::new(left, top, z)),
-                eu: m.transform_vector3(Vec3::new(w, 0.0, 0.0)),
-                ev: m.transform_vector3(Vec3::new(0.0, h, 0.0)),
-                rgb,
-                full_bright,
-            });
-        }
+    let mut quads = Vec::new();
+    text::glyph_quads(
+        font,
+        placed,
+        Vec3::new(x, y, z),
+        color,
+        forced,
+        1.0,
+        &mut quads,
+    );
+    for g in quads {
+        draws.push(Draw::Glyph {
+            texture: g.texture,
+            tex_size: g.tex_size,
+            uv: g.uv,
+            p0: m.transform_point3(g.p0),
+            eu: m.transform_vector3(g.eu),
+            ev: m.transform_vector3(g.ev),
+            rgb: g.rgb,
+            full_bright,
+        });
     }
 }
 
@@ -1153,7 +1137,7 @@ mod tests {
     #[test]
     fn dye_colours_match_dyecolor() {
         assert_eq!(dye_text_color("black"), 0);
-        assert_eq!(scale_rgb(0xFFFFFF, 0.4), 0x666666);
+        assert_eq!(text::scale_rgb(0xFFFFFF, 0.4), 0x666666);
         assert_eq!(dye_diffuse_color("red"), Some(0xB02E26));
         assert_eq!(dye_diffuse_color("nope"), None);
     }

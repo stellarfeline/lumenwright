@@ -230,6 +230,9 @@ pub struct Scene {
     pub entity_stats: entities::EntityStats,
     /// Per-kind counts of the block entities drawn or skipped.
     pub block_entity_stats: block_entities::BlockEntityStats,
+    /// Text display geometry in scene coordinates (drawn and lit apart from
+    /// `entity_quads`: one-sided, and see-through ones over everything).
+    pub text_quads: Vec<entities::text_display::TextQuad>,
 }
 
 /// Textures used by generated geometry and the sky, beyond those of block models.
@@ -257,6 +260,12 @@ impl Scene {
         opts: &BuildOptions,
     ) -> Scene {
         let t = std::time::Instant::now();
+        // Text displays have their own pass (`entities::text_display`).
+        let (text_displays, entity_list): (Vec<Entity>, Vec<Entity>) = entity_list
+            .iter()
+            .cloned()
+            .partition(|e| e.short_id() == "text_display");
+        let entity_list = entity_list.as_slice();
         // Block displays render block models, so their states must be baked too.
         for s in entities::display_states(entity_list) {
             registry.intern(&s);
@@ -335,6 +344,14 @@ impl Scene {
             },
         );
         be_plan.register_textures(&mut ab);
+        let text_plan = entities::text_display::plan(
+            store,
+            if opts.entities { &text_displays } else { &[] },
+            origin,
+            volume.size_blocks(),
+            opts.view,
+        );
+        text_plan.register_textures(&mut ab);
         let atlas = ab.build(store);
 
         // Occlusion needs texture transparency, so it is computed after packing.
@@ -365,6 +382,7 @@ impl Scene {
             entity_quad_light: Vec::new(),
             entity_stats: Default::default(),
             block_entity_stats: be_plan.stats.clone(),
+            text_quads: Vec::new(),
         };
         if opts.entities {
             entities::build_entity_quads(
@@ -379,6 +397,9 @@ impl Scene {
         if !be_plan.is_empty() {
             let models = block_entities::BlockEntityModels::load_builtin();
             block_entities::build_quads(&mut scene, &models, &be_plan);
+        }
+        if !text_plan.is_empty() {
+            entities::text_display::build_quads(&mut scene, &text_plan);
         }
         log::info!(
             "scene: {} block states, {} baked models, {} entity quads ({:.2?})",

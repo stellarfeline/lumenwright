@@ -33,6 +33,8 @@ pub const FLAG_ALPHA_MASK: u32 = 3;
 pub const FLAG_WATER: u32 = 1 << 2;
 /// Vanilla `shade` flag (directional face shading in quick mode).
 pub const FLAG_SHADE: u32 = 1 << 3;
+/// Seen from the front only (text displays): a ray meeting the back passes through.
+pub const FLAG_FRONT_ONLY: u32 = 1 << 4;
 
 /// A textured parallelogram `p0 + s*eu + t*ev`, `s,t ∈ [0,1]`, 80 bytes.
 ///
@@ -141,8 +143,9 @@ pub struct Params {
     pub frame: [u32; 4],
     /// x = seed, y = samples per dispatch, z = model count, w = unused.
     pub misc_u: [u32; 4],
-    /// Reserved; pads the struct to 16 vec4 slots.
-    pub _reserved: [u32; 4],
+    /// x = index of the first see-through quad (text displays drawn over everything),
+    /// y = their count; they are also in the overlay cells. z, w = unused.
+    pub see_through: [u32; 4],
 }
 
 /// Borrowed view of all scene buffers.

@@ -218,6 +218,15 @@ Mob geometry lives in Java code in vanilla, not in assets, so it ships as data i
 needs no Rust changes. Block displays, paintings and mannequin or player skins are built in
 code. Anything else is drawn as a box the size of its hitbox.
 
+Text displays are drawn in the jar's default font (`assets/minecraft/font/default.json` and
+the bitmap providers it names), placed as the client places them: the `text` component with
+its colours, bold, italic and `translate` keys, split into lines no wider than `line_width`,
+`alignment`, the `background` colour or `default_background`, `shadow`, `billboard` and
+`transformation`. A `see_through` display is drawn over whatever stands in front of it. A text
+display is seen from the front only, as in the game. `text_opacity` and `brightness` are not
+read, and a character no bitmap provider covers is left out: the jar's unicode fallback
+(`font/include/unifont.json`) lists no providers.
+
 ![entities](docs/renders/entity-lineup.png)
 
 Block entities that vanilla draws in Java code use the same format, in

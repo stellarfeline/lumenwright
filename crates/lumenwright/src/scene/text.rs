@@ -1,7 +1,8 @@
-//! Text components as stored in a save (sign messages), flattened to styled runs and
-//! laid out with the vanilla bitmap font.
+//! Text components as stored in a save (sign messages, text displays), flattened to
+//! styled runs, laid out with the vanilla bitmap font and turned into glyph quads.
 
 use fastnbt::Value;
+use glam::Vec3;
 
 use crate::assets::font::Font;
 use crate::assets::lang::Lang;
@@ -16,12 +17,14 @@ pub struct Span {
     pub color: Option<u32>,
     /// Drawn in the bold face (each glyph struck twice, one pixel apart).
     pub bold: bool,
+    pub italic: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 struct Style {
     color: Option<u32>,
     bold: bool,
+    italic: bool,
 }
 
 /// `ChatFormatting` colours by name.
@@ -82,6 +85,7 @@ fn push(out: &mut Vec<Span>, text: &str, st: Style) {
     if let Some(last) = out.last_mut()
         && last.color == st.color
         && last.bold == st.bold
+        && last.italic == st.italic
     {
         last.text.push_str(text);
         return;
@@ -90,6 +94,7 @@ fn push(out: &mut Vec<Span>, text: &str, st: Style) {
         text: text.to_string(),
         color: st.color,
         bold: st.bold,
+        italic: st.italic,
     });
 }
 
@@ -147,6 +152,10 @@ fn nbt_style(c: &nbt::Compound, parent: Style) -> Style {
         bold: match c.get("bold") {
             Some(v) => nbt::as_i64(v).unwrap_or(0) != 0,
             None => parent.bold,
+        },
+        italic: match c.get("italic") {
+            Some(v) => nbt::as_i64(v).unwrap_or(0) != 0,
+            None => parent.italic,
         },
     }
 }
@@ -212,6 +221,10 @@ fn json_style(o: &serde_json::Map<String, serde_json::Value>, parent: Style) -> 
             .get("bold")
             .and_then(|b| b.as_bool())
             .unwrap_or(parent.bold),
+        italic: o
+            .get("italic")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(parent.italic),
     }
 }
 
@@ -226,21 +239,18 @@ pub struct Placed {
     pub color: Option<u32>,
     /// Drawn in the bold face.
     pub bold: bool,
+    pub italic: bool,
 }
 
 /// Lays out one line and returns its characters and width. Like the sign renderer
 /// (`Font.split(line, maxWidth)`, first line kept), text past `max_width` is cut at
 /// the last space that fits, or mid-word when no space does.
 pub fn layout_line(font: &Font, spans: &[Span], max_width: f32) -> (Vec<Placed>, f32) {
-    let chars: Vec<(char, Option<u32>, bool)> = spans
-        .iter()
-        .flat_map(|s| s.text.chars().map(move |c| (c, s.color, s.bold)))
-        .take_while(|(c, _, _)| *c != '\n')
-        .collect();
+    let chars: Vec<StyledChar> = styled_chars(spans).take_while(|s| s.c != '\n').collect();
     let mut width = 0.0;
     let mut end = chars.len();
     let mut last_space: Option<usize> = None;
-    for (i, &(c, _, bold)) in chars.iter().enumerate() {
+    for (i, &StyledChar { c, bold, .. }) in chars.iter().enumerate() {
         let a = font.advance(c, bold);
         if width + a > max_width {
             end = match last_space {
@@ -254,13 +264,159 @@ pub fn layout_line(font: &Font, spans: &[Span], max_width: f32) -> (Vec<Placed>,
         }
         width += a;
     }
+    place(font, &chars[..end])
+}
+
+#[derive(Clone, Copy)]
+struct StyledChar {
+    c: char,
+    color: Option<u32>,
+    bold: bool,
+    italic: bool,
+}
+
+fn styled_chars(spans: &[Span]) -> impl Iterator<Item = StyledChar> + '_ {
+    spans.iter().flat_map(|s| {
+        s.text.chars().map(move |c| StyledChar {
+            c,
+            color: s.color,
+            bold: s.bold,
+            italic: s.italic,
+        })
+    })
+}
+
+fn place(font: &Font, chars: &[StyledChar]) -> (Vec<Placed>, f32) {
     let mut x = 0.0;
-    let mut placed = Vec::with_capacity(end);
-    for &(c, color, bold) in &chars[..end] {
-        placed.push(Placed { c, x, color, bold });
-        x += font.advance(c, bold);
+    let mut placed = Vec::with_capacity(chars.len());
+    for s in chars {
+        placed.push(Placed {
+            c: s.c,
+            x,
+            color: s.color,
+            bold: s.bold,
+            italic: s.italic,
+        });
+        x += font.advance(s.c, s.bold);
     }
     (placed, x)
+}
+
+/// Lays out text as `Font.split(text, max_width)` does (`StringSplitter.splitLines`):
+/// a line ends at `\n`, or where the next character would pass `max_width`, at the
+/// last space when the line has one and mid-word when it does not; the newline or
+/// space a line ends at is dropped. Every line keeps at least one character.
+/// Returns each line's characters and width.
+pub fn layout_lines(font: &Font, spans: &[Span], max_width: f32) -> Vec<(Vec<Placed>, f32)> {
+    let chars: Vec<StyledChar> = styled_chars(spans).collect();
+    let mut lines = Vec::new();
+    let mut start = 0;
+    while start < chars.len() {
+        // LineBreakFinder.accept: a space is a break candidate before it is measured.
+        let mut width = 0.0;
+        let mut last_space: Option<usize> = None;
+        let mut had_width = false;
+        // (end of the line, characters skipped after it)
+        let mut cut = (chars.len(), 0);
+        for (i, s) in chars.iter().enumerate().skip(start) {
+            if s.c == '\n' {
+                cut = (i, 1);
+                break;
+            }
+            if s.c == ' ' {
+                last_space = Some(i);
+            }
+            let w = font.advance(s.c, s.bold);
+            width += w;
+            if had_width && width > max_width {
+                cut = match last_space {
+                    Some(sp) => (sp, 1),
+                    None => (i, 0),
+                };
+                break;
+            }
+            had_width |= w != 0.0;
+        }
+        lines.push(place(font, &chars[start..cut.0]));
+        start = cut.0 + cut.1;
+    }
+    lines
+}
+
+/// One glyph quad in text space (x right, y down, in font pixels).
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphQuad {
+    pub texture: String,
+    pub tex_size: [f32; 2],
+    /// u0, v0, u1, v1 in texture pixels.
+    pub uv: [f32; 4],
+    pub p0: Vec3,
+    pub eu: Vec3,
+    pub ev: Vec3,
+    pub rgb: u32,
+}
+
+/// Scales each channel of an RGB colour (`ARGB.scaleRGB`).
+pub fn scale_rgb(c: u32, f: f32) -> u32 {
+    let ch = |s: u32| ((((c >> s) & 0xFF) as f32 * f) as u32) << s;
+    ch(16) | ch(8) | ch(0)
+}
+
+/// The glyph quads of one laid-out line whose top-left is `origin` (text space), as
+/// `BakedGlyph.render` places them: bold draws the glyph again one pixel right, italic
+/// shears the top right and the bottom left by a quarter pixel per pixel of height.
+/// `color` is the colour of characters with none of their own; `forced` uses it for
+/// every character (sign outlines); `shade` scales the result (0.25 for a shadow).
+pub fn glyph_quads(
+    font: &Font,
+    placed: &[Placed],
+    origin: Vec3,
+    color: u32,
+    forced: bool,
+    shade: f32,
+    out: &mut Vec<GlyphQuad>,
+) {
+    for p in placed {
+        let Some(g) = font.glyph(p.c) else {
+            continue;
+        };
+        let rgb = if forced {
+            color
+        } else {
+            p.color.unwrap_or(color)
+        };
+        let rgb = if shade == 1.0 {
+            rgb
+        } else {
+            scale_rgb(rgb, shade)
+        };
+        let w = g.cell[2] * g.scale;
+        let h = g.cell[3] * g.scale;
+        let up = 7.0 - g.ascent;
+        let (top_shear, bottom_shear) = if p.italic {
+            (1.0 - 0.25 * up, 1.0 - 0.25 * (up + h))
+        } else {
+            (0.0, 0.0)
+        };
+        let copies: &[f32] = if p.bold { &[0.0, 1.0] } else { &[0.0] };
+        for &bx in copies {
+            let left = origin.x + p.x + bx;
+            out.push(GlyphQuad {
+                texture: g.texture.clone(),
+                tex_size: g.texture_size,
+                uv: [
+                    g.cell[0],
+                    g.cell[1],
+                    g.cell[0] + g.cell[2],
+                    g.cell[1] + g.cell[3],
+                ],
+                p0: Vec3::new(left + top_shear, origin.y + up, origin.z),
+                eu: Vec3::new(w, 0.0, 0.0),
+                ev: Vec3::new(bottom_shear - top_shear, h, 0.0),
+                rgb,
+            });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -311,12 +467,14 @@ mod tests {
                 Span {
                     text: "AB".into(),
                     color: Some(0xFF5555),
-                    bold: false
+                    bold: false,
+                    italic: false
                 },
                 Span {
                     text: "C".into(),
                     color: Some(0x123456),
-                    bold: false
+                    bold: false,
+                    italic: false
                 }
             ]
         );
@@ -342,6 +500,7 @@ mod tests {
             text: "aaa bbb".into(),
             color: None,
             bold: false,
+            italic: false,
         }];
         let (p, w) = layout_line(&font, &spans, 30.0);
         assert_eq!(p.len(), 3);
@@ -352,7 +511,46 @@ mod tests {
             text: "abcdefgh".into(),
             color: None,
             bold: false,
+            italic: false,
         }];
         assert_eq!(layout_line(&font, &one, 30.0).0.len(), 5);
+    }
+
+    #[test]
+    fn lines_split_like_string_splitter() {
+        let font = Font::default(); // every character advances 6
+        let span = |t: &str| {
+            vec![Span {
+                text: t.into(),
+                color: None,
+                bold: false,
+                italic: false,
+            }]
+        };
+        let text = |lines: Vec<(Vec<Placed>, f32)>| -> Vec<String> {
+            lines
+                .into_iter()
+                .map(|(p, _)| p.iter().map(|c| c.c).collect())
+                .collect()
+        };
+        // A newline ends a line; the space a line breaks at is dropped.
+        assert_eq!(
+            text(layout_lines(&font, &span("aaa bbb\ncc"), 30.0)),
+            ["aaa", "bbb", "cc"]
+        );
+        // The space that passes the width is itself the break.
+        assert_eq!(
+            text(layout_lines(&font, &span("aaaaa bb"), 30.0)),
+            ["aaaaa", "bb"]
+        );
+        // No space: mid-word; a line keeps one character however narrow.
+        assert_eq!(
+            text(layout_lines(&font, &span("abcdefg"), 30.0)),
+            ["abcde", "fg"]
+        );
+        assert_eq!(text(layout_lines(&font, &span("ab"), 1.0)), ["a", "b"]);
+        let (_, w) = &layout_lines(&font, &span("aaa bbb"), 100.0)[0];
+        assert_eq!(*w, 42.0);
+        assert!(layout_lines(&font, &span(""), 100.0).is_empty());
     }
 }
