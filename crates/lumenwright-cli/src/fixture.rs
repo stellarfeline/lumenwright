@@ -17,7 +17,11 @@ use lumenwright::world::region::write_region;
 pub const DATA_VERSION: i32 = 4671;
 pub const VERSION_NAME: &str = "1.21.11";
 
+mod chinese;
 mod text_displays;
+pub use chinese::{
+    DISPLAY as CHINESE_DISPLAY, SIGN as CHINESE_SIGN, TEXT as CHINESE_TEXT, chinese_text_gallery,
+};
 pub use text_displays::{TEXT_DISPLAYS, TextDisplayCase, text_display_gallery};
 
 /// Region coordinates -> chunks (local x, local z, NBT bytes).

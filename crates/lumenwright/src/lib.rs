@@ -57,6 +57,7 @@
 //!     world: WorldSource::Dir { path: Path::new("saves/MyWorld"), dimension: Dimension::Overworld },
 //!     chunks: ChunkRect::around(camera.pos, 8),
 //!     jar: Path::new("minecraft-1.21.11-client.jar"),
+//!     unifont: None,
 //!     resource_packs: &[],
 //!     camera,
 //!     mode: Mode::Quick,
@@ -77,19 +78,20 @@
 //!
 //! The [`Request`] carries every input: the world (a directory or an opened
 //! [`world::World`]) and the inclusive [`ChunkRect`] to load, the client jar and
-//! resource packs as paths, the camera, the mode, the backend, the size, the mode
-//! options, the entity policy and the sky, either derived from a time of day
+//! the Unifont directory and resource packs as paths, the camera, the mode, the
+//! backend, the size, the mode options, the entity policy and the sky, either derived from a time of day
 //! ([`Sky::Vanilla`]) or stated by the caller ([`Sky::Stated`]). The [`Rendered`]
 //! frame carries the pixels, the HQ radiance, the backend that drew it, the
 //! per-stage timings and per-kind entity and block-entity counts.
 //!
 //! `render` resolves no jar, performs no network access, writes no file and
 //! prints nothing; it emits [`log`] records only. Mojang's assets are not
-//! redistributable, so the caller supplies the jar. A request it refuses before
-//! drawing carries a [`RequestError`] (`err.downcast_ref::<RequestError>()`).
+//! redistributable, so the caller supplies the jar, and the Unifont directory when text
+//! outside the bitmap fonts (CJK among it) is to be drawn ([`assets::unifont`]). A
+//! request it refuses before drawing carries a [`RequestError`] (`err.downcast_ref::<RequestError>()`).
 //!
 //! The `lumenwright` command (crate `lumenwright-cli`) is a caller of this API:
-//! it adds the jar lookup and download, the flags and the PNG writer.
+//! it adds the jar and Unifont lookup and download, the flags and the PNG writer.
 //! [`glam`] is re-exported for the camera and sky vectors.
 //!
 //! # Pipeline

@@ -21,6 +21,7 @@ use crate::assets::atlas::{AtlasBuilder, load_texture};
 use crate::assets::font::Font;
 use crate::assets::lang::{DEFAULT_LANGUAGE, Lang};
 use crate::assets::source::{norm_loc, split_loc};
+use crate::assets::unifont;
 use crate::world::nbt::{self, Compound};
 use crate::world::{BlockState, BlockVolume, Registry};
 
@@ -245,9 +246,16 @@ pub fn plan(ctx: &PlanContext, list: &[BlockEntity]) -> BlockEntityPlan {
         match kind {
             Some(kind) => {
                 for d in &draws {
-                    if let Draw::Model { texture, .. } | Draw::Glyph { texture, .. } = d
-                        && !texture.starts_with("lumenwright:")
+                    let (Draw::Model { texture, .. } | Draw::Glyph { texture, .. }) = d;
+                    if let Some((font, _)) = &font
+                        && texture.starts_with(unifont::TEXTURE_PREFIX)
                     {
+                        if !out.generated.iter().any(|g| &g.0 == texture)
+                            && let Some((w, h, px)) = font.generated_texture(texture)
+                        {
+                            out.generated.push((texture.clone(), w, h, px));
+                        }
+                    } else if !texture.starts_with("lumenwright:") {
                         out.textures.push(texture.clone());
                     }
                 }
@@ -551,7 +559,7 @@ fn glyph_draws(
         Vec3::new(x, y, z),
         color,
         forced,
-        1.0,
+        false,
         &mut quads,
     );
     for g in quads {

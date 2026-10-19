@@ -374,16 +374,18 @@ pub fn scale_rgb(c: u32, f: f32) -> u32 {
 /// `BakedGlyph.render` places them: bold draws the glyph again one pixel right, italic
 /// shears the top right and the bottom left by a quarter pixel per pixel of height.
 /// `color` is the colour of characters with none of their own; `forced` uses it for
-/// every character (sign outlines); `shade` scales the result (0.25 for a shadow).
+/// every character (sign outlines); `shadow` draws the glyphs at a quarter of their
+/// colour, moved right and down by the glyph's own shadow offset.
 pub fn glyph_quads(
     font: &Font,
     placed: &[Placed],
     origin: Vec3,
     color: u32,
     forced: bool,
-    shade: f32,
+    shadow: bool,
     out: &mut Vec<GlyphQuad>,
 ) {
+    let shade = if shadow { 0.25 } else { 1.0 };
     for p in placed {
         let Some(g) = font.glyph(p.c) else {
             continue;
@@ -406,9 +408,14 @@ pub fn glyph_quads(
         } else {
             (0.0, 0.0)
         };
-        let copies: &[f32] = if p.bold { &[0.0, 1.0] } else { &[0.0] };
-        for &bx in copies {
-            let left = origin.x + p.x + bx;
+        let (dx, dy) = if shadow {
+            (g.offset, g.offset)
+        } else {
+            (0.0, 0.0)
+        };
+        let copies: [f32; 2] = [0.0, g.offset];
+        for &bx in &copies[..if p.bold { 2 } else { 1 }] {
+            let left = origin.x + p.x + bx + dx;
             out.push(GlyphQuad {
                 texture: g.texture.clone(),
                 tex_size: g.texture_size,
@@ -418,7 +425,7 @@ pub fn glyph_quads(
                     g.cell[0] + g.cell[2],
                     g.cell[1] + g.cell[3],
                 ],
-                p0: Vec3::new(left + top_shear, origin.y + up, origin.z),
+                p0: Vec3::new(left + top_shear, origin.y + up + dy, origin.z),
                 eu: Vec3::new(w, 0.0, 0.0),
                 ev: Vec3::new(bottom_shear - top_shear, h, 0.0),
                 rgb,

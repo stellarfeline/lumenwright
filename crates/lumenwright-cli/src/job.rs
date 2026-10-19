@@ -14,6 +14,7 @@ use lumenwright::{ChunkRect, EntityPolicy, HqOptions, QuickOptions, Request, Sky
 
 use crate::jar;
 use crate::output;
+use crate::unifont;
 use crate::values::{BackendArg, ModeArg, TonemapArg, UnknownEntitiesArg};
 
 #[derive(Clone, Debug, clap::Args)]
@@ -103,7 +104,12 @@ pub struct RenderArgs {
     /// Minecraft version whose jar to use (default: the world's version).
     #[arg(long)]
     pub mc_version: Option<String>,
-    /// Never download the client jar.
+    /// Directory holding the Unifont files of the launcher's asset index
+    /// (minecraft/font/include/unifont.json and the hex zip it names), which draw CJK
+    /// and every other character no bitmap font covers.
+    #[arg(long)]
+    pub unifont: Option<PathBuf>,
+    /// Never download the client jar or the Unifont.
     #[arg(long)]
     pub offline: bool,
     /// Resource packs (zip or directory), applied in order on top of vanilla.
@@ -205,12 +211,20 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
         version: version.as_deref(),
         allow_download: !a.offline,
     })?;
+    let unifont_dir = unifont::resolve_unifont(&unifont::UnifontRequest {
+        explicit: a.unifont.as_deref(),
+        version: jar::jar_version(&jar_path)
+            .as_deref()
+            .or(version.as_deref()),
+        allow_download: !a.offline,
+    })?;
     let opening = t.elapsed().as_secs_f64();
     let r = a.render_distance.max(1);
     let req = Request {
         world: WorldSource::Opened(&world),
         chunks: ChunkRect::around(cam.pos, r),
         jar: &jar_path,
+        unifont: Some(&unifont_dir),
         resource_packs: &a.resource_packs,
         camera: cam,
         mode: a.mode.into(),

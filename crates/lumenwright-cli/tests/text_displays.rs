@@ -18,6 +18,7 @@ use lumenwright::{
 };
 use lumenwright_cli::fixture::{self, TEXT_DISPLAYS, TextDisplayCase};
 use lumenwright_cli::jar;
+use lumenwright_cli::unifont;
 
 fn client_jar() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("LUMENWRIGHT_MC_JAR") {
@@ -29,6 +30,23 @@ fn client_jar() -> Option<PathBuf> {
         allow_download: false,
     })
     .ok()
+}
+
+/// The Unifont directory (LUMENWRIGHT_UNIFONT, or the cache's), if there is one.
+fn client_unifont() -> Option<&'static Path> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        if let Ok(p) = std::env::var("LUMENWRIGHT_UNIFONT") {
+            return Some(PathBuf::from(p));
+        }
+        unifont::resolve_unifont(&unifont::UnifontRequest {
+            explicit: None,
+            version: Some(fixture::VERSION_NAME),
+            allow_download: false,
+        })
+        .ok()
+    })
+    .as_deref()
 }
 
 macro_rules! require_jar {
@@ -107,6 +125,7 @@ fn request<'a>(world: &'a Path, jar: &'a Path, mode: Mode, cam: Camera) -> Reque
         },
         chunks: ChunkRect::around(cam.pos, 3),
         jar,
+        unifont: client_unifont(),
         resource_packs: &[],
         camera: cam,
         mode,

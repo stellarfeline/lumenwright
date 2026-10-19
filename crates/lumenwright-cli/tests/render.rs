@@ -9,6 +9,7 @@ use clap::Parser;
 use lumenwright_cli::fixture;
 use lumenwright_cli::jar;
 use lumenwright_cli::job::{self, RenderArgs};
+use lumenwright_cli::unifont;
 
 #[derive(Parser)]
 struct Wrap {
@@ -26,6 +27,23 @@ fn client_jar() -> Option<PathBuf> {
         allow_download: false,
     })
     .ok()
+}
+
+/// The Unifont directory (LUMENWRIGHT_UNIFONT, or the cache's), if there is one.
+fn client_unifont() -> Option<&'static Path> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        if let Ok(p) = std::env::var("LUMENWRIGHT_UNIFONT") {
+            return Some(PathBuf::from(p));
+        }
+        unifont::resolve_unifont(&unifont::UnifontRequest {
+            explicit: None,
+            version: Some(fixture::VERSION_NAME),
+            allow_download: false,
+        })
+        .ok()
+    })
+    .as_deref()
 }
 
 macro_rules! require_jar {
@@ -148,6 +166,9 @@ const GALLERY_VIEW: [&str; 6] = [
     "60",
 ];
 
+const UNIFONT_HINT: &str =
+    "the unifont: set LUMENWRIGHT_UNIFONT or run `lumenwright assets fetch-unifont 1.21.11`";
+
 fn render(
     world: &Path,
     jar: &Path,
@@ -160,6 +181,8 @@ fn render(
         world.display().to_string(),
         "--minecraft-jar".into(),
         jar.display().to_string(),
+        "--unifont".into(),
+        client_unifont().expect(UNIFONT_HINT).display().to_string(),
         "--offline".into(),
         "--output".into(),
         out.display().to_string(),
@@ -663,6 +686,8 @@ fn cli_info_and_render() {
         .arg(showcase())
         .arg("--minecraft-jar")
         .arg(&jar)
+        .arg("--unifont")
+        .arg(client_unifont().expect(UNIFONT_HINT))
         .arg("--output")
         .arg(&png)
         .status()
@@ -908,7 +933,7 @@ fn every_item_definition_in_the_jar_resolves() {
     use lumenwright::assets::items::ItemStack;
     use lumenwright::scene::items::ItemBakery;
     let jar = require_jar!();
-    let store = lumenwright::assets::load_resources(&jar, &[]).unwrap();
+    let store = lumenwright::assets::load_resources(&jar, client_unifont(), &[]).unwrap();
     let defs = store.paths_ending_with(".json");
     let defs: Vec<&String> = defs
         .iter()

@@ -14,6 +14,7 @@ use crate::assets::atlas::AtlasBuilder;
 use crate::assets::font::Font;
 use crate::assets::lang::{DEFAULT_LANGUAGE, Lang};
 use crate::assets::source::ResourceStore;
+use crate::assets::unifont;
 use crate::scene::text::{self, GlyphQuad};
 use crate::scene::{Alpha, EntityLight, Quad, Scene};
 use crate::world::{Entity, nbt};
@@ -75,6 +76,8 @@ pub struct TextDisplayPlan {
     textures: Vec<String>,
     /// Background colours (ARGB) that need a generated texture.
     backgrounds: Vec<u32>,
+    /// Glyphs of the Unifont, as textures made in code: location, size, texels.
+    generated: Vec<(String, u32, u32, Vec<u32>)>,
     /// Glyph quads planned, for the log.
     pub glyphs: usize,
 }
@@ -88,6 +91,9 @@ impl TextDisplayPlan {
     pub fn register_textures(&self, ab: &mut AtlasBuilder) {
         for t in &self.textures {
             ab.add(t);
+        }
+        for (loc, w, h, px) in &self.generated {
+            ab.add_generated(loc, *w, *h, px.clone());
         }
         for &argb in &self.backgrounds {
             // Atlas texels are RGBA8 with red in the low byte.
@@ -171,6 +177,15 @@ pub fn plan(
     }
     out.textures.sort();
     out.textures.dedup();
+    out.textures.retain(|t| {
+        if !t.starts_with(unifont::TEXTURE_PREFIX) {
+            return true;
+        }
+        if let Some((w, h, px)) = font.generated_texture(t) {
+            out.generated.push((t.clone(), w, h, px));
+        }
+        false
+    });
     out.backgrounds.sort();
     out.backgrounds.dedup();
     log::debug!(
@@ -240,13 +255,13 @@ fn place(
         };
         let y = i as f32 * LINE_HEIGHT;
         if shadow {
-            // Font.drawInBatch: the shadow one pixel right and down, at a quarter of
-            // the colour, then the text.
-            let o = Vec3::new(x + 1.0, y + 1.0, SHADOW_Z);
-            text::glyph_quads(font, placed, o, 0xFF_FFFF, false, 0.25, &mut glyphs);
+            // Font.drawInBatch: the shadow a glyph's shadow offset right and down, at a
+            // quarter of the colour, then the text.
+            let o = Vec3::new(x, y, SHADOW_Z);
+            text::glyph_quads(font, placed, o, 0xFF_FFFF, false, true, &mut glyphs);
         }
         let o = Vec3::new(x, y, TEXT_Z);
-        text::glyph_quads(font, placed, o, 0xFF_FFFF, false, 1.0, &mut glyphs);
+        text::glyph_quads(font, placed, o, 0xFF_FFFF, false, false, &mut glyphs);
     }
     out.glyphs += glyphs.len();
     for g in glyphs {
