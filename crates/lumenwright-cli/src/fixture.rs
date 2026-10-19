@@ -19,7 +19,11 @@ pub const VERSION_NAME: &str = "1.21.11";
 
 mod emitters;
 pub use emitters::{CANDLE_ROOM_VIEW, FLOOR_Y, TORCH_ROOM_VIEW, candle_room, torch_room};
+mod chinese;
 mod text_displays;
+pub use chinese::{
+    DISPLAY as CHINESE_DISPLAY, SIGN as CHINESE_SIGN, TEXT as CHINESE_TEXT, chinese_text_gallery,
+};
 pub use text_displays::{TEXT_DISPLAYS, TextDisplayCase, text_display_gallery};
 
 /// Region coordinates -> chunks (local x, local z, NBT bytes).

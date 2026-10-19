@@ -61,6 +61,13 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/mc/client.jar" "$jarurl"
           echo "$MC_JAR_SHA1  $RUNNER_TEMP/mc/client.jar" | sha1sum -c -
           echo "LUMENWRIGHT_MC_JAR=$RUNNER_TEMP/mc/client.jar" >> "$GITHUB_ENV"
+      - name: Fetch the Unifont (the version's asset index, SHA-1 and size checked)
+        run: |
+          set -euo pipefail
+          cargo build -p lumenwright-cli
+          export LUMENWRIGHT_CACHE="$RUNNER_TEMP/lw-cache"
+          dir=$(./target/debug/lumenwright assets fetch-unifont "$MC_VERSION")
+          echo "LUMENWRIGHT_UNIFONT=$dir" >> "$GITHUB_ENV"
       - name: Test, and count the tests that skipped
         run: |
           set -euo pipefail

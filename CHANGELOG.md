@@ -10,6 +10,7 @@ The first release: `lumenwright`, `lumenwright-cli` and `lumenwright-kernel`.
 
 ### Added
 
+- CJK and every other character no bitmap font covers are drawn, on signs and on text displays, from the Unifont the client reads out of the launcher's asset index (the jar's own unifont provider list is empty), cut and spaced as the client's unihex provider does. `Request::unifont` takes the directory (`minecraft/font/include/unifont.json` and the hex zip it names) and refuses a missing or unusable file by name (`RequestError::Unifont`), with no network. The command resolves it by `--unifont`, then its cache, then a SHA-1 and size verified download through the asset index unless `--offline`; `lumenwright assets fetch-unifont` fetches ahead.
 - `lumenwright::render(&Request)`: one frame of a Minecraft Java Edition world as RGBA8 pixels,
   with every input explicit (world, chunk rectangle, client jar, resource packs, camera, mode,
   backend, size, options, entity policy, sky). It resolves no jar, uses no network, writes no

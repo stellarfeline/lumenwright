@@ -219,6 +219,11 @@ pub struct Request<'a> {
     pub chunks: ChunkRect,
     /// The Minecraft client jar the textures and models are read from.
     pub jar: &'a Path,
+    /// The directory holding the Unifont the client reads from the launcher's asset
+    /// index (`minecraft/font/include/unifont.json` and the hex zips it names; see
+    /// [`assets::unifont`]). Without it, a character no bitmap font covers (CJK among
+    /// them) draws nothing. Layered over the jar and under the resource packs.
+    pub unifont: Option<&'a Path>,
     /// Resource packs (zip or directory) layered over the jar, later ones winning.
     pub resource_packs: &'a [PathBuf],
     /// The eye position, orientation and vertical field of view.
@@ -284,6 +289,8 @@ pub enum RequestError {
     JarNotFound(PathBuf),
     /// A resource pack path does not exist.
     ResourcePackNotFound(PathBuf),
+    /// The unifont directory lacks a file, or a file is not what the client reads.
+    Unifont(assets::unifont::UnifontError),
     /// `chunks.min` exceeds `chunks.max` on an axis.
     InvertedChunkRect(ChunkRect),
     /// None of the requested chunks exists in the save.
@@ -307,6 +314,7 @@ impl fmt::Display for RequestError {
             RequestError::ResourcePackNotFound(p) => {
                 write!(f, "resource pack {} does not exist", p.display())
             }
+            RequestError::Unifont(e) => e.fmt(f),
             RequestError::InvertedChunkRect(r) => {
                 write!(f, "chunk rectangle min {:?} exceeds max {:?}", r.min, r.max)
             }
@@ -337,6 +345,9 @@ fn validate(req: &Request) -> std::result::Result<(), RequestError> {
     }
     if let Some(p) = req.resource_packs.iter().find(|p| !p.exists()) {
         return Err(RequestError::ResourcePackNotFound(p.clone()));
+    }
+    if let Some(dir) = req.unifont {
+        assets::unifont::read_dir(dir).map_err(RequestError::Unifont)?;
     }
     let c = req.chunks;
     if c.min[0] > c.max[0] || c.min[1] > c.max[1] {
@@ -401,7 +412,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
     lap("load world", &mut t);
 
     // 2. Assets.
-    let store = assets::load_resources(req.jar, req.resource_packs)?;
+    let store = assets::load_resources(req.jar, req.unifont, req.resource_packs)?;
     lap("load assets", &mut t);
 
     // 3. Scene.

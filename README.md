@@ -102,6 +102,17 @@ resolved in this order:
 
 This resolution and the downloader belong to the command. The library takes the jar as a path.
 
+The jar's own `font/include/unifont.json` lists no providers: the client reads the Unifont that
+draws CJK and every other character no bitmap font covers from the launcher's asset index. The
+command fetches it the same way, in this order: `--unifont <dir>` (a directory holding
+`minecraft/font/include/unifont.json` and the hex zip it names, laid out like the index's keys),
+then the cache (`<cache>/unifont/<version>`, every file checked against the SHA-1 its lock
+records), then a download through the version's asset index, the index and every file checked by
+SHA-1 and size. `--offline` forbids the download and refuses, naming what is missing, when
+neither of the first two has the files. `lumenwright assets fetch-unifont <version|latest>`
+downloads ahead of time. The library takes the directory as `Request::unifont` and does the same
+checks on it without any network.
+
 `--resource-pack` (zip or directory, repeatable) layers packs on top of the vanilla assets.
 
 ## Command line (render)
@@ -132,7 +143,7 @@ This resolution and the downloader belong to the command. The library takes the 
 | `--hdr-output out.pfm` | | also write the linear HDR image (HQ) |
 | `--no-entities`, `--players`, `--unknown-entities box\|skip` | | entity options |
 | `--no-block-entities` | | leave out block entities drawn by Java code |
-| `--minecraft-jar`, `--mc-version`, `--offline`, `--resource-pack` | | the client jar and packs (see [Textures](#textures-the-chunky-approach)) |
+| `--minecraft-jar`, `--mc-version`, `--unifont`, `--offline`, `--resource-pack` | | the client jar, the Unifont and packs (see [Textures](#textures-the-chunky-approach)) |
 | `--threads`, `--log` | all cores, info | CPU worker threads and log level, for every subcommand |
 
 ## Library
@@ -243,8 +254,9 @@ its colours, bold, italic and `translate` keys, split into lines no wider than `
 `alignment`, the `background` colour or `default_background`, `shadow`, `billboard` and
 `transformation`. A `see_through` display is drawn over whatever stands in front of it. A text
 display is seen from the front only, as in the game. `text_opacity` and `brightness` are not
-read, and a character no bitmap provider covers is left out: the jar's unicode fallback
-(`font/include/unifont.json`) lists no providers.
+read. A character no bitmap provider covers is drawn from the Unifont (see
+[Textures](#textures-the-chunky-approach)), cut and spaced as the client's unihex provider cuts
+and spaces it; without a Unifont directory it is left out.
 
 ![entities](docs/renders/entity-lineup.png)
 
