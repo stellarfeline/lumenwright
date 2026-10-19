@@ -151,7 +151,7 @@ fn star_bin(q: Vec3) -> (u32, u32) {
 
 /// The stars binned by direction for per-pixel lookup, as `u32` words: one start
 /// index per bin plus an end (`STAR_BINS_AZ * STAR_BINS_EL + 1` words), then
-/// [`STAR_WORDS`] float words per entry (centre, `a1 / |a1|²`, `a2 / |a2|²`).
+/// nine float words per entry (centre, `a1 / |a1|²`, `a2 / |a2|²`).
 /// A star is entered in every bin its angular extent, with a margin, touches.
 pub fn star_table() -> &'static [u32] {
     static T: OnceLock<Vec<u32>> = OnceLock::new();
@@ -508,10 +508,10 @@ impl QuickSky {
     /// each clamped to 0..1 as the client's 8-bit target clamps them.
     pub fn background(&self, d: Vec3, atlas: &[u32], atlas_w: u32, stars: &[u32]) -> Vec3 {
         let mut c = Vec3::from_slice(&self.fog_color[..3]);
-        if self.flags[0] > 0.5 {
-            if let Some(disc) = self.disc(d) {
-                c = disc;
-            }
+        if self.flags[0] > 0.5
+            && let Some(disc) = self.disc(d)
+        {
+            c = disc;
         }
         if self.flags[1] > 0.5 {
             let a = self.fan_alpha(d);

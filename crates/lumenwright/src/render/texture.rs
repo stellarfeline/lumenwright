@@ -7,10 +7,10 @@
 //! client's `LevelRenderer` builds for terrain (linear min/mag filters, so
 //! trilinear between levels, clamp to edge) and, with the client's
 //! *Anisotropic* texture filtering at its default 4×, anisotropic filtering.
-//! The anisotropic filter here is the reference footprint approximation of the
-//! `EXT_texture_filter_anisotropic` specification: up to [`MAX_ANISOTROPY`]
-//! trilinear taps spread along the footprint's major axis at the level of the
-//! minor axis. Everything else (entities, items, text) is read nearest at level
+//! The anisotropic filter follows the footprint approximation the
+//! `EXT_texture_filter_anisotropic` specification gives: `N = min(ceil(Pmax /
+//! Pmin), MAX_ANISOTROPY)` trilinear taps along the footprint's major axis, at
+//! level `log2(Pmax / N)`; the taps are spaced evenly over the axis. Everything else (entities, items, text) is read nearest at level
 //! 0, as the client reads its other atlases.
 
 use glam::{Vec2, Vec4};
