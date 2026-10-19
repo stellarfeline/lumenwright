@@ -4,6 +4,7 @@
 pub mod block_entities;
 pub mod camera;
 pub mod entities;
+pub mod items;
 pub mod mesh;
 pub mod text;
 pub mod voxel;
@@ -22,38 +23,54 @@ use crate::assets::model::{BakedModel, BakedQuad, Dir};
 use crate::world::{BlockState, BlockVolume, Entity, Registry, StateId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// How a surface's texels combine with what lies behind it.
 pub enum Alpha {
+    /// Every texel is drawn; the surface hides what is behind it.
     Opaque,
+    /// Texels are either drawn or discarded by their alpha (leaves, glass panes).
     Cutout,
+    /// Texels are blended over what is behind them (stained glass, ice, water).
     Translucent,
 }
 
 /// A material-resolved quad with atlas-pixel UVs.
 #[derive(Clone, Copy, Debug)]
 pub struct Quad {
+    /// First corner (top-left of the texture), in block-local or scene coordinates.
     pub p0: Vec3,
+    /// Edge from `p0` along the texture's horizontal axis, towards the top-right corner.
     pub eu: Vec3,
+    /// Edge from `p0` along the texture's vertical axis, towards the bottom-left corner.
     pub ev: Vec3,
+    /// Atlas pixel coordinate at `p0`.
     pub uv0: [f32; 2],
+    /// Change of the atlas pixel coordinate along `eu`.
     pub uvs: [f32; 2],
+    /// Change of the atlas pixel coordinate along `ev`.
     pub uvt: [f32; 2],
     /// sRGB tint (rgb), a = 255.
     pub tint: [u8; 4],
+    /// How the quad's texels combine with what is behind them.
     pub alpha: Alpha,
+    /// The quad is a water surface (Fresnel and refraction in HQ mode).
     pub water: bool,
+    /// The quad takes vanilla's per-face directional shading.
     pub shade: bool,
     /// Block light emission / 15.
     pub emission: f32,
+    /// The neighbour direction whose occluding block hides this face, if any.
     pub cullface: Option<Dir>,
     /// The model allows smooth lighting / AO.
     pub ao: bool,
 }
 
 impl Quad {
+    /// Unit normal of the front face (`ev × eu`), or zero for a degenerate quad.
     pub fn normal(&self) -> Vec3 {
         self.ev.cross(self.eu).normalize_or_zero()
     }
 
+    /// The four corners in the order top-left, bottom-left, bottom-right, top-right.
     pub fn corners(&self) -> [Vec3; 4] {
         [
             self.p0,
@@ -74,11 +91,14 @@ impl Quad {
         [at(0.0, 0.0), at(0.0, 1.0), at(1.0, 1.0), at(1.0, 0.0)]
     }
 
+    /// The same quad moved by `by`.
     pub fn translated(mut self, by: Vec3) -> Quad {
         self.p0 += by;
         self
     }
 
+    /// Packs the quad into the kernel's `#[repr(C)]` layout, with the alpha mode,
+    /// water and shade flags, tint and emission in the spare lanes.
     pub fn to_gpu(&self) -> GpuQuad {
         let mut flags = match self.alpha {
             Alpha::Opaque => ALPHA_OPAQUE,
@@ -107,23 +127,35 @@ impl Quad {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A fluid block and its vanilla `level` block-state property
+/// (0 is a source, 1 to 7 flow away from it, 8 and above fall).
 pub enum Fluid {
+    /// Water at the given level.
     Water(u32),
+    /// Lava at the given level.
     Lava(u32),
 }
 
 /// Everything the renderers need to know about one block state.
 #[derive(Clone, Debug, Default)]
 pub struct BlockInfo {
+    /// The models chosen for the state (variants or multipart parts).
     pub models: BlockModelSet,
     /// Full, opaque cube: hides neighbour faces and casts AO.
     pub occludes: bool,
+    /// A face is hidden by a neighbour of the same state (glass, leaves, fluids).
     pub self_cull: bool,
+    /// Block light the state emits, 0 to 15.
     pub emission: u8,
+    /// Which biome or fixed colour tints the state's tinted faces.
     pub tint: Option<TintKind>,
+    /// The fluid the block is, if it is one.
     pub fluid: Option<Fluid>,
+    /// The block also holds water (`waterlogged=true`), drawn as a water source.
     pub waterlogged: bool,
+    /// The state's geometry is in vanilla's translucent render layer.
     pub translucent: bool,
+    /// Nothing is drawn for the state (air, light, barrier, structure void).
     pub invisible: bool,
 }
 
@@ -149,6 +181,7 @@ pub struct EntityLight {
 }
 
 impl EntityLight {
+    /// Lighting sampled at `pos` with entity shading and no full-bright override.
     pub fn shaded(pos: [i32; 3]) -> EntityLight {
         EntityLight {
             pos,
@@ -158,31 +191,48 @@ impl EntityLight {
     }
 }
 
+/// What [`Scene::build`] adds beyond the blocks.
 pub struct BuildOptions {
+    /// Bake entities.
     pub entities: bool,
+    /// Draw an entity without a model as a box the size of its hitbox; otherwise skip it.
     pub unknown_entities_as_boxes: bool,
     /// Draw block entities whose look is Java code (signs, chests, banners...).
     pub block_entities: bool,
     /// Camera position in world coordinates, when known.
     pub eye: Option<[f64; 3]>,
+    /// Camera yaw and pitch in degrees (Minecraft's convention), when known:
+    /// billboarded display entities turn to it.
+    pub view: Option<[f32; 2]>,
 }
 
 /// The world baked against a resource set.
 pub struct Scene {
     /// Integer world origin; all scene coordinates are relative to it.
     pub origin: [i32; 3],
+    /// Every block state and biome name in the loaded volume, by id.
     pub registry: Registry,
+    /// The loaded blocks, light and biomes.
     pub volume: BlockVolume,
+    /// Per-state render info, indexed by [`StateId`].
     pub blocks: Vec<BlockInfo>,
+    /// Baked block models, indexed by model id.
     pub baked: Vec<BakedModel>,
+    /// Texture atlas holding every sprite the scene samples.
     pub atlas: Atlas,
+    /// Biome grass, foliage and water colours.
     pub biomes: BiomeColors,
     /// Entity geometry in scene coordinates.
     pub entity_quads: Vec<Quad>,
     /// How each entity quad is lit in quick mode.
     pub entity_quad_light: Vec<EntityLight>,
+    /// Per-kind counts of the entities drawn, drawn as boxes, or skipped.
     pub entity_stats: entities::EntityStats,
+    /// Per-kind counts of the block entities drawn or skipped.
     pub block_entity_stats: block_entities::BlockEntityStats,
+    /// Text display geometry in scene coordinates (drawn and lit apart from
+    /// `entity_quads`: one-sided, and see-through ones over everything).
+    pub text_quads: Vec<entities::text_display::TextQuad>,
 }
 
 /// Textures used by generated geometry and the sky, beyond those of block models.
@@ -198,6 +248,9 @@ const EXTRA_TEXTURES: &[&str] = &[
 ];
 
 impl Scene {
+    /// Bakes the loaded volume, entities and block entities against `store`:
+    /// resolves every block state's models, packs the atlas, decides which states
+    /// occlude, and builds entity and block-entity quads as `opts` asks.
     pub fn build(
         store: &ResourceStore,
         mut registry: Registry,
@@ -207,6 +260,12 @@ impl Scene {
         opts: &BuildOptions,
     ) -> Scene {
         let t = std::time::Instant::now();
+        // Text displays have their own pass (`entities::text_display`).
+        let (text_displays, entity_list): (Vec<Entity>, Vec<Entity>) = entity_list
+            .iter()
+            .cloned()
+            .partition(|e| e.short_id() == "text_display");
+        let entity_list = entity_list.as_slice();
         // Block displays render block models, so their states must be baked too.
         for s in entities::display_states(entity_list) {
             registry.intern(&s);
@@ -265,6 +324,10 @@ impl Scene {
         }
         let models_json = entities::EntityModels::load_builtin();
         entities::register_textures(&models_json, entity_list, &mut ab);
+        let mut item_bakery = items::ItemBakery::new(store);
+        if opts.entities {
+            entities::register_item_textures(&mut item_bakery, entity_list, &mut ab);
+        }
         let origin = volume.min_block();
         let mut be_plan = block_entities::plan(
             &block_entities::PlanContext {
@@ -281,6 +344,14 @@ impl Scene {
             },
         );
         be_plan.register_textures(&mut ab);
+        let text_plan = entities::text_display::plan(
+            store,
+            if opts.entities { &text_displays } else { &[] },
+            origin,
+            volume.size_blocks(),
+            opts.view,
+        );
+        text_plan.register_textures(&mut ab);
         let atlas = ab.build(store);
 
         // Occlusion needs texture transparency, so it is computed after packing.
@@ -311,13 +382,24 @@ impl Scene {
             entity_quad_light: Vec::new(),
             entity_stats: Default::default(),
             block_entity_stats: be_plan.stats.clone(),
+            text_quads: Vec::new(),
         };
         if opts.entities {
-            entities::build_entity_quads(&mut scene, &models_json, entity_list, store, opts);
+            entities::build_entity_quads(
+                &mut scene,
+                &models_json,
+                &mut item_bakery,
+                entity_list,
+                store,
+                opts,
+            );
         }
         if !be_plan.is_empty() {
             let models = block_entities::BlockEntityModels::load_builtin();
             block_entities::build_quads(&mut scene, &models, &be_plan);
+        }
+        if !text_plan.is_empty() {
+            entities::text_display::build_quads(&mut scene, &text_plan);
         }
         log::info!(
             "scene: {} block states, {} baked models, {} entity quads ({:.2?})",
@@ -330,11 +412,13 @@ impl Scene {
     }
 
     #[inline]
+    /// Render info of the block at world block coordinates `(x, y, z)`.
     pub fn info_at(&self, x: i32, y: i32, z: i32) -> &BlockInfo {
         &self.blocks[self.volume.block(x, y, z) as usize]
     }
 
     #[inline]
+    /// Whether the block at world block coordinates `(x, y, z)` is a full opaque cube.
     pub fn occludes_at(&self, x: i32, y: i32, z: i32) -> bool {
         self.info_at(x, y, z).occludes
     }
@@ -370,6 +454,9 @@ impl Scene {
         }
     }
 
+    /// Resolves a baked model quad to atlas UVs, applying `tint` when the quad is
+    /// tinted, the alpha mode from its sprite (or translucent when `translucent`),
+    /// and the larger of `emission` and the quad's own light emission, scaled to 0..1.
     pub fn resolve_quad(
         &self,
         q: &BakedQuad,

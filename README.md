@@ -24,6 +24,36 @@ for screenshots.
 The requirements, design decisions and what is in or out of scope are in
 [docs/SCOPE.md](docs/SCOPE.md).
 
+## Install
+
+The command, from crates.io:
+
+```sh
+cargo install lumenwright-cli    # installs the `lumenwright` command
+lumenwright backends             # the backends this machine can draw with
+```
+
+The library, in your own crate:
+
+```sh
+cargo add lumenwright
+```
+
+You need Rust 1.90 or newer. Installing the command also compiles a little C (the TLS
+library its jar downloader uses), so it needs a C compiler; the library alone compiles none.
+
+What each backend needs to run:
+
+* **CPU**: any Linux, macOS or Windows machine. It uses every core.
+* **Metal, Vulkan, DX12**: a GPU and its driver: Metal on macOS, Vulkan on Linux or Windows,
+  DX12 on Windows.
+* **CUDA**: an NVIDIA GPU and its driver, and a build from a clone of this repository (see
+  [Backends](#backends)).
+
+Every render also needs the Minecraft Java Edition client jar, which Lumenwright reads its
+textures and models from. The command finds it or downloads it from Mojang (see
+[Textures](#textures-the-chunky-approach)); the library takes its path.
+
 ## Quick start
 
 ```sh
@@ -77,6 +107,7 @@ This resolution and the downloader belong to the command. The library takes the 
 | flag | default | meaning |
 |---|---|---|
 | `-w, --world` | required | save directory (contains `level.dat`) |
+| `-o, --output` | render.png | the PNG to write |
 | `--mode quick\|hq` | quick | vanilla raster or path tracing |
 | `--backend auto\|cpu\|gpu\|metal\|vulkan\|dx12\|cuda` | auto | `auto` uses the GPU if one is available, otherwise the CPU |
 | `--camera x,y,z` | player eye, else spawn | eye position |
@@ -87,8 +118,8 @@ This resolution and the downloader belong to the command. The library takes the 
 | `--render-distance` | 8 | chunk radius loaded around the camera |
 | `--dimension` | overworld | `overworld`, `nether`, `end` |
 | `--time` | world time | ticks: 0 = sunrise, 6000 = noon |
-| `--sun-altitude`, `--sun-azimuth` | from time | degrees, overrides `--time` for the sun |
-| `--spp`, `--max-bounces` | 64, 4 | HQ sampling |
+| `--sun-altitude`, `--sun-azimuth` | from time, 135 | degrees (azimuth 0 = north, 90 = east); an altitude overrides `--time` for the sun |
+| `--spp`, `--max-bounces`, `--seed` | 64, 4, 0 | HQ sampling; the same seed gives the same image |
 | `--exposure`, `--tonemap aces\|gamma\|filmic` | 1.0, aces | HQ post-processing |
 | `--sun-intensity`, `--sky-intensity`, `--emitter-intensity` | 1.5, 1, 6 | HQ lighting |
 | `--ssaa N` | 1 | quick-mode supersampling |
@@ -96,6 +127,8 @@ This resolution and the downloader belong to the command. The library takes the 
 | `--hdr-output out.pfm` | | also write the linear HDR image (HQ) |
 | `--no-entities`, `--players`, `--unknown-entities box\|skip` | | entity options |
 | `--no-block-entities` | | leave out block entities drawn by Java code |
+| `--minecraft-jar`, `--mc-version`, `--offline`, `--resource-pack` | | the client jar and packs (see [Textures](#textures-the-chunky-approach)) |
+| `--threads`, `--log` | all cores, info | CPU worker threads and log level, for every subcommand |
 
 ## Library
 
@@ -185,6 +218,15 @@ Mob geometry lives in Java code in vanilla, not in assets, so it ships as data i
 needs no Rust changes. Block displays, paintings and mannequin or player skins are built in
 code. Anything else is drawn as a box the size of its hitbox.
 
+Text displays are drawn in the jar's default font (`assets/minecraft/font/default.json` and
+the bitmap providers it names), placed as the client places them: the `text` component with
+its colours, bold, italic and `translate` keys, split into lines no wider than `line_width`,
+`alignment`, the `background` colour or `default_background`, `shadow`, `billboard` and
+`transformation`. A `see_through` display is drawn over whatever stands in front of it. A text
+display is seen from the front only, as in the game. `text_opacity` and `brightness` are not
+read, and a character no bitmap provider covers is left out: the jar's unicode fallback
+(`font/include/unifont.json`) lists no providers.
+
 ![entities](docs/renders/entity-lineup.png)
 
 Block entities that vanilla draws in Java code use the same format, in
@@ -205,6 +247,34 @@ chunk's `block_entities`:
 
 ![block entities](docs/renders/block-entities-quick-metal.png)
 ![signs](docs/renders/block-entities-signs.png)
+
+Items are drawn through the jar's item model definitions (`assets/minecraft/items/*.json`,
+the format of 1.21.4 and later), resolved against the stack's components and where it is
+drawn. A model with elements is baked as a block model; a flat item is extruded from its
+sprite, a front and a back face and one face for every open texel edge, as the client does.
+The model's display transform for its context poses it:
+
+* dropped items (`ground`), bobbing and turned by a phase taken from the entity's UUID, as
+  a cluster of up to five copies for a large stack;
+* item frame and glow item frame contents (`fixed`), turned by `ItemRotation`;
+* item displays, in their `item_display` context, `transformation` and `billboard`;
+* items in the hands (`thirdperson_righthand`, `thirdperson_lefthand`) and non-armour items
+  on the head (`head`) of armour stands, mannequins, players and humanoid mobs. Armour
+  stands take their `Pose` and `ShowArms`.
+
+Worn armour is drawn from the jar's equipment assets (`assets/minecraft/equipment/*.json`)
+on the humanoid armour meshes, dyed leather included. The shield is drawn from data in
+[`crates/lumenwright/assets/item_models.json`](crates/lumenwright/assets/item_models.json),
+with the armour meshes, each citing its 1.21.11 client class. `EntityStats` counts the
+stacks drawn and not drawn by item id (`items_rendered`, `items_skipped`).
+
+![items](docs/renders/items-quick.png)
+
+```sh
+target/release/lumenwright demo-world --items /tmp/items
+target/release/lumenwright render -w /tmp/items \
+    --camera 7.5,67.6,9.5 --look-at 7.5,66.0,2.5 --fov 60
+```
 
 ## Backends
 
@@ -238,11 +308,14 @@ cargo test --workspace --release
   overlay cells, cutout alpha, the sky, and pinned RNG values.
 * **Integration tests** (in `lumenwright-cli`, which owns the fixture worlds) write fixture
   worlds and render them end to end. They check terrain
-  colours seen from above, entity coverage, block entities in both modes, sign text, HQ
-  sanity, CPU-vs-GPU parity in both modes (showcase and block-entity gallery), determinism,
-  and the CLI. The library tests check that the CLI's PNG and the library's pixels are
-  byte-equal in both modes, that a missing jar is refused by name, that a stated sky is drawn
-  as given, and that CPU pixels are bit-identical on 1, 3 and 8 threads. Tests that need the
+  colours seen from above, entity coverage, block entities in both modes, sign text, items
+  in both modes (every holder kind, each item's spot against the same frame with the
+  holders empty), that every item definition in the jar resolves, HQ sanity, CPU-vs-GPU
+  parity in both modes (showcase, block-entity gallery and item gallery) and CPU-vs-CUDA
+  parity in HQ mode, determinism, and the CLI. The library tests check that the CLI's PNG
+  and the library's pixels are byte-equal in both modes, that a missing jar is refused by
+  name, that a stated sky is drawn as given, and that CPU pixels are bit-identical on 1, 3
+  and 8 threads (showcase and item gallery). Tests that need the
   client jar or a GPU skip with a message when it is missing. `LUMENWRIGHT_MC_JAR` points the tests at a jar.
 
 ## Measured on an M2 Pro (10 CPU cores, 16 GPU cores)
@@ -263,8 +336,11 @@ Parity on the same view: quick mode, CPU vs Metal, differs in 0.075% of pixels; 
 See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
 * Beds, shulker boxes and the conduit are not drawn. Chests are drawn closed and bells at
   rest; sign text is drawn without italic, underline or obfuscation.
-* Items are not rendered: dropped items, item frame contents, item displays.
-* Entity layers that need a second texture are missing (sheep wool, armour, glowing eyes).
+* Items that vanilla draws in Java code are not drawn, the shield excepted: chests, beds,
+  banners, heads, shulker boxes, decorated pots, the conduit and copper golem statues. They
+  are counted in `items_skipped`. A filled map in a frame shows the map item, not its
+  picture; armour trims and the elytra are not drawn.
+* Entity layers that need a second texture are missing (sheep wool, glowing eyes).
 * Smooth fluid surfaces, clouds, weather, biome blending and mipmaps are not implemented.
 * There is no next-event estimation for emitters, so night scenes need many samples.
 * The CUDA backend has not been run on NVIDIA hardware yet.

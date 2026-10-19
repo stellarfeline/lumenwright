@@ -88,7 +88,10 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
         step_mode: wgpu::VertexStepMode::Vertex,
         attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Unorm8x4],
     };
-    let make_pipeline = |fs: &str, blend: Option<wgpu::BlendState>, depth_write: bool| {
+    let make_pipeline = |fs: &str,
+                         blend: Option<wgpu::BlendState>,
+                         depth_write: bool,
+                         depth_compare: wgpu::CompareFunction| {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(fs),
             layout: Some(&layout),
@@ -107,7 +110,7 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: depth_format,
                 depth_write_enabled: Some(depth_write),
-                depth_compare: Some(wgpu::CompareFunction::Less),
+                depth_compare: Some(depth_compare),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -126,11 +129,19 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
             cache: None,
         })
     };
-    let opaque = make_pipeline("fs_opaque", None, true);
+    let opaque = make_pipeline("fs_opaque", None, true, wgpu::CompareFunction::Less);
     let translucent = make_pipeline(
         "fs_translucent",
         Some(wgpu::BlendState::ALPHA_BLENDING),
         false,
+        wgpu::CompareFunction::Less,
+    );
+    // See-through text displays: blended over everything, no depth test.
+    let see_through = make_pipeline(
+        "fs_translucent",
+        Some(wgpu::BlendState::ALPHA_BLENDING),
+        false,
+        wgpu::CompareFunction::Always,
     );
     let sky = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("sky"),
@@ -215,6 +226,7 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
     };
     let ibuf_o = mk_index(&mesh.opaque);
     let ibuf_t = mk_index(&mesh.translucent);
+    let ibuf_s = mk_index(&mesh.see_through);
 
     let mut enc = device.create_command_encoder(&Default::default());
     {
@@ -254,6 +266,11 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
             pass.set_pipeline(&translucent);
             pass.set_index_buffer(ibuf_t.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..mesh.translucent.len() as u32, 0, 0..1);
+        }
+        if !mesh.see_through.is_empty() {
+            pass.set_pipeline(&see_through);
+            pass.set_index_buffer(ibuf_s.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..mesh.see_through.len() as u32, 0, 0..1);
         }
     }
     let row = (f.width * 4).div_ceil(256) * 256;

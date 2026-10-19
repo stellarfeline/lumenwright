@@ -53,6 +53,9 @@ enum Cmd {
         /// Instead of the showcase, one of every block entity Lumenwright draws.
         #[arg(long, conflicts_with = "lineup")]
         block_entities: bool,
+        /// Instead of the showcase, one of every way Lumenwright draws an item.
+        #[arg(long, conflicts_with_all = ["lineup", "block_entities"])]
+        items: bool,
     },
 }
 
@@ -119,8 +122,11 @@ fn main() -> Result<()> {
             dir,
             lineup,
             block_entities,
+            items,
         } => {
-            let world = if block_entities {
+            let world = if items {
+                lumenwright_cli::fixture::item_gallery(true)
+            } else if block_entities {
                 lumenwright_cli::fixture::block_entity_gallery()
             } else if lineup {
                 let mut ids: Vec<String> =

@@ -5,20 +5,27 @@ use std::collections::HashMap;
 use glam::{Mat3, Vec3};
 use serde::Deserialize;
 
-use super::source::{ResourceStore, norm_loc};
+use super::source::{ResourceStore, norm_loc, split_loc};
 
 /// The six face directions, in vanilla order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Dir {
+    /// −y.
     Down,
+    /// +y.
     Up,
+    /// −z.
     North,
+    /// +z.
     South,
+    /// −x.
     West,
+    /// +x.
     East,
 }
 
 impl Dir {
+    /// Every direction, in vanilla order.
     pub const ALL: [Dir; 6] = [
         Dir::Down,
         Dir::Up,
@@ -28,6 +35,8 @@ impl Dir {
         Dir::East,
     ];
 
+    /// Parses a model or blockstate face name (`down`/`bottom`, `up`/`top`,
+    /// `north`, `south`, `west`, `east`).
     pub fn parse(s: &str) -> Option<Dir> {
         Some(match s {
             "down" | "bottom" => Dir::Down,
@@ -40,6 +49,7 @@ impl Dir {
         })
     }
 
+    /// The unit block offset towards this direction.
     pub fn offset(self) -> [i32; 3] {
         match self {
             Dir::Down => [0, -1, 0],
@@ -51,15 +61,18 @@ impl Dir {
         }
     }
 
+    /// The unit vector towards this direction.
     pub fn normal(self) -> Vec3 {
         let o = self.offset();
         Vec3::new(o[0] as f32, o[1] as f32, o[2] as f32)
     }
 
+    /// Position in [`Dir::ALL`] (0..6).
     pub fn index(self) -> usize {
         self as usize
     }
 
+    /// The opposite direction.
     pub fn opposite(self) -> Dir {
         match self {
             Dir::Down => Dir::Up,
@@ -77,24 +90,103 @@ impl Dir {
     }
 }
 
+/// A block model file as vanilla writes it, before parent resolution.
 #[derive(Deserialize, Clone, Debug)]
 pub struct ModelJson {
+    /// Parent model location.
     pub parent: Option<String>,
+    /// Texture variables to texture locations or `#variable` references.
     #[serde(default)]
     pub textures: HashMap<String, String>,
+    /// Cuboid elements; `None` inherits the parent's.
     pub elements: Option<Vec<ElementJson>>,
+    /// Ambient occlusion switch; `None` inherits the parent's.
     pub ambientocclusion: Option<bool>,
+    /// Item display transforms by context name (`ground`, `fixed`, ...).
+    #[serde(default)]
+    pub display: HashMap<String, TransformJson>,
 }
 
+/// One entry of a model's `display` block (vanilla `ItemTransform`).
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+pub struct TransformJson {
+    /// Rotation about x, y, z in degrees; `None` is 0.
+    pub rotation: Option<[f32; 3]>,
+    /// Translation in sixteenths of a block; `None` is 0.
+    pub translation: Option<[f32; 3]>,
+    /// Scale on x, y, z; `None` is 1.
+    pub scale: Option<[f32; 3]>,
+}
+
+/// A display transform as vanilla applies it: degrees, block units (translation
+/// / 16, clamped to ±5) and a scale clamped to ±4 (`ItemTransform.Deserializer`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ItemTransform {
+    /// Rotation about x, y, z in degrees.
+    pub rotation: Vec3,
+    /// Translation in blocks, already divided by 16 and clamped to ±5.
+    pub translation: Vec3,
+    /// Scale on x, y, z, clamped to ±4.
+    pub scale: Vec3,
+}
+
+impl ItemTransform {
+    /// No rotation, no translation, unit scale: the pose of a context the model has no `display` entry for.
+    pub const IDENTITY: ItemTransform = ItemTransform {
+        rotation: Vec3::ZERO,
+        translation: Vec3::ZERO,
+        scale: Vec3::ONE,
+    };
+
+    fn from_json(j: &TransformJson) -> ItemTransform {
+        let v = |a: Option<[f32; 3]>, d: f32| a.map(Vec3::from).unwrap_or(Vec3::splat(d));
+        ItemTransform {
+            rotation: v(j.rotation, 0.0),
+            translation: (v(j.translation, 0.0) * 0.0625)
+                .clamp(Vec3::splat(-5.0), Vec3::splat(5.0)),
+            scale: v(j.scale, 1.0).clamp(Vec3::splat(-4.0), Vec3::splat(4.0)),
+        }
+    }
+
+    /// The pose vanilla's `ItemTransform.apply` multiplies in, followed by the
+    /// `translate(-0.5)` that centres the 0..1 model: a left-hand context mirrors
+    /// the x translation and the y and z rotations.
+    pub fn matrix(&self, left_hand: bool) -> glam::Mat4 {
+        use glam::{Mat4, Quat};
+        let (mut r, mut t) = (self.rotation, self.translation);
+        if left_hand {
+            r.y = -r.y;
+            r.z = -r.z;
+            t.x = -t.x;
+        }
+        // JOML `rotationXYZ(x, y, z)` is Rx * Ry * Rz.
+        let q = Quat::from_rotation_x(r.x.to_radians())
+            * Quat::from_rotation_y(r.y.to_radians())
+            * Quat::from_rotation_z(r.z.to_radians());
+        Mat4::from_translation(t)
+            * Mat4::from_quat(q)
+            * Mat4::from_scale(self.scale)
+            * Mat4::from_translation(Vec3::splat(-0.5))
+    }
+}
+
+/// One cuboid element of a block model. Coordinates are in model units, 16
+/// to a block.
 #[derive(Deserialize, Clone, Debug)]
 pub struct ElementJson {
+    /// Minimum corner.
     pub from: [f32; 3],
+    /// Maximum corner.
     pub to: [f32; 3],
+    /// Rotation of the element about an origin.
     pub rotation: Option<ElementRotation>,
+    /// Applies directional face shading (default true).
     #[serde(default = "yes")]
     pub shade: bool,
+    /// Minimum light level of the element's faces, 0..=15.
     #[serde(default)]
     pub light_emission: u8,
+    /// Faces by direction name.
     #[serde(default)]
     pub faces: HashMap<String, FaceJson>,
 }
@@ -103,17 +195,25 @@ fn yes() -> bool {
     true
 }
 
+/// An element's rotation, in model units and degrees.
 #[derive(Deserialize, Clone, Debug)]
 pub struct ElementRotation {
+    /// Pivot point (default the block centre, 8,8,8).
     #[serde(default = "center")]
     pub origin: [f32; 3],
+    /// Rotation axis: `x`, `y` or `z`.
     pub axis: Option<String>,
+    /// Angle about `axis` in degrees.
     #[serde(default)]
     pub angle: f32,
     // Newer formats may specify per-axis angles.
+    /// Angle about x in degrees, in the per-axis form.
     pub x: Option<f32>,
+    /// Angle about y in degrees, in the per-axis form.
     pub y: Option<f32>,
+    /// Angle about z in degrees, in the per-axis form.
     pub z: Option<f32>,
+    /// Scales the element back to the block's extent after rotating.
     #[serde(default)]
     pub rescale: bool,
 }
@@ -122,13 +222,20 @@ fn center() -> [f32; 3] {
     [8.0, 8.0, 8.0]
 }
 
+/// One face of a model element.
 #[derive(Deserialize, Clone, Debug)]
 pub struct FaceJson {
+    /// Texture rectangle `[u0, v0, u1, v1]` in sprite units (0..16); `None`
+    /// derives it from the element's position.
     pub uv: Option<[f32; 4]>,
+    /// Texture location or `#variable`.
     pub texture: String,
+    /// Face direction whose neighbour hides this face when it is solid.
     pub cullface: Option<String>,
+    /// Texture rotation in degrees (0, 90, 180 or 270).
     #[serde(default)]
     pub rotation: i32,
+    /// Tint index; −1 (the default) is untinted.
     #[serde(default = "no_tint")]
     pub tintindex: i32,
 }
@@ -140,11 +247,20 @@ fn no_tint() -> i32 {
 /// A fully resolved model: elements plus a flat texture variable map.
 #[derive(Clone, Debug)]
 pub struct ResolvedModel {
+    /// Cuboid elements, from the nearest model in the chain that has any.
     pub elements: Vec<ElementJson>,
+    /// Texture variables, children overriding parents.
     pub textures: HashMap<String, String>,
+    /// Ambient occlusion, from the nearest model that sets it (default true).
     pub ambient_occlusion: bool,
+    /// The `builtin/...` parent the chain ends in (`builtin/generated` for flat items).
+    pub builtin: Option<String>,
+    /// Item display transforms by context name, the nearest model in the chain
+    /// winning per context.
+    pub display: HashMap<String, ItemTransform>,
 }
 
+/// Location of the vanilla magenta and black missing texture.
 pub const MISSING_TEXTURE: &str = "lumenwright:missing";
 
 impl ResolvedModel {
@@ -163,9 +279,31 @@ impl ResolvedModel {
     }
 }
 
+/// One model file's display transforms. Within one file a missing left-hand
+/// transform takes the right hand's (vanilla `ItemTransforms.Deserializer`).
+fn model_display(m: &ModelJson) -> Vec<(String, ItemTransform)> {
+    let mut out: Vec<(String, ItemTransform)> = m
+        .display
+        .iter()
+        .map(|(k, v)| (k.clone(), ItemTransform::from_json(v)))
+        .collect();
+    for (left, right) in [
+        ("thirdperson_lefthand", "thirdperson_righthand"),
+        ("firstperson_lefthand", "firstperson_righthand"),
+    ] {
+        if !m.display.contains_key(left)
+            && let Some(r) = m.display.get(right)
+        {
+            out.push((left.to_string(), ItemTransform::from_json(r)));
+        }
+    }
+    out
+}
+
 /// Loads and resolves a model with its parent chain.
 pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> {
     let mut chain: Vec<ModelJson> = Vec::new();
+    let mut builtin = None;
     let mut cur = Some(loc.to_string());
     while let Some(name) = cur.take() {
         if chain.len() > 32 {
@@ -173,6 +311,7 @@ pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> 
         }
         // "builtin/..." parents have no JSON.
         if name.contains("builtin/") {
+            builtin = Some(split_loc(&name).1.to_string());
             break;
         }
         let bytes = store.resolve("models", &name, "json")?;
@@ -195,6 +334,7 @@ pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> 
             textures.insert(k.clone(), v.clone());
         }
     }
+    let mut display = HashMap::new();
     for m in &chain {
         if elements.is_none() {
             elements = m.elements.clone();
@@ -202,29 +342,43 @@ pub fn resolve_model(store: &ResourceStore, loc: &str) -> Option<ResolvedModel> 
         if ao.is_none() {
             ao = m.ambientocclusion;
         }
+        for (ctx, t) in model_display(m) {
+            display.entry(ctx).or_insert(t);
+        }
     }
     Some(ResolvedModel {
         elements: elements.unwrap_or_default(),
         textures,
         ambient_occlusion: ao.unwrap_or(true),
+        builtin,
+        display,
     })
 }
 
 /// A quad in block-local coordinates (0..1), ready for either renderer.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BakedQuad {
+    /// Corner at the texture's top left.
     pub p0: Vec3,
+    /// Edge from `p0` along the texture's u axis.
     pub eu: Vec3,
+    /// Edge from `p0` along the texture's v axis.
     pub ev: Vec3,
     /// Texture location (`ns:path`).
     pub texture: String,
     /// UV (0..16 sprite space) at p0, and its derivatives along eu / ev.
     pub uv0: [f32; 2],
+    /// UV change along `eu`.
     pub du: [f32; 2],
+    /// UV change along `ev`.
     pub dv: [f32; 2],
+    /// Hidden when the neighbour in this direction is a solid full face.
     pub cullface: Option<Dir>,
+    /// Tint index; −1 is untinted.
     pub tintindex: i32,
+    /// Applies directional face shading.
     pub shade: bool,
+    /// Minimum light level of the face, 0..=15.
     pub light_emission: u8,
 }
 
@@ -239,6 +393,8 @@ impl BakedQuad {
         Dir::from_normal(self.normal())
     }
 
+    /// The four corners in vanilla order: top left, bottom left, bottom right,
+    /// top right.
     pub fn corners(&self) -> [Vec3; 4] {
         // Vanilla order: TL, BL, BR, TR.
         [
@@ -258,9 +414,12 @@ impl BakedQuad {
     }
 }
 
+/// A block model baked into quads, rotated by its blockstate variant.
 #[derive(Clone, Debug, Default)]
 pub struct BakedModel {
+    /// The model's quads, in block-local coordinates.
     pub quads: Vec<BakedQuad>,
+    /// The model takes ambient occlusion.
     pub ambient_occlusion: bool,
     /// The model has a single element spanning the whole block with 6 faces.
     pub full_cube: bool,
@@ -513,6 +672,8 @@ pub fn cube_all(texture: &str) -> BakedModel {
             elements: vec![el],
             textures,
             ambient_occlusion: true,
+            builtin: None,
+            display: HashMap::new(),
         },
         0,
         0,
@@ -582,6 +743,8 @@ mod tests {
             elements: vec![el],
             textures,
             ambient_occlusion: true,
+            builtin: None,
+            display: HashMap::new(),
         };
         let b = bake(&m, 0, 90, false);
         assert_eq!(b.quads[0].dir(), Some(Dir::East));

@@ -40,6 +40,16 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
   `Rotation`. Variant textures come from the NBT `variant` field. Block displays, paintings
   and item frames (through their vanilla block models) are built in code. Players from `level.dat` are optional (`--players`). An unknown entity is
   drawn as a box the size of its hitbox (`--unknown-entities box|skip`).
+* **Items.** Dropped items, item frame contents, item displays, the items in the hands and
+  on the head of armour stands, mannequins, players and humanoid mobs, and worn armour.
+  A stack resolves through the jar's item model definition (`assets/<ns>/items/<id>.json`,
+  1.21.4+) against its components and display context; a property that needs a live
+  client (an item in use, the clock, the compass) takes the value of an item at rest. A
+  model with elements is baked as a block model and a flat item (`builtin/generated`) is
+  extruded as vanilla's `ItemModelGenerator` does; the model's display transform for the
+  context poses it. Armour layers come from the jar's `assets/<ns>/equipment/*.json` on the
+  humanoid armour meshes, and the shield is drawn; both are data in
+  `assets/item_models.json`. `EntityStats` counts the stacks drawn and not drawn by item id.
 * **Block entities.** Signs and hanging signs with their text (vanilla bitmap font from the
   jar, dye colour, glowing text and outline, `translate` keys from the `en_us` language
   files of the jar and resource packs), bells, lectern and enchanting-table books,
@@ -48,10 +58,20 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
   placement and per-block data come from the chunk's `block_entities`. The quads join the
   entity quads, so both modes and every backend draw the same geometry.
   `--no-block-entities` leaves them out.
+* **Text displays.** The `text` component (colour, bold, italic, `translate`) in the jar's
+  `minecraft:default` font, split as `Font.split` splits it at `line_width`, `alignment`,
+  `background` or `default_background`, `shadow`, `see_through`, `billboard` (turned to the
+  camera) and `transformation`, placed as `TextDisplayRenderer` places them. They are
+  one-sided; a see-through display is drawn last with no depth test in quick mode, and in HQ
+  mode the camera path meets it behind whatever hid it. Not read: `text_opacity`,
+  `brightness`. Characters outside the jar's bitmap fonts are left out, since the jar's
+  `include/unifont` reference has no providers.
 * **Lighting controls.** `--time` (ticks), or `--sun-altitude` and `--sun-azimuth`.
   `--exposure`, `--tonemap`, `--spp`, `--max-bounces`, `--ssaa` (quick mode).
 * **Tooling.** An `info` subcommand prints the world version, spawn, player position, and
-  block and entity statistics. An `assets` subcommand fetches the client jar.
+  block and entity statistics. An `assets` subcommand fetches the client jar and shows which
+  jar a version resolves to. `backends` lists the backends available on the machine, and
+  `demo-world` writes generated worlds to try things on.
 
 ## 3. Out of scope (explicitly deferred)
 
@@ -59,8 +79,8 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 |----------|-----|--------------|
 | Beds, shulker boxes, the conduit; open chest lids, ringing bells, italic or obfuscated sign text | Not needed yet | Add models to `block_entity_models.json` and a placement in `scene/block_entities.rs` |
 | Player head skins from the network | Renders read the save and local packs only | A skin given as a resource-pack `texture` in the profile is used |
-| Item rendering: dropped items, item frame contents, display entities | Needs the item model pipeline (`items/*.json`) | Reuse block baking for block items; extruded sprites for flat items |
-| Clouds, rain and snow, mob animation, armor, held items, player skins from the network | Not needed for the core scene | Incremental |
+| Items vanilla draws in Java code other than the shield (`minecraft:special`: chests, beds, banners, heads, shulker boxes, decorated pots, the conduit, copper golem statues); a filled map's picture; armour trims and the elytra | Each is a Java model or needs data beyond the item (the save's map data) | Models in `item_models.json`, as the shield is; the skull and chest models already exist in `block_entity_models.json` |
+| Clouds, rain and snow, mob animation, player skins from the network | Not needed for the core scene | Incremental |
 | Biome blending, mipmaps, anisotropic filtering in quick mode | Cosmetic | Incremental |
 | Denoising (Chunky uses an OIDN plugin) | External dependency | Optional `oidn` feature |
 | Emitter next-event estimation, volumetric fog, a physical sky model (Chunky's Nishita sky) | Quality improvements | The kernel structure already allows them |
@@ -134,7 +154,7 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 
 | Criterion | Result |
 |-----------|--------|
-| Tests | `cargo test --workspace`: 42 library unit, 2 CLI unit, 8 kernel and 13 integration tests (9 render, 4 library) pass. The integration tests ran for real (jar and Metal adapter present). |
+| Tests | `cargo test --workspace`: 42 library unit, 2 CLI unit, 8 kernel and 13 integration tests (9 render, 4 library) and 1 doc test pass. The integration tests ran for real (jar and Metal adapter present). |
 | One render path | The CLI's PNG equals the library's pixels in both modes on the block-entity gallery (integration test) and on the showcase at 1280×720 quick and 640×360 HQ, CPU and Metal. |
 | Embedding build | The library's default features (`gpu`): 96 packages in the normal tree on macOS, 98 on Linux gnu, 109 on Windows MSVC; `cargo check` passes for the five targets above. |
 | Real save, both modes, CPU + Metal | `datapack_test` (1.21.11) renders in all four combinations. Blocks, water, mannequins, an enderman, 68 rotated and scaled block displays, and glow squids (drawn as fallback boxes) all appear. |

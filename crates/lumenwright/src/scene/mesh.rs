@@ -10,6 +10,7 @@ use crate::assets::model::Dir;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+/// One quick-mode vertex, laid out for the GPU vertex buffer.
 pub struct Vertex {
     /// Camera-relative position.
     pub pos: [f32; 3],
@@ -20,26 +21,35 @@ pub struct Vertex {
 }
 
 #[derive(Default)]
+/// The quick-mode triangle mesh: a shared vertex list and two index lists,
+/// three indices per triangle.
 pub struct Mesh {
+    /// Every vertex the index lists refer to.
     pub vertices: Vec<Vertex>,
     /// Opaque + cutout triangles (alpha tested).
     pub opaque: Vec<u32>,
     /// Translucent triangles, sorted back to front.
     pub translucent: Vec<u32>,
+    /// Triangles drawn last with no depth test and blended (see-through text
+    /// displays), far to near by display.
+    pub see_through: Vec<u32>,
 }
 
 impl Mesh {
+    /// Number of triangles in both index lists.
     pub fn triangle_count(&self) -> usize {
-        (self.opaque.len() + self.translucent.len()) / 3
+        (self.opaque.len() + self.translucent.len() + self.see_through.len()) / 3
     }
 }
 
 #[derive(Clone, Copy, Debug)]
+/// Lighting inputs to the quick-mode vertex colours.
 pub struct Lighting {
     /// Daylight factor (vanilla `skyDarken`): 1 at noon, ~0.2 at midnight.
     pub sky_factor: f32,
     /// Vanilla brightness option: 0 = moody, 0.5 = default, 1 = bright.
     pub gamma: f32,
+    /// Smooth lighting and ambient occlusion; `false` is vanilla's flat lighting.
     pub smooth: bool,
 }
 
@@ -237,6 +247,24 @@ impl Chunk {
         inv_atlas: [f32; 2],
         eye: Vec3,
     ) {
+        let idx = self.push_vertices(corners, uvs, colors, inv_atlas, eye);
+        if alpha == Alpha::Translucent {
+            let c = (corners[0] + corners[2]) * 0.5 - eye;
+            self.translucent.push((c.length_squared(), idx));
+        } else {
+            self.opaque.extend_from_slice(&idx);
+        }
+    }
+
+    /// Adds a quad's vertices and returns its two triangles.
+    fn push_vertices(
+        &mut self,
+        corners: [Vec3; 4],
+        uvs: [[f32; 2]; 4],
+        colors: [[u8; 4]; 4],
+        inv_atlas: [f32; 2],
+        eye: Vec3,
+    ) -> [u32; 6] {
         let base = self.vertices.len() as u32;
         for i in 0..4 {
             self.vertices.push(Vertex {
@@ -246,13 +274,7 @@ impl Chunk {
             });
         }
         // TL, BL, BR, TR is counter-clockwise around the outward normal.
-        let idx = [base, base + 1, base + 2, base, base + 2, base + 3];
-        if alpha == Alpha::Translucent {
-            let c = (corners[0] + corners[2]) * 0.5 - eye;
-            self.translucent.push((c.length_squared(), idx));
-        } else {
-            self.opaque.extend_from_slice(&idx);
-        }
+        [base, base + 1, base + 2, base, base + 2, base + 3]
     }
 }
 
@@ -280,6 +302,7 @@ fn aabb_visible(planes: &[Vec4; 6], lo: Vec3, hi: Vec3) -> bool {
     })
 }
 
+/// What [`build_mesh`] needs to know about the view.
 pub struct MeshParams {
     /// Eye position in scene coordinates.
     pub eye: Vec3,
@@ -287,9 +310,15 @@ pub struct MeshParams {
     pub view_proj: Mat4,
     /// Horizontal render distance in blocks.
     pub max_distance: f32,
+    /// Daylight, brightness and smooth-lighting settings.
     pub lighting: Lighting,
 }
 
+/// Builds the quick-mode mesh for `scene`, blocks and entity quads together:
+/// sections outside the frustum or beyond `max_distance` are skipped, hidden
+/// faces are culled, vertex colours carry tint, directional shade, ambient
+/// occlusion and the lightmap, and translucent triangles are sorted back to
+/// front from `eye`.
 pub fn build_mesh(scene: &Scene, p: &MeshParams) -> Mesh {
     let t = std::time::Instant::now();
     let v = &scene.volume;
@@ -375,8 +404,7 @@ pub fn build_mesh(scene: &Scene, p: &MeshParams) -> Mesh {
         .collect();
 
     // Entities.
-    let mut ent = Chunk::default();
-    for (q, el) in scene.entity_quads.iter().zip(&scene.entity_quad_light) {
+    let entity_color = |q: &super::Quad, el: &super::EntityLight| -> [u8; 4] {
         let lp = el.pos;
         let w = [
             lp[0] + scene.origin[0],
@@ -395,12 +423,16 @@ pub fn build_mesh(scene: &Scene, p: &MeshParams) -> Mesh {
         };
         let tint = Vec3::new(q.tint[0] as f32, q.tint[1] as f32, q.tint[2] as f32) / 255.0;
         let c = tint * shade * lightmap(sky as f32, block as f32, &p.lighting);
-        let col = [
+        [
             (c.x * 255.0) as u8,
             (c.y * 255.0) as u8,
             (c.z * 255.0) as u8,
             255,
-        ];
+        ]
+    };
+    let mut ent = Chunk::default();
+    for (q, el) in scene.entity_quads.iter().zip(&scene.entity_quad_light) {
+        let col = entity_color(q, el);
         ent.push_quad(
             q.corners(),
             q.corner_uvs(),
@@ -409,6 +441,31 @@ pub fn build_mesh(scene: &Scene, p: &MeshParams) -> Mesh {
             inv_atlas,
             p.eye,
         );
+    }
+    // Text displays: with the entities, or drawn over everything.
+    let mut see_through = Chunk::default();
+    let mut see_through_order: Vec<(f32, [u32; 6])> = Vec::new();
+    for t in &scene.text_quads {
+        let col = entity_color(&t.quad, &t.light);
+        if t.see_through {
+            let idx = see_through.push_vertices(
+                t.quad.corners(),
+                t.quad.corner_uvs(),
+                [col; 4],
+                inv_atlas,
+                p.eye,
+            );
+            see_through_order.push(((t.anchor - p.eye).length_squared(), idx));
+        } else {
+            ent.push_quad(
+                t.quad.corners(),
+                t.quad.corner_uvs(),
+                [col; 4],
+                t.quad.alpha,
+                inv_atlas,
+                p.eye,
+            );
+        }
     }
 
     let mut mesh = Mesh::default();
@@ -425,6 +482,14 @@ pub fn build_mesh(scene: &Scene, p: &MeshParams) -> Mesh {
     }
     translucent.par_sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
     mesh.translucent = translucent.into_iter().flat_map(|(_, idx)| idx).collect();
+    // A stable sort keeps each display's background, shadow and text in that order.
+    let base = mesh.vertices.len() as u32;
+    mesh.vertices.extend_from_slice(&see_through.vertices);
+    see_through_order.sort_by(|a, b| b.0.total_cmp(&a.0));
+    mesh.see_through = see_through_order
+        .into_iter()
+        .flat_map(|(_, idx)| idx.map(|i| i + base))
+        .collect();
     log::info!(
         "mesh: {} vertices, {} triangles ({} translucent) in {:.2?}",
         mesh.vertices.len(),

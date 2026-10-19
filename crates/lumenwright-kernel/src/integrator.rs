@@ -7,7 +7,7 @@ use crate::rng::Rng;
 use crate::scene::{
     ALPHA_TRANSLUCENT, FLAG_ALPHA_MASK, FLAG_WATER, GpuQuad, SceneView, unpack_rgba,
 };
-use crate::trace::trace;
+use crate::trace::{is_see_through, see_through_hit, trace};
 
 const PI: f32 = core::f32::consts::PI;
 /// Upper bound on surface interactions per path (diffuse + specular + pass-through).
@@ -151,7 +151,26 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
     let sigma = V3::from4(p.water_color);
 
     for _ in 0..MAX_EVENTS {
-        let hit = trace(scene, o, d, tmin, f32::INFINITY);
+        let mut hit = trace(scene, o, d, tmin, f32::INFINITY);
+        // Until the first diffuse bounce, a see-through quad behind the surface the
+        // ray met is drawn instead of it (a translucent one with its own alpha).
+        let mut forced = false;
+        if bounces == 0
+            && p.see_through[1] > 0
+            && let Some(h) = hit
+            && !is_see_through(scene, h.quad)
+            && let Some(s) = see_through_hit(scene, o, d, h.t)
+        {
+            let sq = &scene.quads[s.quad as usize];
+            if sq.flags() & FLAG_ALPHA_MASK == ALPHA_TRANSLUCENT {
+                if rng.next() < (s.texel >> 24) as f32 / 255.0 {
+                    hit = Some(s);
+                    forced = true;
+                }
+            } else {
+                hit = Some(s);
+            }
+        }
         let h = match hit {
             None => {
                 if !in_water {
@@ -200,7 +219,7 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
             continue;
         }
 
-        if flags & FLAG_ALPHA_MASK == ALPHA_TRANSLUCENT && rng.next() >= alpha {
+        if !forced && flags & FLAG_ALPHA_MASK == ALPHA_TRANSLUCENT && rng.next() >= alpha {
             // Pass through (stained glass, ice...), filtered by the surface colour.
             beta = beta.mul(V3::ONE.lerp(albedo, alpha));
             o = pos + d * eps;

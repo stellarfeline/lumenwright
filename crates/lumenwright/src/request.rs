@@ -28,7 +28,9 @@ use crate::world::{Dimension, Entity, World};
 pub enum WorldSource<'a> {
     /// A save directory (the folder holding `level.dat`) and the dimension to read.
     Dir {
+        /// The save directory.
         path: &'a Path,
+        /// The dimension whose regions are read.
         dimension: Dimension,
     },
     /// A world the caller has already opened.
@@ -38,7 +40,9 @@ pub enum WorldSource<'a> {
 /// An inclusive rectangle of chunk coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ChunkRect {
+    /// The lowest chunk `[x, z]`, included.
     pub min: [i32; 2],
+    /// The highest chunk `[x, z]`, included.
     pub max: [i32; 2],
 }
 
@@ -68,6 +72,7 @@ pub enum UnknownEntities {
 pub struct EntityPolicy {
     /// Draw the entities stored in the loaded chunks.
     pub entities: bool,
+    /// How an entity with no model is drawn.
     pub unknown: UnknownEntities,
     /// Draw block entities whose look is Java code (signs, chests, banners...).
     pub block_entities: bool,
@@ -115,11 +120,15 @@ impl Default for QuickOptions {
 pub struct HqOptions {
     /// Samples per pixel.
     pub spp: u32,
+    /// Diffuse bounces per path after the first hit.
     pub max_bounces: u32,
+    /// Random seed; the same seed gives the same image.
     pub seed: u32,
     /// Emissive block strength.
     pub emitter_intensity: f32,
+    /// Linear multiplier applied to the radiance before tonemapping.
     pub exposure: f32,
+    /// The tonemapping operator from linear radiance to sRGB.
     pub tonemap: Tonemap,
 }
 
@@ -168,7 +177,9 @@ impl Default for Sky {
 /// A caller-stated sky for both modes.
 #[derive(Clone, Copy, Debug)]
 pub struct StatedSky {
+    /// The sky quick mode draws.
     pub quick: QuickSkyColours,
+    /// The sun and sky HQ mode traces.
     pub hq: HqSky,
 }
 
@@ -188,6 +199,7 @@ pub struct QuickSkyColours {
 /// One frame to draw. Every input is explicit.
 #[derive(Clone, Copy)]
 pub struct Request<'a> {
+    /// The world to draw.
     pub world: WorldSource<'a>,
     /// The chunks loaded; nothing outside them is drawn.
     pub chunks: ChunkRect,
@@ -195,20 +207,31 @@ pub struct Request<'a> {
     pub jar: &'a Path,
     /// Resource packs (zip or directory) layered over the jar, later ones winning.
     pub resource_packs: &'a [PathBuf],
+    /// The eye position, orientation and vertical field of view.
     pub camera: Camera,
+    /// Quick (rasterized, vanilla look) or HQ (path traced).
     pub mode: Mode,
+    /// The backend to draw with; [`BackendKind::Auto`] takes a GPU if one is available, else the CPU.
     pub backend: BackendKind,
+    /// Image width in pixels.
     pub width: u32,
+    /// Image height in pixels.
     pub height: u32,
+    /// Which entities and block entities are drawn.
     pub entities: EntityPolicy,
+    /// Options used in quick mode; ignored in HQ mode.
     pub quick: QuickOptions,
+    /// Options used in HQ mode; ignored in quick mode.
     pub hq: HqOptions,
+    /// The sky and daylight.
     pub sky: Sky,
 }
 
 /// A drawn frame.
 pub struct Rendered {
+    /// Image width in pixels.
     pub width: u32,
+    /// Image height in pixels.
     pub height: u32,
     /// RGBA8, sRGB, row major, top row first: `width * height * 4` bytes.
     pub rgba: Vec<u8>,
@@ -220,11 +243,15 @@ pub struct Rendered {
     pub backend_fallback: Option<String>,
     /// Seconds per stage, in order.
     pub timings: Vec<(&'static str, f64)>,
+    /// Chunks of the rectangle that exist in the save and were loaded.
     pub chunks_loaded: usize,
     /// Entities handed to the scene (stored ones plus players).
     pub entities_loaded: usize,
+    /// Block entities found in the loaded chunks.
     pub block_entities_loaded: usize,
+    /// Entity counts per kind: drawn with a model, drawn as a box, or skipped.
     pub entity_stats: EntityStats,
+    /// What happened to each block-entity kind.
     pub block_entity_stats: BlockEntityStats,
 }
 
@@ -233,7 +260,12 @@ pub struct Rendered {
 #[derive(Debug, Clone, PartialEq)]
 pub enum RequestError {
     /// Width or height is zero.
-    EmptyImage { width: u32, height: u32 },
+    EmptyImage {
+        /// The requested width.
+        width: u32,
+        /// The requested height.
+        height: u32,
+    },
     /// The client jar path is not a file.
     JarNotFound(PathBuf),
     /// A resource pack path does not exist.
@@ -242,7 +274,9 @@ pub enum RequestError {
     InvertedChunkRect(ChunkRect),
     /// None of the requested chunks exists in the save.
     NoChunks {
+        /// The requested rectangle.
         chunks: ChunkRect,
+        /// The region directory that was searched.
         region_dir: PathBuf,
     },
 }
@@ -362,6 +396,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
         unknown_entities_as_boxes: policy.unknown == UnknownEntities::Box,
         block_entities: policy.block_entities,
         eye: Some([cam.pos.x, cam.pos.y, cam.pos.z]),
+        view: Some([cam.yaw, cam.pitch]),
     };
     let block_entities = block_entities::parse_all(&area.block_entities);
     let scene = Scene::build(
@@ -562,6 +597,6 @@ pub fn hq_params(
         ],
         frame: [width, height, 0, o.max_bounces],
         misc_u: [o.seed, 1, hq.models.len() as u32, 0],
-        _reserved: [0; 4],
+        see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
     }
 }
