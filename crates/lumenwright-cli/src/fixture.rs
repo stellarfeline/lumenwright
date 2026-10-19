@@ -17,6 +17,8 @@ use lumenwright::world::region::write_region;
 pub const DATA_VERSION: i32 = 4671;
 pub const VERSION_NAME: &str = "1.21.11";
 
+mod emitters;
+pub use emitters::{CANDLE_ROOM_VIEW, FLOOR_Y, TORCH_ROOM_VIEW, candle_room, torch_room};
 mod text_displays;
 pub use text_displays::{TEXT_DISPLAYS, TextDisplayCase, text_display_gallery};
 

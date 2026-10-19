@@ -134,6 +134,10 @@ pub struct HqOptions {
     /// Brightness of an emissive surface as the camera sees it: its texel colour
     /// times its light level / 15 times this.
     pub emitter_glow: f32,
+    /// Next-event estimation towards emissive blocks. Off, emitters light the scene
+    /// only when a bounced path happens to meet them: the same image in expectation,
+    /// with far more noise (a reference for checking light sampling).
+    pub light_sampling: bool,
     /// Linear multiplier applied to the radiance before tonemapping.
     pub exposure: f32,
     /// The tonemapping operator from linear radiance to sRGB.
@@ -148,6 +152,7 @@ impl Default for HqOptions {
             seed: 0,
             emitter_intensity: 1.0,
             emitter_glow: 1.5,
+            light_sampling: true,
             exposure: 1.0,
             tonemap: Tonemap::Aces,
         }
@@ -739,7 +744,12 @@ pub fn hq_params(
             hq.quads.len() as u32,
         ],
         frame: [width, height, 0, o.max_bounces],
-        misc_u: [o.seed, 1, hq.models.len() as u32, hq.light_count],
+        misc_u: [
+            o.seed,
+            1,
+            hq.models.len() as u32,
+            if o.light_sampling { hq.light_count } else { 0 },
+        ],
         see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
     }
 }

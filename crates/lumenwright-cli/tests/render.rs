@@ -953,3 +953,183 @@ fn every_item_definition_in_the_jar_resolves() {
     );
     assert_eq!(drawn + undrawn, defs.len(), "{special:?}");
 }
+
+fn torch_room() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = tmp("torch-room");
+        fixture::torch_room().write(&d).unwrap();
+        d
+    })
+}
+
+/// Reads a little-endian PFM (rows bottom to top) into top-to-bottom RGB.
+fn read_pfm(p: &Path) -> (u32, u32, Vec<[f32; 3]>) {
+    let bytes = std::fs::read(p).unwrap();
+    let mut fields = Vec::new();
+    let mut at = 0;
+    while fields.len() < 4 {
+        let start = at;
+        while !bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        fields.push(String::from_utf8_lossy(&bytes[start..at]).to_string());
+        at += 1;
+    }
+    let (w, h): (u32, u32) = (fields[1].parse().unwrap(), fields[2].parse().unwrap());
+    let floats: Vec<f32> = bytes[at..]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
+        .collect();
+    let mut out = vec![[0.0; 3]; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = (((h - 1 - y) * w + x) * 3) as usize;
+            out[(y * w + x) as usize] = [floats[i], floats[i + 1], floats[i + 2]];
+        }
+    }
+    (w, h, out)
+}
+
+/// The block light the game gives the floor `d` blocks from the torch, against the
+/// light level an HQ render of the same floor reads as. The quick render (the game's
+/// lightmap over the save's block light) is the scale: each HQ floor pixel, tonemapped,
+/// is placed on the curve of quick pixel values by light level. The mean absolute
+/// difference over light levels 12 down to 3 (distances 2 to 11) must be at most 1.5
+/// levels and no single level off by more than 3: inverse-square falloff cannot follow
+/// the game's straight line (it is brighter close to the torch and darker far from
+/// it), and these bounds say how closely the calibration holds it to the line.
+#[test]
+fn emitter_calibration() {
+    let jar = require_jar!();
+    let dir = tmp("calibration");
+    let (w, h) = (320u32, 180u32);
+    let size = [
+        "--width",
+        "320",
+        "--height",
+        "180",
+        "--time",
+        "18000",
+        "--render-distance",
+        "3",
+    ];
+    let mut quick_args = vec!["--mode", "quick", "--backend", "cpu"];
+    quick_args.extend_from_slice(&size);
+    quick_args.extend_from_slice(&fixture::TORCH_ROOM_VIEW);
+    let quick = render(torch_room(), &jar, &dir.join("quick.png"), &quick_args).unwrap();
+    let pfm = dir.join("hq.pfm");
+    let pfm_arg = pfm.display().to_string();
+    let mut hq_args = vec![
+        "--mode",
+        "hq",
+        "--backend",
+        "cpu",
+        "--spp",
+        "256",
+        "--hdr-output",
+        &pfm_arg,
+    ];
+    hq_args.extend_from_slice(&size);
+    hq_args.extend_from_slice(&fixture::TORCH_ROOM_VIEW);
+    render(torch_room(), &jar, &dir.join("hq.png"), &hq_args).unwrap();
+    let q = load(&dir.join("quick.png"));
+    let (pw, ph, hdr) = read_pfm(&pfm);
+    assert_eq!((pw, ph), (w, h));
+
+    let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    let floor = fixture::FLOOR_Y as f64 + 1.0;
+    let mut quick_v = Vec::new(); // display luma 0..1 by distance 1..=15
+    let mut hq_lin = Vec::new(); // linear HDR by distance
+    for d in 1..=15 {
+        let (px, py) = project(&quick.camera, [d as f64 + 0.5, floor, 0.5], w, h).unwrap();
+        let (mut a, mut b, mut n) = (0.0f32, [0.0f32; 3], 0.0f32);
+        for y in py - 1..=py + 1 {
+            for x in px - 1..=px + 1 {
+                let p = q.get_pixel(x as u32, y as u32).0;
+                a += luma([p[0] as f32, p[1] as f32, p[2] as f32]) / 255.0;
+                let c = hdr[(y as u32 * w + x as u32) as usize];
+                for i in 0..3 {
+                    b[i] += c[i];
+                }
+                n += 1.0;
+            }
+        }
+        quick_v.push(a / n);
+        hq_lin.push([b[0] / n, b[1] / n, b[2] / n]);
+    }
+    // The light level a display value reads as on the quick curve (level 14 - d at d).
+    let level_of = |v: f32| -> f32 {
+        if v >= quick_v[0] {
+            return 13.0;
+        }
+        for i in 0..quick_v.len() - 1 {
+            let (hi, lo) = (quick_v[i], quick_v[i + 1]);
+            if v <= hi && v >= lo {
+                let f = if hi > lo { (hi - v) / (hi - lo) } else { 0.0 };
+                return (13 - i as i32) as f32 - f;
+            }
+        }
+        -1.0
+    };
+    let shown = |k: f32| -> Vec<f32> {
+        hq_lin
+            .iter()
+            .map(|c| {
+                let px = lumenwright::render::post::tonemap(
+                    &[[c[0] * k, c[1] * k, c[2] * k]],
+                    1.0,
+                    lumenwright::render::post::Tonemap::Aces,
+                )[0];
+                let ch = |s: u32| ((px >> s) & 0xFF) as f32 / 255.0;
+                luma([ch(0), ch(8), ch(16)])
+            })
+            .collect()
+    };
+    let errors = |k: f32| -> Vec<f32> {
+        shown(k)
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| level_of(v) - (13 - i as i32) as f32)
+            .collect()
+    };
+    let band = 1..11; // distances 2..=11, levels 12..=3
+    let mean_abs = |e: &[f32]| e[band.clone()].iter().map(|x| x.abs()).sum::<f32>() / 10.0;
+    let at_one = errors(1.0);
+    let shown_one = shown(1.0);
+    eprintln!("torch calibration (distance, game level, quick luma, hq luma, hq reads as level):");
+    for d in 1..=15usize {
+        eprintln!(
+            "  {d:2} {:3} {:.3} {:.3} {:6.2}",
+            14 - d as i32,
+            quick_v[d - 1],
+            shown_one[d - 1],
+            (13 - (d as i32 - 1)) as f32 + at_one[d - 1]
+        );
+    }
+    // The power multiplier that would fit best, on a log grid from 1/8 to 8.
+    let (mut best_k, mut best_e) = (1.0f32, f32::MAX);
+    for i in -30..=30 {
+        let k = 2f32.powf(i as f32 / 10.0);
+        let e = mean_abs(&errors(k));
+        if e < best_e {
+            (best_k, best_e) = (k, e);
+        }
+    }
+    let worst = at_one[band.clone()]
+        .iter()
+        .fold(0.0f32, |m, x| m.max(x.abs()));
+    eprintln!(
+        "torch calibration: mean |level error| {:.2} (worst {worst:.2}) over levels 12..3; \
+         best power multiplier {best_k:.3} gives {best_e:.2}",
+        mean_abs(&at_one)
+    );
+    assert!(
+        mean_abs(&at_one) <= 1.5,
+        "mean level error {:.2}",
+        mean_abs(&at_one)
+    );
+    assert!(worst <= 3.0, "worst level error {worst:.2}");
+}
