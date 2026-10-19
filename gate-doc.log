@@ -1,0 +1,7 @@
+   Compiling lumenwright v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright)
+    Checking lumenwright-kernel v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-kernel)
+ Documenting lumenwright-kernel v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-kernel)
+ Documenting lumenwright v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright)
+ Documenting lumenwright-cli v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-cli)
+    Finished `dev` profile [optimized + debuginfo] target(s) in 1.81s
+   Generated /Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/target/doc/lumenwright/index.html and 2 other files

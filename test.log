@@ -1,0 +1,242 @@
+   Compiling lumenwright-kernel v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-kernel)
+   Compiling lumenwright v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright)
+   Compiling lumenwright-cli v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-cli)
+    Finished `test` profile [optimized + debuginfo] target(s) in 16.22s
+     Running unittests src/lib.rs (target/debug/deps/lumenwright-c6aba955aa654c37)
+
+running 71 tests
+test assets::biome::tests::plains_sky_is_vanilla_blue ... ok
+test assets::blockinfo::tests::fluid_heights ... ok
+test assets::biome::tests::unknown_biome_defaults ... ok
+test assets::blockstate::tests::weighted_choice_is_deterministic_and_covers_all ... ok
+test assets::blockinfo::tests::tints ... ok
+test assets::environment::tests::colour_helpers_match_argb ... ok
+test assets::blockstate::tests::variant_keys ... ok
+test assets::blockinfo::tests::partial_emitters ... ok
+test assets::blockstate::tests::multipart_when ... ok
+test assets::blockinfo::tests::emitters ... ok
+test assets::environment::tests::no_attributes_is_none ... ok
+test assets::atlas::tests::packs_missing_and_unknown ... ok
+test assets::items::tests::a_missing_definition_is_named ... ok
+test assets::items::tests::range_dispatch_picks_the_highest_threshold_reached ... ok
+test assets::environment::tests::day_cycle_layers_dimension_and_timeline ... ok
+test assets::items::tests::display_context_selects_and_conditions_rest ... ok
+test assets::items::tests::select_takes_the_case_or_the_fallback ... ok
+test assets::items::tests::stacks_read_both_formats_and_skip_empty_slots ... ok
+test assets::items::tests::tints_read_components_or_their_default ... ok
+test assets::mipmap::tests::cutout_keeps_alpha_test_coverage ... ok
+test assets::mipmap::tests::mcmeta_texture_section ... ok
+test assets::lang::tests::formats_like_translatable_contents ... ok
+test assets::mipmap::tests::mean_is_taken_in_linear_light ... ok
+test assets::mipmap::tests::opaque_chain_halves_to_one_texel ... ok
+test assets::mipmap::tests::tables_match_the_client_endpoints ... ok
+test assets::font::tests::measures_glyphs_like_bitmap_provider ... ok
+test assets::model::tests::cube_faces_point_outward ... ok
+test assets::model::tests::default_uvs_full_face ... ok
+test assets::model::tests::uv_rotation_matches_vanilla_shift ... ok
+test assets::font::tests::unihex_glyphs_follow_the_client_and_bitmaps_come_first ... ok
+test assets::model::tests::y_rotation_moves_north_to_east ... ok
+test assets::unifont::tests::a_blank_glyph_is_as_wide_as_its_row_plus_one ... ok
+test assets::unifont::tests::filters_follow_the_default_options ... ok
+test assets::unifont::tests::a_glyph_is_cut_to_the_columns_it_lights ... ok
+test assets::unifont::tests::rows_of_every_width_are_left_aligned ... ok
+test assets::unifont::tests::texture_locations_round_trip ... ok
+test assets::unifont::tests::a_size_override_replaces_the_cut ... ok
+test assets::unifont::tests::malformed_lines_are_refused ... ok
+test render::post::tests::downsample_averages ... ok
+test render::post::tests::tonemap_endpoints ... ok
+test render::sky::tests::altitude_azimuth ... ok
+test render::sky::tests::sun_follows_vanilla_day_cycle ... ok
+test render::texture::tests::magnified_texels_stay_sharp ... ok
+test scene::block_entities::tests::banner_layers_blend_in_their_colour ... ok
+test scene::block_entities::tests::dye_colours_match_dyecolor ... ok
+test scene::block_entities::tests::sign_woods ... ok
+test scene::block_entities::tests::builtin_models_parse_and_cite_their_source ... ok
+test scene::block_entities::tests::skull_rotation_8_faces_south ... ok
+test scene::camera::tests::basis_is_right_handed ... ok
+test scene::camera::tests::look_at_roundtrip ... ok
+test scene::camera::tests::minecraft_yaw_convention ... ok
+test scene::camera::tests::projection_maps_forward_point_to_center ... ok
+test scene::block_entities::tests::chest_lock_faces_the_facing_direction ... ok
+test scene::entities::tests::cube_faces_point_outward_and_cover_box ... ok
+test scene::entities::text_display::tests::a_fixed_display_faces_south_above_its_origin ... ok
+test scene::entities::text_display::tests::background_follows_the_flags ... ok
+test scene::items::tests::armour_items_name_their_asset_and_slot ... ok
+test scene::mesh::tests::lightmap_extremes ... ok
+test scene::items::tests::a_flat_item_is_a_slab_with_one_face_per_open_texel_edge ... ok
+test scene::mesh::tests::vanilla_face_shades ... ok
+test scene::items::tests::display_transforms_resolve_through_parents_and_mirror_left ... ok
+test scene::text::tests::flattens_every_stored_form ... ok
+test scene::text::tests::lines_split_like_string_splitter ... ok
+test scene::text::tests::long_lines_break_at_a_space ... ok
+test world::chunk::tests::bits ... ok
+test world::chunk::tests::unpack_non_spanning ... ok
+test world::region::tests::lz4_block_stream ... ok
+test world::region::tests::region_name ... ok
+test world::region::tests::region_roundtrip ... ok
+test scene::entities::tests::pig_faces_south_at_yaw_zero ... ok
+test scene::entities::tests::builtin_models_parse ... ok
+
+test result: ok. 71 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/lumenwright_cli-3416d381eaf408d8)
+
+running 6 tests
+test values::tests::every_value_converts_both_ways ... ok
+test unifont::tests::offline_with_nothing_cached_is_refused_without_the_network ... ok
+test unifont::tests::a_cached_file_that_no_longer_matches_its_hash_is_refused_by_name ... ok
+test unifont::tests::a_cached_unifont_is_used_without_the_network ... ok
+test unifont::tests::an_explicit_directory_is_checked_and_beats_the_cache ... ok
+test fixture::tests::roundtrip_through_reader ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (target/debug/deps/lumenwright-c5c70d1a3006d534)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/library.rs (target/debug/deps/library-0c2ffd8180821e52)
+
+running 5 tests
+test a_missing_jar_is_refused_by_name_before_anything_is_read ... ok
+test a_stated_sky_is_drawn_as_given ... ok
+wrote /var/folders/lb/dq8bjmk112dctscc71kvwnzr0000gn/T/lumenwright-lib-6690-cli-vs-lib/quick.png (192x108) with backend cpu (10 threads)
+  open world            0.144s
+  load world            0.001s
+  load assets           0.278s
+  build scene           0.094s
+  build mesh            0.001s
+  render                0.003s
+  write image           0.000s
+  total                 0.521s
+noon (6000): sky #78a7ff, fog #b2ceff; zenith-side pixel [131, 175, 255], vanilla [131.3, 174.6, 255.0]
+dusk (12500): sky #4d6ca5, fog #7689ab; zenith-side pixel [85, 114, 166], vanilla [85.0, 113.7, 166.2]
+wrote /var/folders/lb/dq8bjmk112dctscc71kvwnzr0000gn/T/lumenwright-lib-6690-cli-vs-lib/hq.png (192x108) with backend cpu (10 threads)
+  open world            0.047s
+  load world            0.001s
+  load assets           0.202s
+  build scene           0.085s
+  build voxel scene     0.001s
+  render                0.036s
+  write image           0.001s
+  total                 0.372s
+midnight (18000): sky #000000, fog #080911; zenith-side pixel [2, 2, 3], vanilla [1.6, 1.8, 3.3]
+test quick_sky_follows_the_vanilla_day ... ok
+test cli_png_equals_library_pixels ... ok
+test cpu_pixels_are_identical_across_thread_counts ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.41s
+
+     Running tests/render.rs (target/debug/deps/render-5b2975ee2a0e3276)
+
+running 12 tests
+1505 item definitions: 1428 drawn, 77 special (not drawn): {"minecraft:banner": 16, "minecraft:bed": 16, "minecraft:chest": 11, "minecraft:conduit": 1, "minecraft:copper_golem_statue": 8, "minecraft:decorated_pot": 1, "minecraft:head": 6, "minecraft:player_head": 1, "minecraft:shulker_box": 17}
+test every_item_definition_in_the_jar_resolves ... ok
+wrote /var/folders/lb/dq8bjmk112dctscc71kvwnzr0000gn/T/lumenwright-it-6703-cli/cli.png (64x36) with backend cpu (10 threads)
+  open world            0.643s
+  load world            0.002s
+  load assets           0.965s
+  build scene           0.008s
+  build mesh            0.018s
+  render                0.011s
+  write image           0.001s
+  total                 1.647s
+test cli_info_and_render ... ok
+test hq_cpu_produces_a_lit_image ... ok
+test quick_mode_draws_entities ... ok
+test quick_top_down_colours_match_terrain ... ok
+mipmap levels 0: high-frequency energy 5271.9, mean |luma change| under a 0.05-block shift 12.40/255 (rows 79..100, 320 px wide)
+hq showcase: mean luminance differs by 0.010% between CPU and GPU
+hq showcase: 0.097% of pixels differ by more than 16/255 between CPU and GPU
+quick showcase: 0.064% of pixels differ by more than 8/255 between CPU and GPU
+test block_entities_render_in_both_modes ... ok
+test renders_are_deterministic ... ok
+mipmap levels 4: high-frequency energy 1496.8, mean |luma change| under a 0.05-block shift 0.23/255 (rows 79..100, 320 px wide)
+test mipmaps_calm_distant_textures ... ok
+quick block-entities: 0.012% of pixels differ by more than 8/255 between CPU and GPU
+test items_draw_in_both_modes ... ok
+hq block-entities: mean luminance differs by 0.000% between CPU and GPU
+hq block-entities: 0.000% of pixels differ by more than 16/255 between CPU and GPU
+test sign_text_reads_in_both_modes ... ok
+quick items: 0.062% of pixels differ by more than 8/255 between CPU and GPU
+test gpu_matches_cpu_in_quick_mode ... ok
+hq items: mean luminance differs by 0.001% between CPU and GPU
+hq items: 0.000% of pixels differ by more than 16/255 between CPU and GPU
+test gpu_matches_cpu_in_hq_mode ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.13s
+
+     Running tests/text_displays.rs (target/debug/deps/text_displays-019199fb6bf837f1)
+
+running 8 tests
+Gpu Quick overview at 1 spp: 0.0015% of pixels off by more than 8, mean luminance 137.703 vs 137.703 (0.0002%), text pixels off 0 of 432
+test transformation_scales_and_turns_the_text ... ok
+Gpu Quick see_through at 1 spp: 0.0000% of pixels off by more than 8, mean luminance 94.128 vs 94.116 (0.0130%), text pixels off 0 of 2463
+test cpu_text_displays_are_identical_across_thread_counts ... ok
+test lines_align_and_wrap ... ok
+test a_text_component_keeps_its_colours_and_bold ... ok
+Gpu Quick component at 1 spp: 0.0039% of pixels off by more than 8, mean luminance 93.701 vs 93.693 (0.0089%), text pixels off 2 of 1651
+Quick: see-through 0.02070, hidden 0.00000
+Gpu Hq overview at 16 spp: 0.0000% of pixels off by more than 16, mean luminance 188.122 vs 188.122 (0.0000%), text pixels off 0 of 465
+test billboards_turn_to_the_camera ... ok
+Gpu Hq see_through at 16 spp: 0.0008% of pixels off by more than 16, mean luminance 169.616 vs 169.616 (0.0001%), text pixels off 1 of 2278
+Gpu Hq component at 16 spp: 0.0000% of pixels off by more than 16, mean luminance 173.646 vs 173.646 (0.0000%), text pixels off 0 of 2933
+test gpu_matches_cpu_on_text_displays ... ok
+Hq: see-through 0.02131, hidden 0.00000
+test backgrounds_shadows_and_see_through ... ok
+test every_text_display_is_drawn_in_both_modes ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.14s
+
+     Running tests/unifont.rs (target/debug/deps/unifont-becf48f5a40d065c)
+
+running 5 tests
+test a_missing_or_mismatched_unifont_is_refused_by_name ... ok
+test the_command_refuses_offline_without_a_unifont_and_names_it ... ok
+test a_caller_supplies_the_unifont_itself_with_no_network ... ok
+ink 1424, expected 1289 from 252 lit texels of 2.26 pixels
+test the_ink_follows_the_bitmaps_of_the_hex_file ... ok
+display glyph pixels: before 0, after 1424
+sign glyph pixels: before 0, after 301
+test chinese_text_is_drawn_on_a_display_and_on_a_sign ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+
+     Running unittests src/lib.rs (target/debug/deps/lumenwright_kernel-f797a704e559469f)
+
+running 10 tests
+test tests::empty_scene_shows_sky ... ok
+test tests::ray_from_outside_grid_enters_it ... ok
+test tests::a_see_through_quad_is_found_behind_what_hides_it ... ok
+test tests::ray_misses_everything ... ok
+test tests::oblique_rays_hit_cube_top ... ok
+test tests::ray_reaches_uniform_brick ... ok
+test tests::front_only_quads_are_met_from_the_front_only ... ok
+test tests::entity_overlay_quads_are_hit_and_alpha_tested ... ok
+test tests::ray_skips_empty_brick_and_hits_cube ... ok
+test tests::rng_matches_reference_values ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests lumenwright
+
+running 1 test
+test crates/lumenwright/src/lib.rs - (line 43) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.38s; merged doctests compilation took 0.37s
+   Doc-tests lumenwright_cli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests lumenwright_kernel
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

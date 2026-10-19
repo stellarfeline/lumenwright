@@ -204,7 +204,7 @@ mod tests {
         writeln!(zip, "4E00:{}", "F".repeat(64)).unwrap();
         zip.finish().unwrap();
         let sha = |p: &str| {
-            sha1_smol::Sha1::from(&std::fs::read(dir.join(p)).unwrap())
+            sha1_smol::Sha1::from(std::fs::read(dir.join(p)).unwrap())
                 .digest()
                 .to_string()
         };

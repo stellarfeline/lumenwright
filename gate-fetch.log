@@ -1,0 +1,5 @@
+[2026-10-19T21:47:00.998Z INFO  lumenwright_cli::jar] fetching Minecraft version manifest
+[2026-10-19T21:47:01.337Z INFO  lumenwright_cli::unifont] fetching asset index 29
+[2026-10-19T21:47:01.467Z INFO  lumenwright_cli::unifont] downloading minecraft/font/include/unifont.json (3 KB)
+[2026-10-19T21:47:01.650Z INFO  lumenwright_cli::unifont] downloading minecraft/font/unifont.zip (1523 KB)
+[2026-10-19T21:47:01.905Z INFO  lumenwright_cli::unifont] saved /Users/steve235lab/Documents/projects/delvewright-worktrees/.scratch-lw-unifont/cache/unifont/1.21.11

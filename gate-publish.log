@@ -1,0 +1,194 @@
+    Updating crates.io index
+   Packaging lumenwright-kernel v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-kernel)
+    Updating crates.io index
+    Packaged 13 files, 83.2KiB (27.3KiB compressed)
+   Packaging lumenwright v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright)
+    Updating crates.io index
+    Packaged 52 files, 943.7KiB (201.0KiB compressed)
+   Packaging lumenwright-cli v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-cli)
+    Updating crates.io index
+    Packaged 20 files, 290.8KiB (82.0KiB compressed)
+   Verifying lumenwright-kernel v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-kernel)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling libm v0.2.16
+   Compiling syn v3.0.9
+   Compiling bytemuck_derive v1.12.1
+   Compiling bytemuck v1.25.2
+   Compiling lumenwright-kernel v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/target/package/lumenwright-kernel-0.1.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.86s
+   Verifying lumenwright v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright)
+    Updating crates.io index
+   Unpacking lumenwright-kernel v0.1.0 (registry `/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/target/package/tmp-registry`)
+   Compiling unicode-ident v1.0.27
+   Compiling cfg_aliases v0.2.2
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling objc2 v0.6.5
+   Compiling objc2-encode v4.1.0
+   Compiling autocfg v1.5.1
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.3
+   Compiling libc v0.2.190
+   Compiling thiserror v2.0.21
+   Compiling proc-macro2 v1.0.107
+   Compiling zerocopy v0.8.63
+   Compiling rustc-hash v1.1.0
+   Compiling hashbrown v0.17.1
+   Compiling naga v30.0.1
+   Compiling parking_lot_core v0.9.12
+   Compiling log v0.4.34
+   Compiling num-traits v0.2.19
+   Compiling quote v1.0.47
+   Compiling bit-vec v0.9.1
+   Compiling unicode-width v0.2.2
+   Compiling simd-adler32 v0.3.10
+   Compiling syn v3.0.9
+   Compiling indexmap v2.14.2
+   Compiling syn v2.0.119
+   Compiling bit-set v0.10.0
+   Compiling arrayvec v0.7.8
+   Compiling raw-window-handle v0.6.2
+   Compiling crc32fast v1.5.2
+   Compiling codespan-reporting v0.13.1
+   Compiling scopeguard v1.2.0
+   Compiling adler2 v2.0.1
+   Compiling smallvec v1.16.3
+   Compiling once_cell v1.21.4
+   Compiling crossbeam-utils v0.8.23
+   Compiling static_assertions v1.1.0
+   Compiling serde_core v1.0.229
+   Compiling lock_api v0.4.14
+   Compiling wgpu-hal v30.0.1
+   Compiling crossbeam-epoch v0.9.21
+   Compiling miniz_oxide v0.9.1
+   Compiling libloading v0.8.9
+   Compiling profiling v1.0.18
+   Compiling crossbeam-deque v0.8.8
+   Compiling wgpu-core v30.0.1
+   Compiling nix v0.31.3
+   Compiling flate2 v1.1.10
+   Compiling rayon-core v1.13.0
+   Compiling zmij v1.0.23
+   Compiling objc2-core-foundation v0.3.2
+   Compiling block2 v0.6.2
+   Compiling serde v1.0.229
+   Compiling litrs v1.0.1
+   Compiling miniz_oxide v0.8.9
+   Compiling fdeflate v0.3.7
+   Compiling wgpu v30.0.1
+   Compiling anyhow v1.0.104
+   Compiling pxfm v0.1.30
+   Compiling document-features v0.2.12
+   Compiling parking_lot v0.12.5
+   Compiling serde_json v1.0.154
+   Compiling memchr v2.8.3
+   Compiling png v0.18.1
+   Compiling lumenwright v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/target/package/lumenwright-0.1.0)
+   Compiling either v1.19.0
+   Compiling typed-path v0.12.3
+   Compiling objc2-foundation v0.3.2
+   Compiling bytemuck_derive v1.12.1
+   Compiling thiserror-impl v2.0.21
+   Compiling objc2-core-graphics v0.3.2
+   Compiling serde_derive v1.0.229
+   Compiling byteorder-lite v0.1.0
+   Compiling byteorder v1.5.0
+   Compiling cesu8 v1.1.0
+   Compiling itoa v1.0.18
+   Compiling bytemuck v1.25.2
+   Compiling twox-hash v2.1.5
+   Compiling rayon v1.12.0
+   Compiling lz4_flex v0.14.0
+   Compiling lumenwright-kernel v0.1.0
+   Compiling naga-types v30.0.1
+   Compiling wgpu-types v30.0.1
+   Compiling serde_bytes v0.11.19
+   Compiling zip v9.0.3
+   Compiling zerocopy-derive v0.8.63
+   Compiling glam v0.34.1
+   Compiling pollster v1.0.1
+   Compiling moxcms v0.8.1
+   Compiling objc2-metal v0.3.2
+   Compiling fastnbt v2.6.3
+   Compiling objc2-quartz-core v0.3.2
+   Compiling image v0.25.10
+   Compiling raw-window-metal v1.1.0
+   Compiling half v2.7.1
+   Compiling wgpu-naga-bridge v30.0.1
+   Compiling wgpu-core-deps-apple v30.0.1
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 25.36s
+   Verifying lumenwright-cli v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-cli)
+    Updating crates.io index
+   Unpacking lumenwright v0.1.0 (registry `/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/target/package/tmp-registry`)
+   Compiling log v0.4.34
+   Compiling syn v3.0.9
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+   Compiling zeroize v1.9.1
+   Compiling utf8parse v0.2.2
+   Compiling aho-corasick v1.1.5
+   Compiling getrandom v0.2.17
+   Compiling httparse v1.10.1
+   Compiling regex-syntax v0.8.11
+   Compiling anstyle-parse v1.0.0
+   Compiling cc v1.8.0
+   Compiling rustls-pki-types v1.15.1
+   Compiling colorchoice v1.0.5
+   Compiling untrusted v0.9.0
+   Compiling anstyle v1.0.14
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling anstyle-query v1.1.5
+   Compiling rustls v0.23.46
+   Compiling anstream v1.0.0
+   Compiling bytes v1.12.1
+   Compiling heck v0.5.0
+   Compiling base64 v0.23.1
+   Compiling jiff-core v0.1.1
+   Compiling clap_lex v1.1.1
+   Compiling subtle v2.6.1
+   Compiling strsim v0.11.1
+   Compiling http v1.5.0
+   Compiling lumenwright v0.1.0
+   Compiling clap_builder v4.6.7
+   Compiling webpki-roots v1.0.9
+   Compiling percent-encoding v2.3.2
+   Compiling utf8-zero v0.8.1
+   Compiling regex-automata v0.4.18
+   Compiling sha1_smol v1.0.1
+   Compiling jiff v0.2.38
+   Compiling ureq-proto v0.6.4
+   Compiling ring v0.17.14
+   Compiling bytemuck_derive v1.12.1
+   Compiling thiserror-impl v2.0.21
+   Compiling serde_derive v1.0.229
+   Compiling clap_derive v4.6.7
+   Compiling regex v1.13.1
+   Compiling env_filter v2.0.0
+   Compiling bytemuck v1.25.2
+   Compiling env_logger v0.11.11
+   Compiling thiserror v2.0.21
+   Compiling naga-types v30.0.1
+   Compiling lumenwright-kernel v0.1.0
+   Compiling image v0.25.10
+   Compiling wgpu-types v30.0.1
+   Compiling naga v30.0.1
+   Compiling clap v4.6.7
+   Compiling serde v1.0.229
+   Compiling fastnbt v2.6.3
+   Compiling rustls-webpki v0.103.15
+   Compiling ureq v3.4.2
+   Compiling wgpu-naga-bridge v30.0.1
+   Compiling wgpu-hal v30.0.1
+   Compiling wgpu-core-deps-apple v30.0.1
+   Compiling wgpu-core v30.0.1
+   Compiling wgpu v30.0.1
+   Compiling lumenwright-cli v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/target/package/lumenwright-cli-0.1.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 43.50s
+   Uploading lumenwright-kernel v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-kernel)
+warning: aborting upload due to dry run
+   Uploading lumenwright v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright)
+warning: aborting upload due to dry run
+   Uploading lumenwright-cli v0.1.0 (/Users/steve235lab/Documents/projects/delvewright-worktrees/wt-lw-unifont/crates/lumenwright-cli)
+warning: aborting upload due to dry run
