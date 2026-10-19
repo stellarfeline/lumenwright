@@ -37,6 +37,8 @@ pub unsafe extern "ptx-kernel" fn pt_render(
     atlas_len: u32,
     lights: *const GpuLight,
     lights_len: u32,
+    emitters: *const u32,
+    emitters_len: u32,
     accum: *mut [f32; 4],
     sample_start: u32,
     samples: u32,
@@ -55,6 +57,7 @@ pub unsafe extern "ptx-kernel" fn pt_render(
             quads: slice::from_raw_parts(quads, quads_len as usize),
             atlas: slice::from_raw_parts(atlas, atlas_len as usize),
             lights: slice::from_raw_parts(lights, lights_len as usize),
+            emitters: slice::from_raw_parts(emitters, emitters_len as usize),
         };
         let idx = (y * p.frame[0] + x) as usize;
         let mut acc = *accum.add(idx);

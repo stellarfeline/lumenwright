@@ -147,6 +147,16 @@ fn pick_light(scene: &SceneView, u: f32) -> u32 {
     lo
 }
 
+/// Emitted light reaching a surface `dist` blocks away is scaled by `min(dist², 1)`:
+/// its falloff is `1 / max(dist², 1)` rather than `1 / dist²` (Chunky's emitter
+/// sampling does the same), so a surface touching a lamp is lit as one a block away
+/// rather than without bound. Light sampling and BSDF hits apply it alike.
+#[inline(always)]
+fn near_field(dist: f32) -> f32 {
+    let d2 = dist * dist;
+    if d2 < 1.0 { d2 } else { 1.0 }
+}
+
 /// Power heuristic (β = 2) weight of a strategy with density `a` against one with `b`.
 #[inline(always)]
 fn power_heuristic(a: f32, b: f32) -> f32 {
@@ -154,18 +164,38 @@ fn power_heuristic(a: f32, b: f32) -> f32 {
     if a2 + b2 > 0.0 { a2 / (a2 + b2) } else { 0.0 }
 }
 
-/// Solid-angle density with which light sampling picks a point on quad `q`
-/// at distance `dist` along `d` (unit) from the shading point.
+/// The probability light sampling gives texel cell `k` of the emitter-table entry at `e`.
 #[inline(always)]
-fn light_pdf(q: &GpuQuad, d: V3, dist: f32) -> f32 {
+fn texel_share(scene: &SceneView, e: usize, k: usize) -> f32 {
+    let hi = f32::from_bits(scene.emitters[e + 4 + k]);
+    let lo = if k > 0 {
+        f32::from_bits(scene.emitters[e + 3 + k])
+    } else {
+        0.0
+    };
+    hi - lo
+}
+
+/// Solid-angle density with which light sampling picks the point `(s, t)` of quad
+/// `q`, at distance `dist` along `d` (unit) from the shading point.
+#[inline(always)]
+fn light_pdf(scene: &SceneView, q: &GpuQuad, d: V3, dist: f32, s: f32, t: f32) -> f32 {
+    let Some(e) = q.emitter() else {
+        return 0.0;
+    };
+    let e = e as usize;
     let nq = q.normal();
     let area = nq.length();
     let cos_l = abs(nq.dot(d)) / area;
     if cos_l < 1e-6 {
-        0.0
-    } else {
-        q.light_pick() * dist * dist / (area * cos_l)
+        return 0.0;
     }
+    let (ns, nt) = (scene.emitters[e + 1], scene.emitters[e + 2]);
+    let i = ((s * ns as f32) as u32).min(ns - 1);
+    let j = ((t * nt as f32) as u32).min(nt - 1);
+    let share = texel_share(scene, e, (j * ns + i) as usize);
+    let pick = f32::from_bits(scene.emitters[e]);
+    pick * share * (ns * nt) as f32 / area * dist * dist / cos_l
 }
 
 /// Next-event estimation towards one emissive quad, weighted by MIS against
@@ -174,10 +204,28 @@ fn light_pdf(q: &GpuQuad, d: V3, dist: f32) -> f32 {
 fn sample_emitter(scene: &SceneView, origin: V3, n: V3, rng: &mut Rng) -> V3 {
     let p = scene.params;
     let u = rng.next();
-    let s = rng.next();
-    let t = rng.next();
+    let v = rng.next();
+    let ju = rng.next();
+    let jv = rng.next();
     let light = scene.lights[pick_light(scene, u) as usize];
     let q = &scene.quads[light.quad() as usize];
+    let Some(e) = q.emitter() else {
+        return V3::ZERO;
+    };
+    let e = e as usize;
+    // A texel cell by its share of the quad's power, then a point inside it.
+    let (ns, nt) = (scene.emitters[e + 1], scene.emitters[e + 2]);
+    let (mut lo, mut hi) = (0u32, ns * nt - 1);
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if f32::from_bits(scene.emitters[e + 4 + mid as usize]) > v {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    let s = ((lo % ns) as f32 + ju) / ns as f32;
+    let t = ((lo / ns) as f32 + jv) / nt as f32;
     let at = light.offset() + q.origin() + q.edge_u() * s + q.edge_v() * t;
     let to = at - origin;
     let dist = to.length();
@@ -193,7 +241,7 @@ fn sample_emitter(scene: &SceneView, origin: V3, n: V3, rng: &mut Rng) -> V3 {
     if q.flags() & FLAG_FRONT_ONLY != 0 && q.normal().dot(l) >= 0.0 {
         return V3::ZERO;
     }
-    let pdf_l = light_pdf(q, l, dist);
+    let pdf_l = light_pdf(scene, q, l, dist, s, t);
     if pdf_l <= 0.0 {
         return V3::ZERO;
     }
@@ -212,7 +260,7 @@ fn sample_emitter(scene: &SceneView, origin: V3, n: V3, rng: &mut Rng) -> V3 {
     };
     let tr = shadow(scene, origin, l, dist * (1.0 - 1e-4) - p.misc_f[1]);
     let c = linear_rgb(texel).mul(linear_rgb(q.tint()));
-    let le = c.mul(c) * (q.light_scale() * p.misc_f[3] * cover);
+    let le = c.mul(c) * (q.light_scale() * p.misc_f[3] * cover * near_field(dist));
     let pdf_b = cos_s / PI;
     le.mul(tr) * (cos_s / PI * power_heuristic(pdf_l, pdf_b) / pdf_l)
 }
@@ -338,14 +386,15 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
         } else if q.light_scale() > 0.0 && !via_water {
             // Found by BSDF sampling; light sampling also finds it unless the path
             // crossed water, whose light reaches diffuse surfaces by light sampling alone.
-            let w = if q.light_pick() > 0.0 && lights > 0 {
-                let dist = (pos - last_diffuse).length();
-                power_heuristic(pdf_bsdf, light_pdf(q, d, dist))
+            let dist = (pos - last_diffuse).length();
+            let w = if q.emitter().is_some() && lights > 0 {
+                power_heuristic(pdf_bsdf, light_pdf(scene, q, d, dist, h.s, h.tt))
             } else {
                 1.0
             };
-            radiance =
-                radiance + beta.mul(albedo.mul(albedo)) * (q.light_scale() * p.misc_f[3] * w);
+            radiance = radiance
+                + beta.mul(albedo.mul(albedo))
+                    * (q.light_scale() * p.misc_f[3] * w * near_field(dist));
         }
 
         if bounces >= max_bounces {

@@ -998,9 +998,13 @@ fn read_pfm(p: &Path) -> (u32, u32, Vec<[f32; 3]>) {
 /// lightmap over the save's block light) is the scale: each HQ floor pixel, tonemapped,
 /// is placed on the curve of quick pixel values by light level. The mean absolute
 /// difference over light levels 12 down to 3 (distances 2 to 11) must be at most 1.5
-/// levels and no single level off by more than 3: inverse-square falloff cannot follow
-/// the game's straight line (it is brighter close to the torch and darker far from
-/// it), and these bounds say how closely the calibration holds it to the line.
+/// levels and no single level off by more than 3. Physical light cannot follow the
+/// game's straight line: inverse-square falloff is brighter than the game close to the
+/// torch, and light bounced off the room's white walls, which the game does not model,
+/// lifts the far floor (measured with `LEVEL_15_POWER` = 600 on the CPU at 256 spp:
+/// mean 0.76, worst 2.11, the far floor reading about two levels high). The bounds
+/// hold the calibration to that shape: a power off by a factor of two in either
+/// direction exceeds them.
 #[test]
 fn emitter_calibration() {
     let jar = require_jar!();
@@ -1126,10 +1130,16 @@ fn emitter_calibration() {
          best power multiplier {best_k:.3} gives {best_e:.2}",
         mean_abs(&at_one)
     );
+    let (half, double) = (mean_abs(&errors(0.5)), mean_abs(&errors(2.0)));
+    eprintln!(
+        "torch calibration: mean |level error| {half:.2} at half the power, {double:.2} at double"
+    );
     assert!(
         mean_abs(&at_one) <= 1.5,
         "mean level error {:.2}",
         mean_abs(&at_one)
     );
     assert!(worst <= 3.0, "worst level error {worst:.2}");
+    // The bounds bind: half or double the calibrated power fails them.
+    assert!(half > 1.5 && double > 1.5, "{half:.2} / {double:.2}");
 }

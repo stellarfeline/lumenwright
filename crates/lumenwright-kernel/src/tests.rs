@@ -40,6 +40,7 @@ struct TestScene {
     quads: Vec<GpuQuad>,
     atlas: Vec<u32>,
     lights: Vec<crate::scene::GpuLight>,
+    emitters: Vec<u32>,
 }
 
 impl TestScene {
@@ -103,6 +104,7 @@ impl TestScene {
             quads,
             atlas: vec![0xFFFF_FFFF, 0x0000_0000],
             lights: vec![crate::scene::GpuLight::default()],
+            emitters: vec![0; 4],
         }
     }
 
@@ -114,6 +116,7 @@ impl TestScene {
             quads: &self.quads,
             atlas: &self.atlas,
             lights: &self.lights,
+            emitters: &self.emitters,
         }
     }
 }
@@ -290,7 +293,8 @@ fn lamp_scene(nee: bool) -> TestScene {
     );
     lamp.ev[3] = 1.0; // visible emission
     lamp.uvt[3] = 2.0; // light radiance scale
-    lamp.uvt[2] = if nee { 1.0 } else { 0.0 };
+    // Emitter-table entry 0 when sampled: pick 1, 2×1 cells with shares 0.25, 0.75.
+    lamp.uvt[2] = f32::from_bits(if nee { 1 } else { 0 });
     quads.push(lamp);
     // White texels only: the second atlas texel is transparent.
     for q in &mut quads {
@@ -359,6 +363,7 @@ fn lamp_scene(nee: bool) -> TestScene {
             pos: [0.0, 0.0, 0.0, f32::from_bits(6)],
             cdf: [1.0, 0.0, 0.0, 0.0],
         }],
+        emitters: vec![1f32.to_bits(), 2, 1, 0, 0.25f32.to_bits(), 1f32.to_bits()],
     }
 }
 

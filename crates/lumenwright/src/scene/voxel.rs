@@ -40,6 +40,9 @@ pub struct HqScene {
     pub lights: Vec<GpuLight>,
     /// Number of lights in `lights`.
     pub light_count: u32,
+    /// The emitter table: per light quad, its pick probability and the cumulative
+    /// shares of its texel cells (layout in `lumenwright_kernel::scene::SceneView`).
+    pub emitters: Vec<u32>,
     /// What the grid holds, for logging.
     pub stats: HqStats,
 }
@@ -90,6 +93,7 @@ impl HqScene {
             + self.quads.len() * 80
             + self.atlas.len() * 4
             + self.lights.len() * 32
+            + self.emitters.len() * 4
     }
 }
 
@@ -445,7 +449,7 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
     stats.overlay_bricks = ov_cells.len() / OV_CELL_WORDS as usize;
     stats.entity_quads = overlay.len();
 
-    let (lights, light_count) = light_list(
+    let (lights, light_count, emitters) = light_list(
         &mut quads,
         &scene.atlas.pixels,
         scene.atlas.width,
@@ -481,6 +485,7 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
         see_through,
         lights,
         light_count,
+        emitters,
         stats,
     };
     log::info!(
@@ -545,43 +550,53 @@ fn add_instance(
     (models.len() - 1) as u32
 }
 
-/// Samples per quad axis when averaging a quad's texels.
-const POWER_SAMPLES: u32 = 16;
+/// The most texel cells an emitter-table entry divides a quad into along each edge.
+const MAX_CELLS: u32 = 64;
 
-/// The radiant power a quad emits for a unit radiance scale: π × area × the mean
-/// luminance of its squared linear texel colours (the kernel's emitter mapping),
-/// times their coverage, sampled on a regular 16×16 grid of (s, t) the way the
-/// kernel reads texels.
-fn unit_power(q: &GpuQuad, atlas: &[u32], atlas_w: u32) -> f32 {
-    let area = q.normal().length();
+/// The light-sampling weight of each texel cell of a quad, row by row along `s`, and
+/// the cell counts `(ns, nt)`: one cell per texel along each edge (at most
+/// [`MAX_CELLS`]), weighted by the luminance of the squared linear colour of the
+/// texel at its centre (the kernel's emitter mapping) times its coverage.
+fn cell_weights(q: &GpuQuad, atlas: &[u32], atlas_w: u32) -> (Vec<f32>, u32, u32) {
     let h = (atlas.len() as u32 / atlas_w.max(1)) as i32;
+    let ns = (q.uv[2].abs() + q.uv[3].abs())
+        .round()
+        .clamp(1.0, MAX_CELLS as f32) as u32;
+    let nt = (q.uvt[0].abs() + q.uvt[1].abs())
+        .round()
+        .clamp(1.0, MAX_CELLS as f32) as u32;
     let tint = linear(q.tint());
     let mode = q.flags() & FLAG_ALPHA_MASK;
-    let mut sum = 0.0f64;
-    for j in 0..POWER_SAMPLES {
-        for i in 0..POWER_SAMPLES {
-            let s = ((i as f32 + 0.5) / POWER_SAMPLES as f32).clamp(0.0005, 0.9995);
-            let t = ((j as f32 + 0.5) / POWER_SAMPLES as f32).clamp(0.0005, 0.9995);
+    let mut w = Vec::with_capacity((ns * nt) as usize);
+    for j in 0..nt {
+        for i in 0..ns {
+            let s = ((i as f32 + 0.5) / ns as f32).clamp(0.0005, 0.9995);
+            let t = ((j as f32 + 0.5) / nt as f32).clamp(0.0005, 0.9995);
             let u = q.uv[0] + s * q.uv[2] + t * q.uvt[0];
             let v = q.uv[1] + s * q.uv[3] + t * q.uvt[1];
             let x = (u.floor() as i32).clamp(0, atlas_w as i32 - 1);
             let y = (v.floor() as i32).clamp(0, h - 1);
             let texel = atlas[(y * atlas_w as i32 + x) as usize];
-            let a = (texel >> 24) as f32 / 255.0;
             let cover = match mode {
                 ALPHA_CUTOUT if texel >> 24 < 128 => 0.0,
                 ALPHA_CUTOUT => 1.0,
-                ALPHA_TRANSLUCENT => a,
+                ALPHA_TRANSLUCENT => (texel >> 24) as f32 / 255.0,
                 _ => 1.0,
             };
             let c = linear(texel);
             let e = [c[0] * tint[0], c[1] * tint[1], c[2] * tint[2]];
-            let lum = 0.2126 * e[0] * e[0] + 0.7152 * e[1] * e[1] + 0.0722 * e[2] * e[2];
-            sum += (lum * cover) as f64;
+            w.push((0.2126 * e[0] * e[0] + 0.7152 * e[1] * e[1] + 0.0722 * e[2] * e[2]) * cover);
         }
     }
-    let mean = (sum / (POWER_SAMPLES * POWER_SAMPLES) as f64) as f32;
-    std::f32::consts::PI * area * mean
+    (w, ns, nt)
+}
+
+/// The radiant power a quad emits for a unit radiance scale: π × area × the mean of
+/// its [`cell_weights`].
+fn unit_power(q: &GpuQuad, atlas: &[u32], atlas_w: u32) -> f32 {
+    let (w, _, _) = cell_weights(q, atlas, atlas_w);
+    let mean = w.iter().map(|&x| x as f64).sum::<f64>() / w.len() as f64;
+    std::f32::consts::PI * q.normal().length() * mean as f32
 }
 
 /// The kernel's sRGB -> linear polynomial, per channel.
@@ -591,15 +606,16 @@ fn linear(c: u32) -> [f32; 3] {
     [f(c[0]), f(c[1]), f(c[2])]
 }
 
-/// Builds the light list from (voxel corner, quad) sites: each light is picked with
-/// probability proportional to its power, and each light quad records that
-/// probability ([`GpuQuad::light_pick`]) for the kernel's MIS weights.
+/// Builds the light list and the emitter table (layouts in `lumenwright_kernel::scene`)
+/// from (voxel corner, quad) sites. Each light is picked with probability proportional
+/// to its power, and a point on it by its texel cells' shares of that power; each
+/// light quad records its table entry ([`GpuQuad::emitter`]) for the kernel's MIS weights.
 fn light_list(
     quads: &mut [GpuQuad],
     atlas: &[u32],
     atlas_w: u32,
     sites: &[([f32; 3], u32)],
-) -> (Vec<GpuLight>, u32) {
+) -> (Vec<GpuLight>, u32, Vec<u32>) {
     let mut power_of: std::collections::BTreeMap<u32, f64> = std::collections::BTreeMap::new();
     let mut total = 0.0f64;
     for &(_, qi) in sites {
@@ -610,10 +626,25 @@ fn light_list(
         total += p;
     }
     if sites.is_empty() || total <= 0.0 {
-        return (vec![GpuLight::default()], 0);
+        return (vec![GpuLight::default()], 0, vec![0; 4]);
     }
+    let mut table: Vec<u32> = Vec::new();
     for (&qi, &p) in &power_of {
-        quads[qi as usize].uvt[2] = (p / total) as f32;
+        let q = &mut quads[qi as usize];
+        let (w, ns, nt) = cell_weights(q, atlas, atlas_w);
+        let sum: f64 = w.iter().map(|&x| x as f64).sum();
+        if sum <= 0.0 {
+            continue;
+        }
+        q.uvt[2] = f32::from_bits(table.len() as u32 + 1);
+        table.extend([((p / total) as f32).to_bits(), ns, nt, 0]);
+        let mut acc = 0.0f64;
+        let n = w.len();
+        for (k, &x) in w.iter().enumerate() {
+            acc += x as f64;
+            let c = if k + 1 == n { 1.0 } else { (acc / sum) as f32 };
+            table.push(c.to_bits());
+        }
     }
     let mut acc = 0.0f64;
     let mut lights: Vec<GpuLight> = sites
@@ -630,13 +661,14 @@ fn light_list(
         last.cdf[0] = 1.0;
     }
     let n = lights.len() as u32;
-    (lights, n)
+    (lights, n, table)
 }
 
 /// Radiant power of a light-level-15 block, in the kernel's units (the sun's
 /// irradiance is `sun_color`). Calibrated by `emitter_calibration` in
-/// `lumenwright-cli/tests/render.rs`; see docs/research/emitters.md.
-pub const LEVEL_15_POWER: f32 = 64.0;
+/// `lumenwright-cli/tests/render.rs` (its best fit was 9.19 × 64 ≈ 588 on the CPU at
+/// 256 spp); see docs/research/emitters.md.
+pub const LEVEL_15_POWER: f32 = 600.0;
 
 /// The radiant power of a block of light level `level`: `LEVEL_15_POWER × (level/15)²`.
 /// Under inverse-square falloff the distance at which a light's irradiance falls to

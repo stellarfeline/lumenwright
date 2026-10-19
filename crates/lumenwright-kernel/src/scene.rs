@@ -52,7 +52,8 @@ pub struct GpuQuad {
     pub ev: [f32; 4],
     /// uv0.xy, uvs.xy
     pub uv: [f32; 4],
-    /// uvt.xy, z = light selection probability (0 = not a light), w = light radiance scale
+    /// uvt.xy, z = emitter table offset + 1 (bit cast; 0 = not sampled as a light),
+    /// w = light radiance scale
     pub uvt: [f32; 4],
 }
 
@@ -73,11 +74,11 @@ impl GpuQuad {
     pub fn emission(&self) -> f32 {
         self.ev[3]
     }
-    /// The probability that light sampling picks one given instance of this quad from
-    /// the light list ([`SceneView::lights`]); 0 when the quad casts no light.
+    /// The quad's entry in [`SceneView::emitters`], when light sampling can pick it.
     #[inline(always)]
-    pub fn light_pick(&self) -> f32 {
-        self.uvt[2]
+    pub fn emitter(&self) -> Option<u32> {
+        let e = self.uvt[2].to_bits();
+        if e == 0 { None } else { Some(e - 1) }
     }
     /// Emitted radiance scale: the radiance a diffuse surface receives from the quad
     /// is its texel colour times this times [`Params::misc_f`]`.w`; 0 casts no light.
@@ -203,6 +204,12 @@ pub struct SceneView<'a> {
     /// The light list, `misc_u.w` entries (a buffer is never empty: it holds one
     /// unused entry when there are no lights).
     pub lights: &'a [GpuLight],
+    /// The emitter table: per light-casting quad, at the offset its
+    /// [`GpuQuad::emitter`] gives, the words `[pick, ns, nt, 0]` and then `ns × nt`
+    /// cumulative texel probabilities (f32 bits, row by row along `s`). `pick` (f32
+    /// bits) is the probability that light sampling picks one given instance of the
+    /// quad; a texel is picked by its share of the quad's emitted power.
+    pub emitters: &'a [u32],
 }
 
 impl SceneView<'_> {

@@ -15,12 +15,18 @@ pub struct Hit {
     pub quad: u32,
     /// Texel at the hit (rgba8, sRGB).
     pub texel: u32,
+    /// The hit's parametric coordinates on the quad, `p0 + s*eu + t*ev`.
+    pub s: f32,
+    /// See `s`.
+    pub tt: f32,
 }
 
 const NO_HIT: Hit = Hit {
     t: f32::INFINITY,
     quad: u32::MAX,
     texel: 0,
+    s: 0.0,
+    tt: 0.0,
 };
 const MAX_STEPS: u32 = 65536;
 
@@ -80,7 +86,13 @@ fn test_quad(scene: &SceneView, qi: u32, o: V3, d: V3, tmin: f32, best: &mut Hit
         if (mode == ALPHA_CUTOUT && alpha < 128) || (mode == ALPHA_TRANSLUCENT && alpha == 0) {
             return;
         }
-        *best = Hit { t, quad: qi, texel };
+        *best = Hit {
+            t,
+            quad: qi,
+            texel,
+            s,
+            tt,
+        };
     }
 }
 

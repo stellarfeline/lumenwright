@@ -36,6 +36,7 @@ pub fn render(
     let quads = gpu.storage_buffer("quads", bytemuck::cast_slice(&s.quads))?;
     let atlas = gpu.storage_buffer("atlas", bytemuck::cast_slice(&s.atlas))?;
     let lights = gpu.storage_buffer("lights", bytemuck::cast_slice(&s.lights))?;
+    let emitters = gpu.storage_buffer("emitters", bytemuck::cast_slice(&s.emitters))?;
     let accum_size = (w as u64) * (h as u64) * 16;
     let accum = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("accum"),
@@ -72,6 +73,7 @@ pub fn render(
             storage(4, true),
             storage(5, false),
             storage(6, true),
+            storage(7, true),
         ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -105,6 +107,10 @@ pub fn render(
             wgpu::BindGroupEntry {
                 binding: 6,
                 resource: lights.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 7,
+                resource: emitters.as_entire_binding(),
             },
         ],
     });

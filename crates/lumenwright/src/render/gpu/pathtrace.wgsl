@@ -49,6 +49,7 @@ struct Model {
 @group(0) @binding(4) var<storage, read> atlas: array<u32>;
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4<f32>>;
 @group(0) @binding(6) var<storage, read> lights: array<Light>;
+@group(0) @binding(7) var<storage, read> emitters: array<u32>;
 
 const EMPTY: u32 = 0xFFFFFFFFu;
 const UNIFORM: u32 = 0x80000000u;
@@ -98,7 +99,6 @@ fn q_flags(q: Quad) -> u32 { return q.p0.w; }
 fn q_tint(q: Quad) -> u32 { return q.eu.w; }
 fn q_emission(q: Quad) -> f32 { return bitcast<f32>(q.ev.w); }
 fn q_normal(q: Quad) -> vec3<f32> { return cross(q_ev(q), q_eu(q)); }
-fn q_light_pick(q: Quad) -> f32 { return q.uvt.z; }
 fn q_light_scale(q: Quad) -> f32 { return q.uvt.w; }
 
 fn onb_t(n: vec3<f32>) -> vec3<f32> {
@@ -140,6 +140,8 @@ struct Hit {
     t: f32,
     quad: u32,
     texel: u32,
+    s: f32,
+    tt: f32,
 }
 
 fn texel_at(u: f32, v: f32) -> u32 {
@@ -178,7 +180,7 @@ fn test_quad(qi: u32, o: vec3<f32>, d: vec3<f32>, tmin: f32, best: ptr<function,
     let alpha = tex >> 24u;
     let mode = q_flags(q) & 3u;
     if ((mode == ALPHA_CUTOUT && alpha < 128u) || (mode == ALPHA_TRANSLUCENT && alpha == 0u)) { return; }
-    (*best) = Hit(t, qi, tex);
+    (*best) = Hit(t, qi, tex, s, tt);
 }
 
 fn is_see_through(qi: u32) -> bool {
@@ -186,7 +188,7 @@ fn is_see_through(qi: u32) -> bool {
 }
 
 fn see_through_hit(o: vec3<f32>, d: vec3<f32>, tmin: f32) -> Hit {
-    var best = Hit(INF, NO_QUAD, 0u);
+    var best = Hit(INF, NO_QUAD, 0u, 0.0, 0.0);
     for (var i = 0u; i < P.see_through.y; i++) {
         test_quad(P.see_through.x + i, o, d, tmin, &best);
     }
@@ -194,7 +196,7 @@ fn see_through_hit(o: vec3<f32>, d: vec3<f32>, tmin: f32) -> Hit {
 }
 
 fn trace(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> Hit {
-    var result = Hit(INF, NO_QUAD, 0u);
+    var result = Hit(INF, NO_QUAD, 0u, 0.0, 0.0);
     let dims = P.grid_dims.xyz;
     let size = vec3<f32>(f32(dims.x * 16u), f32(dims.y * 16u), f32(dims.z * 16u));
     let inv = vec3<f32>(safe_inv(d.x), safe_inv(d.y), safe_inv(d.z));
@@ -271,7 +273,7 @@ fn trace(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> Hit {
                 model = (w >> ((local & 1u) * 16u)) & 0xFFFFu;
             }
         }
-        var cand = Hit(min(t_hi, best_t), NO_QUAD, 0u);
+        var cand = Hit(min(t_hi, best_t), NO_QUAD, 0u, 0.0, 0.0);
         if (model != 0u) {
             let m = models[model];
             let lo = o - vec3<f32>(f32(cell.x), f32(cell.y), f32(cell.z));
@@ -399,6 +401,12 @@ fn pick_light(u: f32) -> u32 {
     return lo;
 }
 
+fn near_field(dist: f32) -> f32 {
+    let d2 = dist * dist;
+    if (d2 < 1.0) { return d2; }
+    return 1.0;
+}
+
 fn power_heuristic(a: f32, b: f32) -> f32 {
     let a2 = a * a;
     let b2 = b * b;
@@ -406,20 +414,54 @@ fn power_heuristic(a: f32, b: f32) -> f32 {
     return 0.0;
 }
 
-fn light_pdf(q: Quad, d: vec3<f32>, dist: f32) -> f32 {
+fn texel_share(e: u32, k: u32) -> f32 {
+    let hi = bitcast<f32>(emitters[e + 4u + k]);
+    var lo = 0.0;
+    if (k > 0u) { lo = bitcast<f32>(emitters[e + 3u + k]); }
+    return hi - lo;
+}
+
+fn light_pdf(q: Quad, d: vec3<f32>, dist: f32, s: f32, t: f32) -> f32 {
+    let eb = bitcast<u32>(q.uvt.z);
+    if (eb == 0u) { return 0.0; }
+    let e = eb - 1u;
     let nq = q_normal(q);
     let area = length(nq);
     let cos_l = abs(dot(nq, d)) / area;
     if (cos_l < 1e-6) { return 0.0; }
-    return q_light_pick(q) * dist * dist / (area * cos_l);
+    let ns = emitters[e + 1u];
+    let nt = emitters[e + 2u];
+    let i = min(u32(s * f32(ns)), ns - 1u);
+    let j = min(u32(t * f32(nt)), nt - 1u);
+    let share = texel_share(e, j * ns + i);
+    let pick = bitcast<f32>(emitters[e]);
+    return pick * share * f32(ns * nt) / area * dist * dist / cos_l;
 }
 
 fn sample_emitter(origin: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     let u = rnd();
-    let s = rnd();
-    let t = rnd();
+    let v = rnd();
+    let ju = rnd();
+    let jv = rnd();
     let light = lights[pick_light(u)];
     let q = quads[light.pos.w];
+    let eb = bitcast<u32>(q.uvt.z);
+    if (eb == 0u) { return vec3<f32>(0.0); }
+    let e = eb - 1u;
+    let ns = emitters[e + 1u];
+    let nt = emitters[e + 2u];
+    var lo = 0u;
+    var hi = ns * nt - 1u;
+    while (lo < hi) {
+        let mid = (lo + hi) / 2u;
+        if (bitcast<f32>(emitters[e + 4u + mid]) > v) {
+            hi = mid;
+        } else {
+            lo = mid + 1u;
+        }
+    }
+    let s = (f32(lo % ns) + ju) / f32(ns);
+    let t = (f32(lo / ns) + jv) / f32(nt);
     let at = bitcast<vec3<f32>>(light.pos.xyz) + q_p0(q) + q_eu(q) * s + q_ev(q) * t;
     let to = at - origin;
     let dist = length(to);
@@ -428,7 +470,7 @@ fn sample_emitter(origin: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     let cos_s = dot(n, l);
     if (cos_s <= 0.0) { return vec3<f32>(0.0); }
     if ((q_flags(q) & FLAG_FRONT_ONLY) != 0u && dot(q_normal(q), l) >= 0.0) { return vec3<f32>(0.0); }
-    let pdf_l = light_pdf(q, l, dist);
+    let pdf_l = light_pdf(q, l, dist, s, t);
     if (pdf_l <= 0.0) { return vec3<f32>(0.0); }
     let texel = quad_texel(q, s, t);
     let alpha = f32(texel >> 24u) / 255.0;
@@ -441,7 +483,7 @@ fn sample_emitter(origin: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     }
     let tr = shadow(origin, l, dist * (1.0 - 1e-4) - P.misc_f.y);
     let c = linear_rgb(texel) * linear_rgb(q_tint(q));
-    let le = c * c * (q_light_scale(q) * P.misc_f.w * cover);
+    let le = c * c * (q_light_scale(q) * P.misc_f.w * cover * near_field(dist));
     let pdf_b = cos_s / PI;
     return le * tr * (cos_s / PI * power_heuristic(pdf_l, pdf_b) / pdf_l);
 }
@@ -548,12 +590,12 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
                 radiance += beta * albedo * (emission * P.misc_f.x);
             }
         } else if (q_light_scale(q) > 0.0 && !via_water) {
+            let dist = length(pos - last_diffuse);
             var w = 1.0;
-            if (q_light_pick(q) > 0.0 && n_lights > 0u) {
-                let dist = length(pos - last_diffuse);
-                w = power_heuristic(pdf_bsdf, light_pdf(q, d, dist));
+            if (bitcast<u32>(q.uvt.z) != 0u && n_lights > 0u) {
+                w = power_heuristic(pdf_bsdf, light_pdf(q, d, dist, h.s, h.tt));
             }
-            radiance += beta * (albedo * albedo) * (q_light_scale(q) * P.misc_f.w * w);
+            radiance += beta * (albedo * albedo) * (q_light_scale(q) * P.misc_f.w * w * near_field(dist));
         }
 
         if (bounces >= max_bounces) { break; }

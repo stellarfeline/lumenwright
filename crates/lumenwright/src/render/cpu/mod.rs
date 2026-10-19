@@ -55,6 +55,7 @@ impl Backend for CpuBackend {
             quads: &s.quads,
             atlas: &s.atlas,
             lights: &s.lights,
+            emitters: &s.emitters,
         };
         out.par_chunks_mut(w as usize)
             .enumerate()
