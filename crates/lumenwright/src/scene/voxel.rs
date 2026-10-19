@@ -735,6 +735,7 @@ mod tests {
         // Opaque quads are left alone.
         let mut o = q;
         o.p0[3] = f32::from_bits(0);
-        assert_eq!(trim_to_opaque(&o, &atlas, 4), o);
+        let same = trim_to_opaque(&o, &atlas, 4);
+        assert_eq!(bytemuck::bytes_of(&same), bytemuck::bytes_of(&o));
     }
 }
