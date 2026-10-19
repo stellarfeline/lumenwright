@@ -46,7 +46,9 @@ What each backend needs to run:
 
 * **CPU**: any Linux, macOS or Windows machine. It uses every core.
 * **Metal, Vulkan, DX12**: a GPU and its driver: Metal on macOS, Vulkan on Linux or Windows,
-  DX12 on Windows.
+  DX12 on Windows. wgpu's environment flags apply; under WSL2 the GPU is reached through
+  Mesa's `dzn` Vulkan driver, which wgpu lists only with
+  `WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1`.
 * **CUDA**: an NVIDIA GPU and its driver, and a build from a clone of this repository (see
   [Backends](#backends)).
 
