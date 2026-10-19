@@ -239,6 +239,34 @@ chunk's `block_entities`:
 ![block entities](docs/renders/block-entities-quick-metal.png)
 ![signs](docs/renders/block-entities-signs.png)
 
+Items are drawn through the jar's item model definitions (`assets/minecraft/items/*.json`,
+the format of 1.21.4 and later), resolved against the stack's components and where it is
+drawn. A model with elements is baked as a block model; a flat item is extruded from its
+sprite, a front and a back face and one face for every open texel edge, as the client does.
+The model's display transform for its context poses it:
+
+* dropped items (`ground`), bobbing and turned by a phase taken from the entity's UUID, as
+  a cluster of up to five copies for a large stack;
+* item frame and glow item frame contents (`fixed`), turned by `ItemRotation`;
+* item displays, in their `item_display` context, `transformation` and `billboard`;
+* items in the hands (`thirdperson_righthand`, `thirdperson_lefthand`) and non-armour items
+  on the head (`head`) of armour stands, mannequins, players and humanoid mobs. Armour
+  stands take their `Pose` and `ShowArms`.
+
+Worn armour is drawn from the jar's equipment assets (`assets/minecraft/equipment/*.json`)
+on the humanoid armour meshes, dyed leather included. The shield is drawn from data in
+[`crates/lumenwright/assets/item_models.json`](crates/lumenwright/assets/item_models.json),
+with the armour meshes, each citing its 1.21.11 client class. `EntityStats` counts the
+stacks drawn and not drawn by item id (`items_rendered`, `items_skipped`).
+
+![items](docs/renders/items-quick.png)
+
+```sh
+target/release/lumenwright demo-world --items /tmp/items
+target/release/lumenwright render -w /tmp/items \
+    --camera 7.5,67.6,9.5 --look-at 7.5,66.0,2.5 --fov 60
+```
+
 ## Backends
 
 | backend | quick | hq | tested here (Apple M2 Pro) |
@@ -271,11 +299,14 @@ cargo test --workspace --release
   overlay cells, cutout alpha, the sky, and pinned RNG values.
 * **Integration tests** (in `lumenwright-cli`, which owns the fixture worlds) write fixture
   worlds and render them end to end. They check terrain
-  colours seen from above, entity coverage, block entities in both modes, sign text, HQ
-  sanity, CPU-vs-GPU parity in both modes (showcase and block-entity gallery), determinism,
-  and the CLI. The library tests check that the CLI's PNG and the library's pixels are
-  byte-equal in both modes, that a missing jar is refused by name, that a stated sky is drawn
-  as given, and that CPU pixels are bit-identical on 1, 3 and 8 threads. Tests that need the
+  colours seen from above, entity coverage, block entities in both modes, sign text, items
+  in both modes (every holder kind, each item's spot against the same frame with the
+  holders empty), that every item definition in the jar resolves, HQ sanity, CPU-vs-GPU
+  parity in both modes (showcase, block-entity gallery and item gallery) and CPU-vs-CUDA
+  parity in HQ mode, determinism, and the CLI. The library tests check that the CLI's PNG
+  and the library's pixels are byte-equal in both modes, that a missing jar is refused by
+  name, that a stated sky is drawn as given, and that CPU pixels are bit-identical on 1, 3
+  and 8 threads (showcase and item gallery). Tests that need the
   client jar or a GPU skip with a message when it is missing. `LUMENWRIGHT_MC_JAR` points the tests at a jar.
 
 ## Measured on an M2 Pro (10 CPU cores, 16 GPU cores)
@@ -296,8 +327,11 @@ Parity on the same view: quick mode, CPU vs Metal, differs in 0.075% of pixels; 
 See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
 * Beds, shulker boxes and the conduit are not drawn. Chests are drawn closed and bells at
   rest; sign text is drawn without italic, underline or obfuscation.
-* Items are not rendered: dropped items, item frame contents, item displays.
-* Entity layers that need a second texture are missing (sheep wool, armour, glowing eyes).
+* Items that vanilla draws in Java code are not drawn, the shield excepted: chests, beds,
+  banners, heads, shulker boxes, decorated pots, the conduit and copper golem statues. They
+  are counted in `items_skipped`. A filled map in a frame shows the map item, not its
+  picture; armour trims and the elytra are not drawn.
+* Entity layers that need a second texture are missing (sheep wool, glowing eyes).
 * Smooth fluid surfaces, clouds, weather, biome blending and mipmaps are not implemented.
 * There is no next-event estimation for emitters, so night scenes need many samples.
 * The CUDA backend has not been run on NVIDIA hardware yet.

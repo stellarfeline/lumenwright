@@ -12,6 +12,7 @@ const WANTED: &[&str] = &[
     "blockstates/",
     "models/",
     "items/",
+    "equipment/",
     "textures/",
     "font/",
     "lang/",

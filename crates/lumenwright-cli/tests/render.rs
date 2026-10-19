@@ -81,6 +81,63 @@ fn gallery() -> &'static Path {
     })
 }
 
+fn items_world(holding: bool) -> &'static Path {
+    static WITH: OnceLock<PathBuf> = OnceLock::new();
+    static WITHOUT: OnceLock<PathBuf> = OnceLock::new();
+    let (cell, name) = if holding {
+        (&WITH, "items")
+    } else {
+        (&WITHOUT, "items-empty")
+    };
+    cell.get_or_init(|| {
+        let d = tmp(name);
+        fixture::item_gallery(holding).write(&d).unwrap();
+        d
+    })
+}
+
+/// Projects a world point into a frame drawn from `cam` (pixel x, y).
+fn project(
+    cam: &lumenwright::scene::camera::Camera,
+    p: [f64; 3],
+    w: u32,
+    h: u32,
+) -> Option<(i32, i32)> {
+    let (f, r, u) = cam.basis();
+    let d = (lumenwright::glam::DVec3::from_array(p) - cam.pos).as_vec3();
+    let z = d.dot(f);
+    if z <= 0.0 {
+        return None;
+    }
+    let t = (cam.fov_y.to_radians() * 0.5).tan();
+    let x = d.dot(r) / (z * t * w as f32 / h as f32);
+    let y = d.dot(u) / (z * t);
+    Some((
+        ((x + 1.0) * 0.5 * w as f32) as i32,
+        ((1.0 - y) * 0.5 * h as f32) as i32,
+    ))
+}
+
+/// The most any channel moves between two frames within `radius` of a pixel.
+fn change_near(a: &image::RgbaImage, b: &image::RgbaImage, at: (i32, i32), radius: i32) -> i32 {
+    let mut most = 0;
+    for y in at.1 - radius..=at.1 + radius {
+        for x in at.0 - radius..=at.0 + radius {
+            if x < 0 || y < 0 || x >= a.width() as i32 || y >= a.height() as i32 {
+                continue;
+            }
+            let (p, q) = (
+                a.get_pixel(x as u32, y as u32),
+                b.get_pixel(x as u32, y as u32),
+            );
+            for i in 0..3 {
+                most = most.max((p.0[i] as i32 - q.0[i] as i32).abs());
+            }
+        }
+    }
+    most
+}
+
 /// Looks north over the three rows of the block-entity gallery.
 const GALLERY_VIEW: [&str; 6] = [
     "--camera",
@@ -273,6 +330,7 @@ fn gpu_matches_cpu_in_quick_mode() {
     for (name, world, view) in [
         ("showcase", showcase(), &[][..]),
         ("block-entities", gallery(), &GALLERY_VIEW[..]),
+        ("items", items_world(true), &fixture::ITEM_GALLERY_VIEW[..]),
     ] {
         let args = |b: &'static str| {
             let mut v = vec!["--backend", b, "--width", "320", "--height", "180"];
@@ -292,6 +350,10 @@ fn gpu_matches_cpu_in_quick_mode() {
             .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 8))
             .count() as f32
             / (a.width() * a.height()) as f32;
+        eprintln!(
+            "quick {name}: {:.3}% of pixels differ by more than 8/255 between CPU and GPU",
+            off * 100.0
+        );
         assert!(
             off < 0.01,
             "{name}: {:.3}% of pixels differ between CPU and GPU",
@@ -311,6 +373,7 @@ fn gpu_matches_cpu_in_hq_mode() {
     for (name, world, view) in [
         ("showcase", showcase(), &[][..]),
         ("block-entities", gallery(), &GALLERY_VIEW[..]),
+        ("items", items_world(true), &fixture::ITEM_GALLERY_VIEW[..]),
     ] {
         let args = |b: &'static str| {
             let mut v = vec![
@@ -344,6 +407,10 @@ fn gpu_matches_cpu_in_hq_mode() {
         };
         let (la, lb) = (lum(&a), lum(&b));
         let rel = (la - lb).abs() / la.max(1.0);
+        eprintln!(
+            "hq {name}: mean luminance differs by {:.3}% between CPU and GPU",
+            rel * 100.0
+        );
         assert!(
             rel < 0.03,
             "{name}: mean luminance differs by {:.2}%",
@@ -356,6 +423,79 @@ fn gpu_matches_cpu_in_hq_mode() {
             .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 16))
             .count() as f32
             / (a.width() * a.height()) as f32;
+        eprintln!(
+            "hq {name}: {:.3}% of pixels differ by more than 16/255 between CPU and GPU",
+            off * 100.0
+        );
+        assert!(off < 0.02, "{name}: {:.2}% of pixels differ", off * 100.0);
+    }
+}
+
+/// The CUDA kernel is the CPU kernel compiled to PTX: an HQ frame agrees with
+/// the CPU's within the GPU bounds above. Quick mode on CUDA is the CPU rasterizer.
+#[cfg(feature = "cuda")]
+#[test]
+fn cuda_matches_cpu_in_hq_mode() {
+    let jar = require_jar!();
+    if let Err(e) = lumenwright::render::create_backend(lumenwright::render::BackendKind::Cuda) {
+        eprintln!("skipping: no CUDA device ({e:#})");
+        return;
+    }
+    let dir = tmp("parity-cuda");
+    for (name, world, view) in [
+        ("showcase", showcase(), &[][..]),
+        ("block-entities", gallery(), &GALLERY_VIEW[..]),
+        ("items", items_world(true), &fixture::ITEM_GALLERY_VIEW[..]),
+    ] {
+        let args = |b: &'static str| {
+            let mut v = vec![
+                "--mode",
+                "hq",
+                "--backend",
+                b,
+                "--spp",
+                "16",
+                "--width",
+                "160",
+                "--height",
+                "90",
+                "--sun-altitude",
+                "40",
+            ];
+            v.extend_from_slice(view);
+            v
+        };
+        let (cpu, gpu) = (
+            dir.join(format!("{name}-cpu.png")),
+            dir.join(format!("{name}-cuda.png")),
+        );
+        render(world, &jar, &cpu, &args("cpu")).unwrap();
+        let rep = render(world, &jar, &gpu, &args("cuda")).unwrap();
+        assert!(rep.backend.contains("cuda"), "{}", rep.backend);
+        let (a, b) = (load(&cpu), load(&gpu));
+        let lum = |img: &image::RgbaImage| {
+            img.pixels()
+                .map(|p| p.0[0] as f64 * 0.2126 + p.0[1] as f64 * 0.7152 + p.0[2] as f64 * 0.0722)
+                .sum::<f64>()
+        };
+        let (la, lb) = (lum(&a), lum(&b));
+        let rel = (la - lb).abs() / la.max(1.0);
+        let off = a
+            .pixels()
+            .zip(b.pixels())
+            .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 16))
+            .count() as f32
+            / (a.width() * a.height()) as f32;
+        eprintln!(
+            "hq {name}: CUDA mean luminance differs by {:.3}%, {:.3}% of pixels by more than 16/255",
+            rel * 100.0,
+            off * 100.0
+        );
+        assert!(
+            rel < 0.03,
+            "{name}: mean luminance differs by {:.2}%",
+            rel * 100.0
+        );
         assert!(off < 0.02, "{name}: {:.2}% of pixels differ", off * 100.0);
     }
 }
@@ -545,4 +685,141 @@ fn sign_text_reads_in_both_modes() {
         );
         assert!(r > r0 + 0.002, "{mode}: red pixels {r:.4}, {r0:.4} without");
     }
+}
+
+#[test]
+fn items_draw_in_both_modes() {
+    let jar = require_jar!();
+    let dir = tmp("item-modes");
+    let kinds = [
+        ("item", 2),
+        ("item_display", 2),
+        ("item_frame", 1),
+        ("glow_item_frame", 1),
+        ("armor_stand", 1),
+        ("mannequin", 1),
+        ("zombie", 1),
+    ];
+    let items = [
+        "diamond",
+        "bricks",
+        "grass_block",
+        "map",
+        "lantern",
+        "end_rod",
+        "iron_helmet",
+        "diamond_chestplate",
+        "iron_sword",
+        "shield",
+        "golden_helmet",
+        "leather_chestplate",
+        "chainmail_leggings",
+        "iron_boots",
+        "diamond_axe",
+        "carved_pumpkin",
+        "stone_sword",
+    ];
+    for mode in ["quick", "hq"] {
+        let mut args = vec![
+            "--mode",
+            mode,
+            "--backend",
+            "cpu",
+            "--spp",
+            "8",
+            "--width",
+            "640",
+            "--height",
+            "360",
+            "--sun-altitude",
+            "45",
+        ];
+        args.extend_from_slice(&fixture::ITEM_GALLERY_VIEW);
+        let with = dir.join(format!("{mode}-with.png"));
+        let rep = render(items_world(true), &jar, &with, &args).unwrap();
+        let st = &rep.entity_stats;
+        for (kind, n) in kinds {
+            assert_eq!(st.rendered.get(kind), Some(&n), "{mode} {kind}: {st:?}");
+        }
+        assert!(
+            st.skipped.is_empty() && st.fallback_boxes.is_empty(),
+            "{st:?}"
+        );
+        for id in items {
+            assert_eq!(st.items_rendered.get(id), Some(&1), "{mode} {id}: {st:?}");
+        }
+        assert_eq!(
+            st.items_rendered.values().sum::<usize>(),
+            items.len(),
+            "{st:?}"
+        );
+        assert!(st.items_skipped.is_empty(), "{st:?}");
+        // The same frame with the holders empty: every item's spot changes.
+        let without = dir.join(format!("{mode}-without.png"));
+        let bare = render(items_world(false), &jar, &without, &args).unwrap();
+        assert!(bare.entity_stats.items_rendered.is_empty());
+        let (a, b) = (load(&with), load(&without));
+        let mut blank = Vec::new();
+        for (spot, p) in fixture::ITEM_GALLERY_SPOTS {
+            let at = project(&rep.camera, *p, a.width(), a.height())
+                .unwrap_or_else(|| panic!("{spot} is behind the camera"));
+            let moved = change_near(&a, &b, at, 3);
+            if moved <= 24 {
+                blank.push(format!("{spot} (pixel {at:?}, largest change {moved})"));
+            }
+        }
+        assert!(blank.is_empty(), "{mode}: nothing drawn at {blank:?}");
+    }
+}
+
+#[test]
+fn every_item_definition_in_the_jar_resolves() {
+    use lumenwright::assets::items::DisplayContext;
+    use lumenwright::assets::items::ItemStack;
+    use lumenwright::scene::items::ItemBakery;
+    let jar = require_jar!();
+    let store = lumenwright::assets::load_resources(&jar, &[]).unwrap();
+    let defs = store.paths_ending_with(".json");
+    let defs: Vec<&String> = defs
+        .iter()
+        .filter(|p| p.starts_with("assets/minecraft/items/"))
+        .collect();
+    assert!(defs.len() > 1000, "{} item definitions", defs.len());
+    let mut bakery = ItemBakery::new(&store);
+    let (mut drawn, mut special) = (0, std::collections::BTreeMap::<String, usize>::new());
+    for path in &defs {
+        let name = path
+            .trim_start_matches("assets/minecraft/items/")
+            .trim_end_matches(".json");
+        let stack = ItemStack {
+            id: format!("minecraft:{name}"),
+            count: 1,
+            components: Default::default(),
+        };
+        for ctx in [
+            DisplayContext::Ground,
+            DisplayContext::Fixed,
+            DisplayContext::ThirdPersonRightHand,
+        ] {
+            let p = bakery.prepare(&stack, ctx);
+            for why in &p.undrawn {
+                // Only the Java-drawn special models other than the shield go undrawn.
+                let kind = why
+                    .strip_prefix("special model ")
+                    .unwrap_or_else(|| panic!("{name} ({}): {why}", ctx.name()));
+                if ctx == DisplayContext::Fixed {
+                    *special.entry(kind.to_string()).or_default() += 1;
+                }
+            }
+            if ctx == DisplayContext::Fixed && p.drawn() {
+                drawn += 1;
+            }
+        }
+    }
+    let undrawn: usize = special.values().sum();
+    eprintln!(
+        "{} item definitions: {drawn} drawn, {undrawn} special (not drawn): {special:?}",
+        defs.len()
+    );
+    assert_eq!(drawn + undrawn, defs.len(), "{special:?}");
 }
