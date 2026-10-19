@@ -428,11 +428,39 @@ pub fn render(req: &Request) -> Result<Rendered> {
         tan_half_fov: (cam.fov_y.to_radians() * 0.5).tan(),
         aspect,
     };
-    // The vanilla derivation, when the caller states no sky.
-    let vanilla = |time: Option<i64>, sun: Option<Vec3>| {
-        let angle = sky::celestial_angle(time.unwrap_or(world.level.day_time));
-        let sun_dir = sun.unwrap_or_else(|| sky::sun_direction_from_angle(angle));
-        (angle, sun_dir)
+    // The environment attributes at the camera: the sky's colours and the sun's,
+    // moon's and stars' angles for the day time.
+    let biome = scene.registry.biomes[scene.volume.biome(
+        cam.pos.x.floor() as i32,
+        cam.pos.y.floor() as i32,
+        cam.pos.z.floor() as i32,
+    ) as usize]
+        .clone();
+    let dimension = match world.dimension {
+        Dimension::Overworld => "minecraft:overworld",
+        Dimension::Nether => "minecraft:the_nether",
+        Dimension::End => "minecraft:the_end",
+    };
+    let day_time = match req.sky {
+        Sky::Vanilla { time, .. } => time.unwrap_or(world.level.day_time),
+        Sky::Stated(_) => world.level.day_time,
+    };
+    let env = assets::environment::sample(&store, dimension, &biome, day_time);
+    if env.is_none() {
+        log::warn!(
+            "the client jar carries no environment attributes (before 1.21.11): \
+             drawing the sky from the biome's temperature and the old day curve"
+        );
+    }
+    // The vanilla sun when the caller states none: `visual/sun_angle`, or the
+    // pre-1.21.11 day curve for a jar without environment attributes.
+    let vanilla_sun = |time: Option<i64>, sun: Option<Vec3>| {
+        sun.unwrap_or_else(|| match &env {
+            Some(e) => sky::celestial_direction(e.sun_angle),
+            None => sky::sun_direction_from_angle(sky::celestial_angle(
+                time.unwrap_or(world.level.day_time),
+            )),
+        })
     };
 
     let (pixels, hdr) = match req.mode {
@@ -443,26 +471,25 @@ pub fn render(req: &Request) -> Result<Rendered> {
             let max_dist = q.draw_distance;
             let view_proj =
                 cam.projection(aspect, 0.05, max_dist * 2.0 + 512.0) * cam.view(Vec3::ZERO);
-            let colours = match req.sky {
-                Sky::Stated(s) => s.quick,
-                Sky::Vanilla { time, sun_dir, .. } => {
-                    let (angle, sun_dir) = vanilla(time, sun_dir);
-                    let day = sky::daylight(angle);
-                    let biome = scene.registry.biomes[scene.volume.biome(
-                        cam.pos.x.floor() as i32,
-                        cam.pos.y.floor() as i32,
-                        cam.pos.z.floor() as i32,
-                    ) as usize]
-                        .clone();
-                    let temp = assets::biome::biome_info(&biome).temperature;
-                    QuickSkyColours {
-                        sky: Vec3::from(assets::biome::sky_color(temp)) * day,
-                        fog: Vec3::new(0.753, 0.847, 1.0) * (day * 0.94 + 0.06),
-                        sun_dir,
-                        sky_factor: day,
-                    }
-                }
+            let rect = |loc: &str| {
+                scene.atlas.id(loc).map(|id| {
+                    let s = scene.atlas.sprites[id as usize];
+                    [s.x as f32, s.y as f32, s.w as f32, s.h as f32]
+                })
             };
+            let sun_rect = crate::scene::SUN_TEXTURES.iter().find_map(|t| rect(t));
+            let render_fog = (max_dist - (max_dist / 10.0).clamp(4.0, 64.0), max_dist);
+            let (colours, desc) = quick_sky(
+                &req.sky,
+                env.as_ref(),
+                &biome,
+                world.level.day_time,
+                f,
+                max_dist,
+                render_fog,
+                sun_rect,
+                &rect,
+            );
             let lighting = Lighting {
                 sky_factor: colours.sky_factor,
                 gamma: q.brightness.clamp(0.0, 1.0),
@@ -478,30 +505,15 @@ pub fn render(req: &Request) -> Result<Rendered> {
                 },
             );
             lap("build mesh", &mut t);
-            let fog_range = (max_dist - (max_dist / 10.0).clamp(4.0, 64.0), max_dist);
-            let sun_rect = crate::scene::SUN_TEXTURES
-                .iter()
-                .find_map(|t| scene.atlas.id(t))
-                .map(|id| {
-                    let s = scene.atlas.sprites[id as usize];
-                    [s.x as f32, s.y as f32, s.w as f32, s.h as f32]
-                })
-                .filter(|_| colours.sun_dir.y > -0.2)
-                .unwrap_or([0.0; 4]);
-            let qs = QuickSky::new(
-                &rays,
-                w,
-                h,
-                colours.sky,
-                colours.fog,
-                colours.sun_dir,
-                fog_range,
-                sun_rect,
-            );
+            let qs = QuickSky::new(&rays, w, h, &desc);
             let frame = QuickFrame {
                 mesh: &mesh,
                 atlas_pixels: &scene.atlas.pixels,
                 atlas_size: [scene.atlas.width, scene.atlas.height],
+                atlas_mips: &scene.atlas.mips,
+                mip_levels: scene.atlas.mip_levels,
+                mip_rows: scene.atlas.mip_rows,
+                stars: sky::star_table(),
                 width: w,
                 height: h,
                 view_proj,
@@ -521,10 +533,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
                     sun_dir,
                     sun_intensity,
                     sky_intensity,
-                } => {
-                    let (_, sun_dir) = vanilla(time, sun_dir);
-                    sky::hq_sky(sun_dir, sun_intensity, sky_intensity)
-                }
+                } => sky::hq_sky(vanilla_sun(time, sun_dir), sun_intensity, sky_intensity),
             };
             let params = hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky);
             let frame = HqFrame {
@@ -556,6 +565,126 @@ pub fn render(req: &Request) -> Result<Rendered> {
         entity_stats: scene.entity_stats.clone(),
         block_entity_stats: scene.block_entity_stats.clone(),
     })
+}
+
+/// `ARGB` channel `i` (0 = red) of `0xAARRGGBB` as 0..1.
+fn channel(c: u32, shift: u32) -> f32 {
+    ((c >> shift) & 0xFF) as f32 / 255.0
+}
+
+fn rgb(c: u32) -> Vec3 {
+    Vec3::new(channel(c, 16), channel(c, 8), channel(c, 0))
+}
+
+/// The quick sky for a frame: the lightmap's colours and what the sky passes draw.
+///
+/// For [`Sky::Vanilla`] with the jar's environment attributes, the fog colour is
+/// `AtmosphericFogEnvironment.getBaseColor`: the fog attribute, blended towards
+/// the sunrise colour by how directly the camera faces the sun's side of the sky
+/// (render distance 4 chunks or more), then towards the sky colour by
+/// `1 - lerp(min(sky fog end / 16, render distance) / 32, 0.25, 1)^0.25`.
+#[allow(clippy::too_many_arguments)]
+fn quick_sky(
+    req_sky: &Sky,
+    env: Option<&assets::environment::EnvironmentState>,
+    biome: &str,
+    world_day_time: i64,
+    forward: Vec3,
+    draw_distance: f32,
+    render_fog: (f32, f32),
+    sun_rect: Option<[f32; 4]>,
+    rect: &dyn Fn(&str) -> Option<[f32; 4]>,
+) -> (QuickSkyColours, sky::SkyDescription) {
+    use assets::environment::{Skybox, srgb_lerp};
+    let env_fog = env.map_or((0.0, 1024.0), |e| (e.fog_start, e.fog_end));
+    let sky_fog_end = draw_distance.min(env.map_or(512.0, |e| e.sky_fog_end));
+    let mut desc = sky::SkyDescription {
+        sky: Vec3::ZERO,
+        fog: Vec3::ZERO,
+        sky_fog_end,
+        render_fog,
+        env_fog,
+        sky_disc: env.is_none_or(|e| e.skybox == Skybox::Overworld),
+        sunrise: [0.0; 4],
+        sun_angle: 0.0,
+        sun: None,
+        moon: None,
+        star_angle: 0.0,
+        star_brightness: 0.0,
+    };
+    match *req_sky {
+        Sky::Stated(s) => {
+            desc.sky = s.quick.sky;
+            desc.fog = s.quick.fog;
+            desc.sun = sun_rect.map(|r| (s.quick.sun_dir, r));
+            (s.quick, desc)
+        }
+        Sky::Vanilla { time, sun_dir, .. } => {
+            let ticks = time.unwrap_or(world_day_time);
+            // The lightmap keeps its daylight factor on the pre-1.21.11 day curve.
+            let angle = sky::celestial_angle(ticks);
+            let day = sky::daylight(angle);
+            let Some(e) = env else {
+                let temp = assets::biome::biome_info(biome).temperature;
+                let sun = sun_dir.unwrap_or_else(|| sky::sun_direction_from_angle(angle));
+                let colours = QuickSkyColours {
+                    sky: Vec3::from(assets::biome::sky_color(temp)) * day,
+                    fog: Vec3::new(0.753, 0.847, 1.0) * (day * 0.94 + 0.06),
+                    sun_dir: sun,
+                    sky_factor: day,
+                };
+                desc.sky = colours.sky;
+                desc.fog = colours.fog;
+                desc.sun = sun_rect.map(|r| (sun, r));
+                return (colours, desc);
+            };
+            let render_chunks = (draw_distance / 16.0).floor();
+            let mut fog = e.fog_color;
+            if render_chunks >= 4.0 {
+                let side = if e.sun_angle.to_radians().sin() > 0.0 {
+                    -1.0
+                } else {
+                    1.0
+                };
+                let facing = forward.x * side;
+                let glow = e.sunrise_sunset_color >> 24;
+                if facing > 0.0 && glow > 0 {
+                    let a = glow as f32 / 255.0;
+                    fog = srgb_lerp(facing * a, fog, e.sunrise_sunset_color | 0xFF00_0000);
+                }
+            }
+            let reach = (e.sky_fog_end / 16.0).min(render_chunks);
+            let lerp = (reach / 32.0).clamp(0.0, 1.0) * 0.75 + 0.25;
+            fog = srgb_lerp(1.0 - lerp.powf(0.25), fog, e.sky_color);
+            let sun = sun_dir.unwrap_or_else(|| sky::celestial_direction(e.sun_angle));
+            let moon = if sun_dir.is_some() {
+                -sun
+            } else {
+                sky::celestial_direction(e.moon_angle)
+            };
+            let sr = e.sunrise_sunset_color;
+            desc.sky = rgb(e.sky_color);
+            desc.fog = rgb(fog);
+            desc.sunrise = [
+                channel(sr, 16),
+                channel(sr, 8),
+                channel(sr, 0),
+                channel(sr, 24),
+            ];
+            desc.sun_angle = e.sun_angle;
+            desc.sun = sun_rect.map(|r| (sun, r));
+            desc.moon = rect(&crate::scene::moon_texture(&e.moon_phase)).map(|r| (moon, r));
+            desc.star_angle = e.star_angle;
+            desc.star_brightness = e.star_brightness;
+            let colours = QuickSkyColours {
+                sky: desc.sky,
+                fog: desc.fog,
+                sun_dir: sun,
+                sky_factor: day,
+            };
+            (colours, desc)
+        }
+    }
 }
 
 /// The path tracer's parameters for a camera and a sky.

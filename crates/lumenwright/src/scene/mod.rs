@@ -240,6 +240,10 @@ pub const SUN_TEXTURES: &[&str] = &[
     "minecraft:environment/celestial/sun",
     "minecraft:environment/sun",
 ];
+/// The moon's sprites, one per phase in `MoonPhase` order (1.21.11 and later).
+pub fn moon_texture(phase: &str) -> String {
+    format!("minecraft:environment/celestial/moon/{phase}")
+}
 const EXTRA_TEXTURES: &[&str] = &[
     "minecraft:block/water_still",
     "minecraft:block/water_flow",
@@ -315,6 +319,12 @@ impl Scene {
         for t in SUN_TEXTURES {
             if store.resolve("textures", t, "png").is_some() {
                 ab.add(t);
+            }
+        }
+        for phase in crate::assets::environment::MOON_PHASES {
+            let t = moon_texture(phase);
+            if store.resolve("textures", &t, "png").is_some() {
+                ab.add(&t);
             }
         }
         for m in &bakery.baked {

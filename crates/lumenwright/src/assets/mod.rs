@@ -5,9 +5,11 @@ pub mod atlas;
 pub mod biome;
 pub mod blockinfo;
 pub mod blockstate;
+pub mod environment;
 pub mod font;
 pub mod items;
 pub mod lang;
+pub mod mipmap;
 pub mod model;
 pub mod source;
 

@@ -16,6 +16,7 @@ const WANTED: &[&str] = &[
     "textures/",
     "font/",
     "lang/",
+    "atlases/",
 ];
 const SKIPPED: &[&str] = &[
     "textures/gui/",
@@ -33,9 +34,23 @@ pub struct ResourceStore {
     pub sources: Vec<PathBuf>,
 }
 
+/// Data sub-paths we need, in any namespace: what the client reads to draw the
+/// sky (environment attributes and timelines).
+const WANTED_DATA: &[&str] = &[
+    "timeline/",
+    "tags/timeline/",
+    "dimension_type/",
+    "worldgen/biome/",
+];
+
 fn wanted(name: &str) -> bool {
     if name == "version.json" {
         return true;
+    }
+    if let Some(rest) = name.strip_prefix("data/") {
+        return rest.split_once('/').is_some_and(|(_, rest)| {
+            WANTED_DATA.iter().any(|p| rest.starts_with(p)) && rest.ends_with(".json")
+        });
     }
     let Some(rest) = name.strip_prefix("assets/") else {
         return false;
