@@ -243,6 +243,8 @@ fn sample_emitter(scene: &SceneView, origin: V3, n: V3, e: &GpuEmitter, rng: &mu
 /// before its albedo: Chunky's emitter sampling in `doDiffuseReflection`, over the
 /// emitters the grid cell of `pos` lists. `ONE` and `ONE_BLOCK` take one of them
 /// uniformly; `ALL` averages over all of them. The result is scaled by π, as Chunky's.
+// On CUDA the whole path tracer is one function: see `pt_render` in crates/lumenwright-ptx.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
 pub(crate) fn sample_emitters(scene: &SceneView, pos: V3, origin: V3, n: V3, rng: &mut Rng) -> V3 {
     let (start, count) = emitter_cell(scene, pos);
     if count == 0 {
