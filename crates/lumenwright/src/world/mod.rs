@@ -199,74 +199,38 @@ impl BlockVolume {
         }
     }
 
-    /// The stored layer that gives section `(sx, sy, sz)` its sky light, by vanilla's
-    /// rule that a section without a sky-light layer inherits the bottom row of the
-    /// next stored layer above it: `Some((layer, None))` for the section's own layer,
-    /// `Some((layer, Some(0)))` for an inherited one (read at local y = 0), and `None`
-    /// for full sky light (nothing stored above, or above the world).
-    fn sky_layer(&self, sx: i32, sy: i32, sz: i32) -> Option<(&[u8], Option<usize>)> {
-        let top = self.min_section + self.sections_y;
-        let mut y = sy;
-        loop {
-            if y >= top {
-                return None;
-            }
-            if let Some(sl) = self.section(sx, y, sz).and_then(|s| s.sky_light.as_deref()) {
-                return Some((sl, if y == sy { None } else { Some(0) }));
-            }
-            self.section_index(sx, y, sz)?;
-            y += 1;
-        }
-    }
-
     /// (sky, block) light at world coordinates, following vanilla's rule that a
     /// section without a sky-light layer inherits the bottom of the next stored
     /// layer above it (or full light above the world).
     pub fn light(&self, x: i32, y: i32, z: i32) -> (u8, u8) {
         let (lx, lz) = ((x & 15) as usize, (z & 15) as usize);
-        let (sx, sy, sz) = (x >> 4, y >> 4, z >> 4);
+        let sx = x >> 4;
+        let sz = z >> 4;
+        let mut sy = y >> 4;
         let block = self
             .section(sx, sy, sz)
             .and_then(|s| s.block_light.as_deref())
             .map(|b| nibble(b, lx, (y & 15) as usize, lz))
             .unwrap_or(0);
-        let sky = match self.sky_layer(sx, sy, sz) {
-            None => 15,
-            Some((sl, ly)) => nibble(sl, lx, ly.unwrap_or((y & 15) as usize), lz),
+        let mut ly = (y & 15) as usize;
+        let top = self.min_section + self.sections_y;
+        let sky = loop {
+            if sy >= top {
+                break 15;
+            }
+            if let Some(sl) = self
+                .section(sx, sy, sz)
+                .and_then(|s| s.sky_light.as_deref())
+            {
+                break nibble(sl, lx, ly, lz);
+            }
+            if self.section_index(sx, sy, sz).is_none() {
+                break 15;
+            }
+            sy += 1;
+            ly = 0;
         };
         (sky, block)
-    }
-
-    /// The light of every voxel of section `(sx, sy, sz)`, by the rule of
-    /// [`BlockVolume::light`]: one byte `sky << 4 | block` per voxel, in YZX order.
-    pub fn section_light(&self, sx: i32, sy: i32, sz: i32) -> Vec<u8> {
-        let block = self
-            .section(sx, sy, sz)
-            .and_then(|s| s.block_light.as_deref());
-        let sky = self.sky_layer(sx, sy, sz);
-        let mut out = vec![0u8; 4096];
-        for ly in 0..16 {
-            for lz in 0..16 {
-                for lx in 0..16 {
-                    let b = block.map_or(0, |b| nibble(b, lx, ly, lz));
-                    let s = match sky {
-                        None => 15,
-                        Some((sl, row)) => nibble(sl, lx, row.unwrap_or(ly), lz),
-                    };
-                    out[(ly * 16 + lz) * 16 + lx] = s << 4 | b;
-                }
-            }
-        }
-        out
-    }
-
-    /// Whether any loaded section stores a sky or block light layer: a world saved
-    /// without light (or before its light was computed) stores none.
-    pub fn stores_light(&self) -> bool {
-        self.sections
-            .iter()
-            .flatten()
-            .any(|s| s.sky_light.is_some() || s.block_light.is_some())
     }
 }
 

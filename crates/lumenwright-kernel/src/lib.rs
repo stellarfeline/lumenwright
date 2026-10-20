@@ -30,7 +30,6 @@
 // buffer layout and algorithms exactly: a change to a struct or algorithm here is made there too.
 
 pub mod integrator;
-pub mod lightmap;
 // With both `std` and `libm` enabled (feature unification), std math wins.
 #[cfg(feature = "libm")]
 use libm as _;

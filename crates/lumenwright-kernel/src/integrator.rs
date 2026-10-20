@@ -9,15 +9,8 @@
 //! texel colour squared (Chunky's quadratic emitter mapping: a texel half as
 //! bright casts a quarter of the light, so a torch's flame lights the room and
 //! its stick barely does) times [`GpuQuad::light_scale`] times `misc_f.w`.
-//!
-//! The light emissive blocks cast is then limited as the game's lightmap limits
-//! block light: a path's emitter light is scaled by [`block_light_gate`] of the
-//! surface the camera sees (its first diffuse vertex), from the game's stored sky
-//! and block light levels there. Under open sky by day the gate is 0, and where
-//! the game has no block light it is 0; the look of an emitter is never gated.
 
-use crate::lightmap::block_share;
-use crate::math::{V3, abs, clamp, floor, max, onb, sin_cos_turns, sqrt, srgb_to_linear, v3};
+use crate::math::{V3, abs, clamp, max, onb, sin_cos_turns, sqrt, srgb_to_linear, v3};
 use crate::rng::Rng;
 use crate::scene::{
     ALPHA_CUTOUT, ALPHA_TRANSLUCENT, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY, FLAG_WATER, GpuQuad,
@@ -273,21 +266,6 @@ fn sample_emitter(scene: &SceneView, origin: V3, n: V3, rng: &mut Rng) -> V3 {
     le.mul(tr) * (cos_s / PI * power_heuristic(pdf_l, pdf_b) / pdf_l)
 }
 
-/// The share of emitter light a path whose first diffuse vertex is at `p`, with
-/// normal `n`, may carry: the lightmap's [`block_share`] of the game's light levels
-/// in the voxel the surface faces (the one holding `p + n / 2`, the voxel whose
-/// light vanilla's flat lighting draws a face with). 1 when the world stores no light.
-#[inline(always)]
-pub fn block_light_gate(scene: &SceneView, p: V3, n: V3) -> V3 {
-    let params = scene.params;
-    if params.light_grid[2] == 0 {
-        return V3::ONE;
-    }
-    let c = p + n * 0.5;
-    let (sky, block) = scene.light_levels(floor(c.x) as i32, floor(c.y) as i32, floor(c.z) as i32);
-    block_share(sky as f32, block as f32, params.lightmap[0])
-}
-
 /// Radiance estimate for one camera sample at pixel (px, py).
 // On CUDA the whole path tracer is one function: see `pt_render` in crates/lumenwright-ptx.
 #[cfg_attr(target_arch = "nvptx64", inline(always))]
@@ -320,8 +298,6 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
     let mut last_diffuse = V3::ZERO;
     let mut pdf_bsdf = 0.0f32;
     let mut via_water = false;
-    // The share of emitter light the path may carry, set at its first diffuse vertex.
-    let mut gate = V3::ONE;
     let lights = p.misc_u[3];
     let mut tmin = 0.0f32;
     let sigma = V3::from4(p.water_color);
@@ -420,15 +396,12 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
                 1.0
             };
             radiance = radiance
-                + beta.mul(albedo.mul(albedo)).mul(gate)
+                + beta.mul(albedo.mul(albedo))
                     * (q.light_scale() * p.misc_f[3] * w * near_field(dist));
         }
 
         if bounces >= max_bounces {
             break;
-        }
-        if bounces == 0 {
-            gate = block_light_gate(scene, pos, n);
         }
         bounces += 1;
 
@@ -448,7 +421,6 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
             radiance = radiance
                 + beta
                     .mul(albedo)
-                    .mul(gate)
                     .mul(sample_emitter(scene, origin, n, &mut rng));
         }
 

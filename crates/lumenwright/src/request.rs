@@ -565,10 +565,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
                     sky_intensity,
                 } => sky::hq_sky(vanilla_sun(time, sun_dir), sun_intensity, sky_intensity),
             };
-            let sky_factor = lightmap_sky_factor(&req.sky, world.level.day_time);
-            let params = hq_params(
-                &req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky, sky_factor,
-            );
+            let params = hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky);
             let frame = HqFrame {
                 scene: &hq,
                 params,
@@ -654,8 +651,9 @@ fn quick_sky(
         }
         Sky::Vanilla { time, sun_dir, .. } => {
             let ticks = time.unwrap_or(world_day_time);
+            // The lightmap keeps its daylight factor on the pre-1.21.11 day curve.
             let angle = sky::celestial_angle(ticks);
-            let day = lightmap_sky_factor(req_sky, world_day_time);
+            let day = sky::daylight(angle);
             let Some(e) = env else {
                 let temp = assets::biome::biome_info(biome).temperature;
                 let sun = sun_dir.unwrap_or_else(|| sky::sun_direction_from_angle(angle));
@@ -719,22 +717,7 @@ fn quick_sky(
     }
 }
 
-/// The lightmap's daylight factor for a frame (vanilla `skyDarken`, 1 at noon and
-/// about 0.2 at midnight): the stated sky's, or the vanilla one at the frame's time.
-/// The quick mode draws its lightmap with it, and HQ limits emitter light by it.
-pub fn lightmap_sky_factor(req_sky: &Sky, world_day_time: i64) -> f32 {
-    match *req_sky {
-        Sky::Stated(s) => s.quick.sky_factor,
-        // The lightmap keeps its daylight factor on the pre-1.21.11 day curve.
-        Sky::Vanilla { time, .. } => {
-            sky::daylight(sky::celestial_angle(time.unwrap_or(world_day_time)))
-        }
-    }
-}
-
-/// The path tracer's parameters for a camera and a sky; `sky_factor` is the
-/// lightmap's daylight factor ([`lightmap_sky_factor`]).
-#[allow(clippy::too_many_arguments)]
+/// The path tracer's parameters for a camera and a sky.
 pub fn hq_params(
     o: &HqOptions,
     width: u32,
@@ -743,7 +726,6 @@ pub fn hq_params(
     eye: Vec3,
     rays: &CameraRays,
     s: &HqSky,
-    sky_factor: f32,
 ) -> Params {
     let sun_radius: f32 = 0.03;
     let solid_angle = std::f32::consts::TAU * (1.0 - sun_radius.cos());
@@ -780,12 +762,5 @@ pub fn hq_params(
             if o.light_sampling { hq.light_count } else { 0 },
         ],
         see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
-        light_grid: [
-            hq.light_offsets[0],
-            hq.light_offsets[1],
-            hq.light_gated as u32,
-            0,
-        ],
-        lightmap: [sky_factor, 0.0, 0.0, 0.0],
     }
 }
