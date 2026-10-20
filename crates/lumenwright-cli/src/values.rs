@@ -69,6 +69,9 @@ mirror! {
         Aces,
         /// Hable / Uncharted 2 filmic, then the display gamma.
         Filmic,
+        /// Hable read brighter so linear 0.18 shows as the game shows it (0.18^(1/2.2)),
+        /// then the display gamma.
+        FilmicMidGrey,
     }
 }
 
