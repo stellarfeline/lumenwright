@@ -6,7 +6,10 @@ All notable changes to Lumenwright are recorded here. The format follows
 
 ## [0.1.0] - Unreleased
 
-The first release: `lumenwright`, `lumenwright-cli` and `lumenwright-kernel`.
+The first release. The `lumenwright` library and its kernel `lumenwright-kernel` are published on
+crates.io; the `lumenwright` command (`lumenwright-cli`) is installed from the repository at
+the tag `v0.1.0`. 0.1.0 draws Minecraft Java Edition worlds in the vanilla client's look
+or path traced as Chunky traces it, on the CPU, Metal, Vulkan, DX12 and CUDA.
 
 ### Added
 
@@ -36,7 +39,8 @@ The first release: `lumenwright`, `lumenwright-cli` and `lumenwright-kernel`.
   frame its 250-sample frame is as close to Chunky's converged frame as Chunky's own
   250-sample frame is.
 - Backends: CPU on every core, Metal, Vulkan and DX12 through wgpu (feature `gpu`, on by
-  default) and CUDA (feature `cuda`, built from a clone of the repository). On the CPU, a
+  default) and CUDA (feature `cuda`, with the PTX `scripts/build-ptx.sh` builds in a clone of the
+  repository, found in the clone or named by `LUMENWRIGHT_PTX`). On the CPU, a
   request gives the same bytes for any thread count. The CUDA kernel is the path tracer
   inlined whole, in f32 alone: `scripts/build-ptx.sh` refuses a kernel with an f64
   instruction or a call other than a panic. An HQ frame logs its kernel time by CUDA events.

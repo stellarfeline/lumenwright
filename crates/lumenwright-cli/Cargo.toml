@@ -6,6 +6,8 @@ version.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version = "1.90"
+# Not published to crates.io: the command is installed from the repository (README, Install).
+publish = false
 readme = "../../README.md"
 documentation = "https://github.com/stellarfeline/lumenwright#readme"
 keywords = ["minecraft", "renderer", "path-tracing", "cli", "screenshot"]

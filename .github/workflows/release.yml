@@ -1,0 +1,178 @@
+# Lumenwright release: publishes lumenwright-kernel, then lumenwright, to crates.io, then tags
+# v<version> and creates the GitHub Release. lumenwright-cli is not published.
+#
+# Run it from the Actions tab (or `gh workflow run release.yml -f version=X.Y.Z`) on main.
+# Nothing is published, tagged or released until every refusal below has passed:
+#   * the run is not on main;
+#   * the input is not a version, or differs from the version of either published crate;
+#   * main's CI (ci.yml, on push) did not succeed at this commit;
+#   * the version of either crate is already on crates.io, or the tag v<version> exists;
+#   * CHANGELOG.md has no dated section for the version (a section still marked Unreleased
+#     is refused);
+#   * the test suite (ci.yml, run again here) fails.
+#
+# Secret: CARGO_REGISTRY_TOKEN, a crates.io API token with the publish-update scope for both
+# crates (publish-new for a first release), stored as a repository secret.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the v (it must equal the workspace version)"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: "1.97.1"
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Refuse a run that is not on main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::refused: a release runs on main, not $GITHUB_REF"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - name: Refuse an input that is not the workspace version
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::refused: '$VERSION' is not a version (X.Y.Z, no leading v)"
+            exit 1
+          fi
+          meta=$(cargo metadata --no-deps --format-version 1)
+          for crate in lumenwright-kernel lumenwright; do
+            have=$(jq -r --arg n "$crate" '.packages[] | select(.name==$n) | .version' <<<"$meta")
+            if [ "$have" != "$VERSION" ]; then
+              echo "::error::refused: $crate is at '$have' in the workspace, the input is $VERSION"
+              exit 1
+            fi
+          done
+          cli=$(jq -r '.packages[] | select(.name=="lumenwright-cli") | .publish | tostring' <<<"$meta")
+          if [ "$cli" != "[]" ]; then
+            echo "::error::refused: lumenwright-cli must carry publish = false (its publish field reads $cli)"
+            exit 1
+          fi
+      - name: Refuse a commit whose CI on main did not succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&branch=main&per_page=100")
+          count=$(jq '.workflow_runs | length' <<<"$runs")
+          ok=$(jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success")] | length' <<<"$runs")
+          echo "ci.yml push runs on main at $GITHUB_SHA: $count, succeeded: $ok"
+          if [ "$ok" -eq 0 ]; then
+            echo "::error::refused: main's CI has no successful run at $GITHUB_SHA ($count runs found)"
+            exit 1
+          fi
+      - name: Refuse a version already on crates.io, or a tag that exists
+        run: |
+          set -euo pipefail
+          for crate in lumenwright-kernel lumenwright; do
+            # The sparse index: a 404 is the only answer read as "absent".
+            path="$(cut -c1-2 <<<"$crate")/$(cut -c3-4 <<<"$crate")/$crate"
+            code=$(curl -sS -o index.txt -w '%{http_code}' "https://index.crates.io/$path")
+            case "$code" in
+              404) echo "$crate: not on crates.io" ;;
+              200)
+                if jq -e --arg v "$VERSION" 'select(.vers==$v)' index.txt >/dev/null; then
+                  echo "::error::refused: $crate $VERSION is already on crates.io"
+                  exit 1
+                fi
+                echo "$crate: on crates.io, $VERSION is not" ;;
+              *) echo "::error::refused: the crates.io index answered $code for $crate"; exit 1 ;;
+            esac
+          done
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::refused: the tag v$VERSION already exists"
+            exit 1
+          fi
+      - name: Refuse a version CHANGELOG.md does not date
+        run: |
+          set -euo pipefail
+          head=$(grep -F "## [$VERSION] " CHANGELOG.md | head -n 1 || true)
+          if ! [[ "$head" =~ ^##\ \[[^]]+\]\ -\ [0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "::error::refused: CHANGELOG.md needs a section '## [$VERSION] - YYYY-MM-DD' (found: '${head:-none}')"
+            exit 1
+          fi
+          awk -v h="$head" '$0 == h { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::refused: the CHANGELOG.md section for $VERSION is empty"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-notes
+          path: notes.md
+          if-no-files-found: error
+
+  ci:
+    needs: preflight
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: [preflight, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - name: Publish lumenwright-kernel
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p lumenwright-kernel
+      - name: Wait until the index serves lumenwright-kernel at the version
+        run: |
+          set -euo pipefail
+          for _ in $(seq 60); do
+            if curl -fsS https://index.crates.io/lu/me/lumenwright-kernel 2>/dev/null \
+                | jq -e --arg v "$VERSION" 'select(.vers==$v)' >/dev/null; then
+              echo "lumenwright-kernel $VERSION is in the index"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::lumenwright-kernel $VERSION did not reach the index within 10 minutes"
+          exit 1
+      - name: Publish lumenwright
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p lumenwright
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-notes
+      - name: Tag v<version> at the released commit and create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Lumenwright $VERSION" --notes-file notes.md

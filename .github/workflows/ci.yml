@@ -12,12 +12,16 @@ on:
   pull_request:
   push:
     branches: [main, "ci/**"]
+  # release.yml runs these same jobs before it publishes.
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # github.workflow is the caller's name when release.yml calls this file, so a release's
+  # test run and a push's CI run never cancel each other.
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:

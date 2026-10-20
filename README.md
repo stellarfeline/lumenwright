@@ -97,17 +97,11 @@ The requirements, design decisions and what is in or out of scope are in
 
 ## Install
 
-The command, from crates.io:
+The command, from this repository (it is not on crates.io):
 
 ```sh
-cargo install lumenwright-cli    # installs the `lumenwright` command
+cargo install --locked --git https://github.com/stellarfeline/lumenwright --tag v0.1.0 lumenwright-cli
 lumenwright backends             # the backends this machine can draw with
-```
-
-The library, in your own crate:
-
-```sh
-cargo add lumenwright
 ```
 
 You need Rust 1.90 or newer. Installing the command also compiles a little C (the TLS
@@ -120,12 +114,28 @@ What each backend needs to run:
   DX12 on Windows. wgpu's environment flags apply; under WSL2 the GPU is reached through
   Mesa's `dzn` Vulkan driver, which wgpu lists only with
   `WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1`.
-* **CUDA**: an NVIDIA GPU and its driver, and a build from a clone of this repository (see
-  [Backends](#backends)).
+* **CUDA**: an NVIDIA GPU and its driver, and the kernel's PTX built from a clone of this
+  repository (see [Backends](#backends)).
 
 Every render also needs the Minecraft Java Edition client jar, which Lumenwright reads its
 textures and models from. The command finds it or downloads it from Mojang (see
 [Textures](#textures-the-chunky-approach)); the library takes its path.
+
+### Using the crate
+
+The library is on crates.io as `lumenwright`, with its kernel `lumenwright-kernel`:
+
+```toml
+[dependencies]
+lumenwright = "0.1.0"                                                         # CPU, Metal, Vulkan, DX12
+# lumenwright = { version = "0.1.0", default-features = false }              # CPU only
+# lumenwright = { version = "0.1.0", default-features = false, features = ["gpu"] }
+```
+
+The `cuda` feature embeds the kernel's PTX, which `scripts/build-ptx.sh` builds in a clone of
+this repository (nightly Rust and the `nvptx64-nvidia-cuda` target). In a clone it is found in
+`target/ptx/`; from crates.io, set `LUMENWRIGHT_PTX` to the file the script wrote. Without it
+the build stops and says so; nothing is downloaded. See [Library](#library) for the API.
 
 ## Quick start
 
@@ -548,6 +558,17 @@ See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
   above the horizon; below it, the sky falls to a night's 3% at the end of civil twilight
   (the sun 6° below the horizon), and the sun gives no light from below the horizon. Those
   two rules are Lumenwright's own.
+
+## Releasing
+
+Releases are published by CI only, never from a workstation. The `release` workflow
+(`.github/workflows/release.yml`) is run by hand on `main` with the version to release. It
+refuses unless that version is the workspace version, `main`'s CI succeeded at the commit,
+neither crate has that version on crates.io, no tag `v<version>` exists, and `CHANGELOG.md`
+has a dated `## [<version>] - YYYY-MM-DD` section. It then runs the tests, publishes
+`lumenwright-kernel` and then `lumenwright` with the repository secret
+`CARGO_REGISTRY_TOKEN` (a crates.io API token for both crates), and tags `v<version>` with a
+GitHub Release whose notes are that changelog section. `lumenwright-cli` is not published.
 
 ## License
 
