@@ -168,7 +168,7 @@ pub enum Sky {
         time: Option<i64>,
         /// Unit vector towards the sun; `None` follows `time`.
         sun_dir: Option<Vec3>,
-        /// HQ sun irradiance scale.
+        /// HQ sun intensity, Chunky's: the sun's irradiance is `intensity^2.2`.
         sun_intensity: f32,
         /// HQ sky radiance scale.
         sky_intensity: f32,
@@ -182,7 +182,7 @@ impl Default for Sky {
         Sky::Vanilla {
             time: None,
             sun_dir: None,
-            sun_intensity: 1.5,
+            sun_intensity: sky::DEFAULT_SUN_INTENSITY,
             sky_intensity: 1.0,
         }
     }

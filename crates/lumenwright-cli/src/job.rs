@@ -76,8 +76,8 @@ pub struct RenderArgs {
     /// Sun azimuth in degrees (0 = north, 90 = east).
     #[arg(long, default_value_t = 135.0, allow_hyphen_values = true)]
     pub sun_azimuth: f32,
-    /// HQ: sun irradiance scale.
-    #[arg(long, default_value_t = 1.5)]
+    /// HQ: sun intensity, as Chunky's (the sun's irradiance is intensity^2.2).
+    #[arg(long, default_value_t = sky::DEFAULT_SUN_INTENSITY)]
     pub sun_intensity: f32,
     /// HQ: sky radiance scale.
     #[arg(long, default_value_t = 1.0)]

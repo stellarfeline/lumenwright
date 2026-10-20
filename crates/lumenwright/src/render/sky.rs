@@ -557,16 +557,22 @@ pub struct HqSky {
     pub horizon: Vec3,
 }
 
-/// Derives the HQ sun and sky for a sun direction: the sun warms and dims
-/// towards the horizon and the sky darkens below it. `sun_intensity` and
-/// `sky_intensity` scale the sun and sky radiance.
+/// Chunky's default sun intensity (`Sun.DEFAULT_INTENSITY`, chunky-dev/chunky 156e2bb).
+pub const DEFAULT_SUN_INTENSITY: f32 = 1.25;
+
+/// Derives the HQ sun and sky for a sun direction. The sun is Chunky's (GPL-3.0,
+/// `Sun.initSun` at chunky-dev/chunky 156e2bb): white, with irradiance
+/// `sun_intensity^2.2` (`Scene.DEFAULT_GAMMA`). Below 1/6 of the sine of its altitude
+/// it fades to nothing at the horizon, so a world open below its terrain is not lit
+/// from under the ground at night (Lumenwright's; Chunky's sun does not fade).
+/// `sky_intensity` scales the sky radiance.
 pub fn hq_sky(sun_dir: Vec3, sun_intensity: f32, sky_intensity: f32) -> HqSky {
     let alt = sun_dir.y;
     let day = (alt * 4.0 + 0.4).clamp(0.0, 1.0);
-    // Warmer and dimmer sunlight near the horizon.
     let warm = (alt / 0.35).clamp(0.0, 1.0);
-    let sun_tint = Vec3::new(1.0, 0.55, 0.3).lerp(Vec3::new(1.0, 0.96, 0.9), warm);
-    let sun_color = sun_tint * sun_intensity * (alt * 6.0).clamp(0.0, 1.0);
+    let sun_color = Vec3::ONE
+        * sun_intensity.powf(lumenwright_kernel::math::GAMMA)
+        * (alt * 6.0).clamp(0.0, 1.0);
     let zenith =
         Vec3::new(0.16, 0.32, 0.75).lerp(Vec3::new(0.01, 0.015, 0.04), 1.0 - day) * sky_intensity;
     let horizon = Vec3::new(0.42, 0.56, 0.8).lerp(Vec3::new(0.9, 0.55, 0.35), (1.0 - warm) * day)
