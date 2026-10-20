@@ -46,11 +46,13 @@ target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look
 | image | Apple M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end / in the kernel) |
 |---|---|---|
 | camp, quick, day / dusk | 0.27 s / 0.27 s | |
-| camp, hq, day (4096 spp) / dusk (16384 spp) | | 92 s / 333 s (90 s / 331 s) |
+| camp, hq, day (4096 spp) / dusk (16384 spp) | | 66 s / 262 s (65 s / 262 s) |
 | bridge, quick, day / dusk | 0.23 s / 0.23 s | |
-| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 123 s / 447 s (121 s / 444 s) |
+| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 91 s / 361 s (90 s / 360 s) |
 
-The quick times are the second of two runs. The 4070 Ti SUPER runs under WSL2 on a 16-thread PC.
+These are the renders' own times at their quality budgets, not a speed comparison (that is
+[benchmark.md](benchmark.md)). The quick times are the second of two runs, measured at `v0.1.0`;
+the quick frames are byte-identical at this revision. The 4070 Ti SUPER runs under WSL2 on a 16-thread PC.
 Each HQ image rendered twice with the same command on the CUDA backend gave byte-identical
 PNGs, as each quick image did on Metal.
 
