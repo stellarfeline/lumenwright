@@ -160,7 +160,9 @@ pub struct HqOptions {
     pub prevent_normal_emitter: bool,
     /// Linear multiplier applied to the radiance before tonemapping.
     pub exposure: f32,
-    /// The tonemapping operator from linear radiance to display values.
+    /// The tonemapping operator from linear radiance to display values. The default
+    /// shows mid-grey as the game does ([`Tonemap::FilmicMidGrey`]), for the default
+    /// game sky; Chunky's own default is [`Tonemap::Gamma`].
     pub tonemap: Tonemap,
 }
 
@@ -174,7 +176,7 @@ impl Default for HqOptions {
             emitter_sampling: EmitterSampling::One,
             prevent_normal_emitter: false,
             exposure: 1.0,
-            tonemap: Tonemap::Gamma,
+            tonemap: Tonemap::FilmicMidGrey,
         }
     }
 }
@@ -234,7 +236,9 @@ pub enum HqSkyModel {
 
 impl Default for HqSkyModel {
     fn default() -> Self {
-        HqSkyModel::CHUNKY
+        HqSkyModel::Game {
+            render_distance: DEFAULT_RENDER_DISTANCE,
+        }
     }
 }
 

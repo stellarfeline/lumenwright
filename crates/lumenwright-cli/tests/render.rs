@@ -519,9 +519,17 @@ fn gpu_matches_cpu_in_quick_mode() {
 /// of its disc above it (the sky at full light and the sun's horizon test); and a low sun
 /// at the centre of a narrow view, exposed so the sun texture drawn in the sky does not
 /// clip.
-const DAY_SUN: &[&str] = &["--sun-altitude", "40"];
-const DUSK_SUN: &[&str] = &["--sun-altitude", "-0.5"];
-const SUN_IN_VIEW: &[&str] = &["--sun-altitude", "8", "--sun-azimuth", "330"];
+/// Chunky's sky with a sun at a stated altitude.
+const DAY_SUN: &[&str] = &["--sky", "chunky", "--sun-altitude", "40"];
+const DUSK_SUN: &[&str] = &["--sky", "chunky", "--sun-altitude", "-0.5"];
+const SUN_IN_VIEW: &[&str] = &[
+    "--sky",
+    "chunky",
+    "--sun-altitude",
+    "8",
+    "--sun-azimuth",
+    "330",
+];
 /// The game's sky in the morning and at the setting sun.
 const GAME_DAY: &[&str] = &["--sky", "game", "--time", "4000"];
 const GAME_DUSK: &[&str] = &["--sky", "game", "--time", "12800"];
@@ -643,6 +651,8 @@ fn gpu_draws_the_sky_as_the_cpu_does() {
             "18.5,200,40",
             "--fov",
             "150",
+            "--sky",
+            "chunky",
             "--sun-altitude",
             "5",
             "--sun-azimuth",
@@ -721,6 +731,37 @@ fn gpu_draws_the_game_sky_as_the_cpu_does() {
         "the frame shows the dusk sky: mean red {mean_red:.1}"
     );
     assert!(worst <= 2, "{worst}/255");
+}
+
+/// Chunky's sun and sky scales mean nothing under the game's sky (the default): either
+/// flag is refused by name before anything is drawn, and is taken under `--sky chunky`.
+#[test]
+fn chunky_scales_are_refused_under_the_game_sky() {
+    let jar = require_jar!();
+    let dir = tmp("game-sky-flags");
+    for flag in ["--sun-intensity", "--sky-intensity"] {
+        let small = [
+            "--mode",
+            "hq",
+            "--backend",
+            "cpu",
+            "--spp",
+            "1",
+            "--width",
+            "16",
+            "--height",
+            "9",
+        ];
+        let mut args = small.to_vec();
+        args.extend([flag, "2"]);
+        let err = render(showcase(), &jar, &dir.join("refused.png"), &args)
+            .err()
+            .unwrap_or_else(|| panic!("{flag} was taken under the game's sky"));
+        let msg = format!("{err:#}");
+        assert!(msg.contains(flag) && msg.contains("--sky chunky"), "{msg}");
+        args.extend(["--sky", "chunky"]);
+        render(showcase(), &jar, &dir.join("taken.png"), &args).unwrap();
+    }
 }
 
 /// The CUDA kernel is the CPU kernel compiled to PTX: an HQ frame agrees with

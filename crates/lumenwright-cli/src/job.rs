@@ -80,7 +80,7 @@ pub struct RenderArgs {
     #[arg(long, default_value_t = 135.0, allow_hyphen_values = true)]
     pub sun_azimuth: f32,
     /// HQ: the sky the frame is lit by and drawn under.
-    #[arg(long, value_enum, default_value_t = SkyArg::Chunky)]
+    #[arg(long, value_enum, default_value_t = SkyArg::Game)]
     pub sky: SkyArg,
     /// HQ, `--sky chunky`: sun intensity, as Chunky's (the sun's irradiance is
     /// intensity^2.2). Default 1.25.
@@ -102,8 +102,10 @@ pub struct RenderArgs {
     pub prevent_normal_emitter: bool,
     #[arg(long, default_value_t = 1.0)]
     pub exposure: f32,
-    #[arg(long, value_enum, default_value_t = TonemapArg::Gamma)]
-    pub tonemap: TonemapArg,
+    /// HQ: the tone curve. Default: `filmic-mid-grey` under `--sky game` (mid-grey shown
+    /// as the game shows it), `gamma` under `--sky chunky` (Chunky's default).
+    #[arg(long, value_enum)]
+    pub tonemap: Option<TonemapArg>,
     /// Quick: vanilla brightness option (0 = moody, 0.5 = default, 1 = bright).
     #[arg(long, default_value_t = 0.5)]
     pub brightness: f32,
@@ -290,7 +292,13 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             emitter_sampling: a.emitter_sampling.into(),
             prevent_normal_emitter: a.prevent_normal_emitter,
             exposure: a.exposure,
-            tonemap: a.tonemap.into(),
+            tonemap: a
+                .tonemap
+                .unwrap_or(match a.sky {
+                    SkyArg::Game => TonemapArg::FilmicMidGrey,
+                    SkyArg::Chunky => TonemapArg::Gamma,
+                })
+                .into(),
         },
         sky: Sky::Vanilla {
             time: a.time,

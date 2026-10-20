@@ -115,7 +115,9 @@ fn request<'a>(world: &'a Path, jar: &'a Path, mode: Mode) -> Request<'a> {
         sky: Sky::Vanilla {
             time: None,
             sun_dir: Some(sky::sun_direction(40.0, 135.0)),
-            hq: HqSkyModel::CHUNKY,
+            hq: HqSkyModel::Game {
+                render_distance: (RADIUS * 16) as f32,
+            },
         },
     }
 }
