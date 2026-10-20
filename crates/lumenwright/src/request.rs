@@ -186,12 +186,11 @@ pub enum Sky {
     Vanilla {
         /// Ticks (0 = sunrise, 6000 = noon); `None` is the world's `DayTime`.
         time: Option<i64>,
-        /// Unit vector towards the sun; `None` follows `time`.
+        /// Unit vector towards the sun; `None` follows `time`. Under
+        /// [`HqSkyModel::Game`] it moves only the sun drawn in the sky.
         sun_dir: Option<Vec3>,
-        /// HQ sun intensity, Chunky's: the sun's irradiance is `intensity^2.2`.
-        sun_intensity: f32,
-        /// HQ sky radiance scale.
-        sky_intensity: f32,
+        /// What HQ mode lights the frame with and draws in its sky.
+        hq: HqSkyModel,
     },
     /// The caller's sky, used as given; nothing is derived from the world's time.
     Stated(StatedSky),
@@ -202,10 +201,49 @@ impl Default for Sky {
         Sky::Vanilla {
             time: None,
             sun_dir: None,
-            sun_intensity: sky::DEFAULT_SUN_INTENSITY,
-            sky_intensity: 1.0,
+            hq: HqSkyModel::default(),
         }
     }
+}
+
+/// The client's default render distance, 12 chunks (`options.renderDistance`), in blocks.
+pub const DEFAULT_RENDER_DISTANCE: f32 = 192.0;
+
+/// The sky HQ mode traces under [`Sky::Vanilla`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum HqSkyModel {
+    /// The game's own sky at the tick, lit as the 1.21.11 client lights it
+    /// ([`sky::game_sky_maps`]): the lens sees the client's sky (its disc, fog, sunrise
+    /// glow, sun, moon and stars); the sun casts no light; the sky casts the lightmap's
+    /// colour for a cell open to it. Needs a client jar with environment attributes
+    /// (1.21.11 or later).
+    Game {
+        /// The client's render distance in blocks, which the sky's fog and the
+        /// horizon's colour depend on: quick mode's draw distance.
+        render_distance: f32,
+    },
+    /// Chunky's simulated sky: the Preetham sky and a sun at the time's angle, as
+    /// Chunky lights a scene ([`sky::hq_sky`]).
+    Chunky {
+        /// The sun's intensity, Chunky's: its irradiance is `intensity^2.2`.
+        sun_intensity: f32,
+        /// The Preetham sky's radiance scale.
+        sky_intensity: f32,
+    },
+}
+
+impl Default for HqSkyModel {
+    fn default() -> Self {
+        HqSkyModel::CHUNKY
+    }
+}
+
+impl HqSkyModel {
+    /// Chunky's defaults: a sun of intensity 1.25 and the sky at its own scale.
+    pub const CHUNKY: HqSkyModel = HqSkyModel::Chunky {
+        sun_intensity: sky::DEFAULT_SUN_INTENSITY,
+        sky_intensity: 1.0,
+    };
 }
 
 /// A caller-stated sky for both modes.
@@ -576,33 +614,137 @@ pub fn render(req: &Request) -> Result<Rendered> {
         Mode::Hq => {
             let hq = voxel::build_hq(&scene)?;
             lap("build voxel scene", &mut t);
-            let hq_sky = match req.sky {
-                Sky::Stated(s) => s.hq,
+            let frame = match req.sky {
                 Sky::Vanilla {
-                    time,
-                    sun_dir,
-                    sun_intensity,
-                    sky_intensity,
-                } => sky::hq_sky(vanilla_sun(time, sun_dir), sun_intensity, sky_intensity),
+                    hq: HqSkyModel::Game { render_distance },
+                    ..
+                } => {
+                    let Some(e) = env.as_ref() else {
+                        anyhow::bail!(
+                            "the game's sky needs the environment attributes of a 1.21.11 or \
+                             later client jar, and this jar has none; draw Chunky's sky instead \
+                             (HqSkyModel::Chunky, `--sky chunky`)"
+                        );
+                    };
+                    let rect = |loc: &str| {
+                        scene.atlas.id(loc).map(|id| {
+                            let s = scene.atlas.sprites[id as usize];
+                            [s.x as f32, s.y as f32, s.w as f32, s.h as f32]
+                        })
+                    };
+                    let sun_rect = crate::scene::SUN_TEXTURES.iter().find_map(|t| rect(t));
+                    let render_fog = (
+                        render_distance - (render_distance / 10.0).clamp(4.0, 64.0),
+                        render_distance,
+                    );
+                    let (_, desc) = quick_sky(
+                        &req.sky,
+                        Some(e),
+                        &biome,
+                        world.level.day_time,
+                        f,
+                        render_distance,
+                        render_fog,
+                        sun_rect,
+                        &rect,
+                    );
+                    // What is drawn in the sky casts no light in the game.
+                    let bare = sky::SkyDescription {
+                        sun: None,
+                        moon: None,
+                        star_brightness: 0.0,
+                        ..desc
+                    };
+                    let maps = sky::game_sky_maps(
+                        &QuickSky::new(&rays, req.width, req.height, &desc),
+                        &QuickSky::new(&rays, req.width, req.height, &bare),
+                        e.sky_light_factor,
+                        rgb(e.sky_light_color),
+                        &scene.atlas.pixels,
+                        scene.atlas.width,
+                        sky::star_table(),
+                    );
+                    log::info!(
+                        "hq sky: the game's at day time {day_time}; sky light factor {:.6}, \
+                         colour #{:06x}; light {:.6} {:.6} {:.6} (the lightmap's, linear) = \
+                         {:.6} x (the sky's mean {:.6} {:.6} {:.6} + veil {:.6} {:.6} {:.6}); \
+                         sun {}",
+                        e.sky_light_factor,
+                        e.sky_light_color & 0xFF_FFFF,
+                        maps.light.x,
+                        maps.light.y,
+                        maps.light.z,
+                        maps.scale,
+                        maps.mean.x,
+                        maps.mean.y,
+                        maps.mean.z,
+                        maps.veil.x,
+                        maps.veil.y,
+                        maps.veil.z,
+                        match desc.sun {
+                            Some((d, _)) => format!(
+                                "drawn at altitude {:.6} rad, casting no light",
+                                d.y.clamp(-1.0, 1.0).asin()
+                            ),
+                            None => "not drawn".to_string(),
+                        }
+                    );
+                    let none = HqSky {
+                        sun_dir: desc.sun.map_or(Vec3::Y, |s| s.0),
+                        sun_color: Vec3::ZERO,
+                        sky_light: 0.0,
+                    };
+                    let mut params =
+                        hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &none);
+                    params.sky_map = maps.sizes;
+                    params.misc_f[2] = 0.0;
+                    // The lens's map draws the client's sun; Chunky's is not drawn.
+                    params.sun_sprite = [0.0; 4];
+                    HqFrame {
+                        scene: &hq,
+                        params,
+                        spp: req.hq.spp,
+                        sky: maps.buffer,
+                    }
+                }
+                _ => {
+                    let hq_sky = match req.sky {
+                        Sky::Stated(s) => s.hq,
+                        Sky::Vanilla {
+                            time,
+                            sun_dir,
+                            hq:
+                                HqSkyModel::Chunky {
+                                    sun_intensity,
+                                    sky_intensity,
+                                },
+                        } => sky::hq_sky(vanilla_sun(time, sun_dir), sun_intensity, sky_intensity),
+                        Sky::Vanilla {
+                            hq: HqSkyModel::Game { .. },
+                            ..
+                        } => unreachable!("the game's sky is drawn above"),
+                    };
+                    let d = hq_sky.sun_dir;
+                    log::info!(
+                        "hq sun: direction {:.6} {:.6} {:.6}, altitude {:.6} rad, azimuth \
+                         from +x towards +z {:.6} rad (Chunky's sun angles)",
+                        d.x,
+                        d.y,
+                        d.z,
+                        d.y.clamp(-1.0, 1.0).asin(),
+                        d.z.atan2(d.x)
+                    );
+                    let params =
+                        hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky);
+                    HqFrame {
+                        scene: &hq,
+                        params,
+                        spp: req.hq.spp,
+                        sky: sky::sky_cache(&params),
+                    }
+                }
             };
-            let d = hq_sky.sun_dir;
-            log::info!(
-                "hq sun: direction {:.6} {:.6} {:.6}, altitude {:.6} rad, azimuth from +x \
-                 towards +z {:.6} rad (Chunky's sun angles)",
-                d.x,
-                d.y,
-                d.z,
-                d.y.clamp(-1.0, 1.0).asin(),
-                d.z.atan2(d.x)
-            );
-            let params = hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky);
-            let frame = HqFrame {
-                scene: &hq,
-                params,
-                spp: req.hq.spp,
-                sky: sky::sky_cache(&params),
-            };
-            lap("sky cache", &mut t);
+            lap("sky", &mut t);
             let started = Instant::now();
             let progress = |done: u32, total: u32| {
                 log::debug!("{done}/{total} ({:.1?})", started.elapsed());
@@ -818,5 +960,63 @@ pub fn hq_params(
         sun_su: f4(su, sky::SUN_TEXTURE_BRIGHTNESS),
         sun_sv: f4(sv, 4.0 * sun_radius),
         sun_sprite: hq.sun_sprite.map_or([0.0; 4], |r| r.map(|v| v as f32)),
+        sky_map: [0.0; 4],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `AtmosphericFogEnvironment.getBaseColor` in the 1.21.11 client lerps the clear colour
+    /// towards the sky colour by `1 − Mth.clampedLerp(min(sky fog end / 16, render
+    /// distance) / 32, 0.25, 1)^0.25`, and `Mth.clampedLerp(delta, start, end)` is
+    /// `start` below 0, `end` above 1 and `lerp(delta, start, end)` between (both read off
+    /// the jar's bytecode): at the client's default 12 chunks the weight is
+    /// `1 − 0.53125^0.25` = 0.146, not `1 − 0.375^0.25` = 0.218.
+    #[test]
+    fn the_clear_colour_leans_to_the_sky_as_the_client_does() {
+        let env = assets::environment::EnvironmentState {
+            sky_color: 0xFF78_A7FF,
+            fog_color: 0xFFC0_D8FF,
+            sunrise_sunset_color: 0,
+            sun_angle: 0.0,
+            moon_angle: 180.0,
+            star_angle: 0.0,
+            star_brightness: 0.0,
+            moon_phase: "full_moon".into(),
+            fog_start: 0.0,
+            fog_end: 1024.0,
+            sky_fog_end: 512.0,
+            sky_light_factor: 1.0,
+            sky_light_color: 0xFFFF_FFFF,
+            skybox: assets::environment::Skybox::Overworld,
+        };
+        let sky = Sky::Vanilla {
+            time: Some(6000),
+            sun_dir: None,
+            hq: HqSkyModel::default(),
+        };
+        let none = |_: &str| None;
+        for (chunks, w) in [
+            (12.0f32, 1.0 - 0.53125f32.powf(0.25)),
+            (2.0, 1.0 - (0.25f32 + 0.75 * 2.0 / 32.0).powf(0.25)),
+            (40.0, 0.0),
+        ] {
+            let (_, desc) = quick_sky(
+                &sky,
+                Some(&env),
+                "minecraft:plains",
+                0,
+                Vec3::Z,
+                chunks * 16.0,
+                (0.0, 1.0),
+                None,
+                &none,
+            );
+            let lerp = |a: u32, b: u32| (a as f32 + (w * (b as f32 - a as f32)).floor()) / 255.0;
+            let want = Vec3::new(lerp(0xC0, 0x78), lerp(0xD8, 0xA7), lerp(0xFF, 0xFF));
+            assert_eq!(desc.fog, want, "{chunks} chunks");
+        }
     }
 }

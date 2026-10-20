@@ -75,6 +75,17 @@ mirror! {
     }
 }
 
+/// `--sky`: the library's [`lumenwright::request::HqSkyModel`] without its values, which
+/// come from their own flags.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SkyArg {
+    /// The game's own sky at the tick, lit as the client lights it: the lightmap's sky
+    /// light, no sunlight, the client's sky, sun, moon and stars drawn.
+    Game,
+    /// Chunky's simulated sky: the Preetham sky and a sun that lights and shadows.
+    Chunky,
+}
+
 mirror! {
     /// `--emitter-sampling`.
     EmitterSamplingArg => EmitterSampling {

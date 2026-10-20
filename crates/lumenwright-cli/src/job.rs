@@ -6,6 +6,7 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 use lumenwright::glam::DVec3;
 use lumenwright::render::sky;
+use lumenwright::request::HqSkyModel;
 use lumenwright::scene::block_entities::BlockEntityStats;
 use lumenwright::scene::camera::Camera;
 use lumenwright::scene::entities::EntityStats;
@@ -15,7 +16,9 @@ use lumenwright::{ChunkRect, EntityPolicy, HqOptions, QuickOptions, Request, Sky
 use crate::jar;
 use crate::output;
 use crate::unifont;
-use crate::values::{BackendArg, EmitterSamplingArg, ModeArg, TonemapArg, UnknownEntitiesArg};
+use crate::values::{
+    BackendArg, EmitterSamplingArg, ModeArg, SkyArg, TonemapArg, UnknownEntitiesArg,
+};
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct RenderArgs {
@@ -76,12 +79,16 @@ pub struct RenderArgs {
     /// Sun azimuth in degrees (0 = north, 90 = east).
     #[arg(long, default_value_t = 135.0, allow_hyphen_values = true)]
     pub sun_azimuth: f32,
-    /// HQ: sun intensity, as Chunky's (the sun's irradiance is intensity^2.2).
-    #[arg(long, default_value_t = sky::DEFAULT_SUN_INTENSITY)]
-    pub sun_intensity: f32,
-    /// HQ: sky radiance scale.
-    #[arg(long, default_value_t = 1.0)]
-    pub sky_intensity: f32,
+    /// HQ: the sky the frame is lit by and drawn under.
+    #[arg(long, value_enum, default_value_t = SkyArg::Chunky)]
+    pub sky: SkyArg,
+    /// HQ, `--sky chunky`: sun intensity, as Chunky's (the sun's irradiance is
+    /// intensity^2.2). Default 1.25.
+    #[arg(long)]
+    pub sun_intensity: Option<f32>,
+    /// HQ, `--sky chunky`: the Preetham sky's radiance scale. Default 1.
+    #[arg(long)]
+    pub sky_intensity: Option<f32>,
     /// HQ: Chunky's emitter intensity (an emitting surface emits its texel colour squared
     /// times its block's emittance times this; 0 turns emitters off).
     #[arg(long, default_value_t = lumenwright::request::DEFAULT_EMITTER_INTENSITY)]
@@ -228,6 +235,29 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
     })?;
     let opening = t.elapsed().as_secs_f64();
     let r = a.render_distance.max(1);
+    let hq_sky = match a.sky {
+        SkyArg::Game => {
+            for (flag, given) in [
+                ("--sun-intensity", a.sun_intensity.is_some()),
+                ("--sky-intensity", a.sky_intensity.is_some()),
+            ] {
+                if given {
+                    bail!(
+                        "{flag} scales Chunky's sun and sky, which `--sky game` does not draw: \
+                         the game's sky casts the lightmap's light and its sun casts none. \
+                         Remove {flag}, or pass `--sky chunky`"
+                    );
+                }
+            }
+            HqSkyModel::Game {
+                render_distance: (r * 16) as f32,
+            }
+        }
+        SkyArg::Chunky => HqSkyModel::Chunky {
+            sun_intensity: a.sun_intensity.unwrap_or(sky::DEFAULT_SUN_INTENSITY),
+            sky_intensity: a.sky_intensity.unwrap_or(1.0),
+        },
+    };
     let req = Request {
         world: WorldSource::Opened(&world),
         chunks: ChunkRect::around(cam.pos, r),
@@ -267,8 +297,7 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             sun_dir: a
                 .sun_altitude
                 .map(|alt| sky::sun_direction(alt, a.sun_azimuth)),
-            sun_intensity: a.sun_intensity,
-            sky_intensity: a.sky_intensity,
+            hq: hq_sky,
         },
     };
     let out = lumenwright::render(&req)?;

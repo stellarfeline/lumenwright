@@ -54,6 +54,12 @@ pub struct EnvironmentState {
     pub fog_end: f32,
     /// `visual/sky_fog_end_distance`, blocks.
     pub sky_fog_end: f32,
+    /// `visual/sky_light_factor`, 0..1: how much of the sky's light reaches a cell open
+    /// to it (the lightmap's `SkyFactor`).
+    pub sky_light_factor: f32,
+    /// `visual/sky_light_color`, `0xAARRGGBB`: the colour of that light (the
+    /// lightmap's `SkyLightColor`).
+    pub sky_light_color: u32,
     /// The dimension's skybox.
     pub skybox: Skybox,
 }
@@ -80,6 +86,9 @@ const ATTRIBUTES: &[(&str, Kind, f64)] = &[
     ("visual/fog_start_distance", Kind::Float, 0.0),
     ("visual/fog_end_distance", Kind::Float, 1024.0),
     ("visual/sky_fog_end_distance", Kind::Float, 512.0),
+    ("visual/sky_light_factor", Kind::Float, 1.0),
+    // `-1`: opaque white, as the unsigned word `0xFFFFFFFF`.
+    ("visual/sky_light_color", Kind::Rgb, 4_294_967_295.0),
 ];
 
 /// The moon phases in `MoonPhase` order.
@@ -443,6 +452,8 @@ pub fn sample(
         fog_start: f("visual/fog_start_distance"),
         fog_end: f("visual/fog_end_distance"),
         sky_fog_end: f("visual/sky_fog_end_distance"),
+        sky_light_factor: f("visual/sky_light_factor"),
+        sky_light_color: values["visual/sky_light_color"].color(),
         skybox,
     })
 }
@@ -466,7 +477,9 @@ mod tests {
             br##"{"period_ticks":24000,"tracks":{
                 "minecraft:visual/sky_color":{"keyframes":[{"ticks":133,"value":"#ffffff"},{"ticks":11867,"value":"#ffffff"},{"ticks":13670,"value":"#000000"},{"ticks":22330,"value":"#000000"}],"modifier":"multiply"},
                 "minecraft:visual/sun_angle":{"ease":{"cubic_bezier":[0.362,0.241,0.638,0.759]},"keyframes":[{"ticks":6000,"value":360.0},{"ticks":6000,"value":0.0}]},
-                "minecraft:visual/star_brightness":{"keyframes":[{"ticks":11373,"value":0.0},{"ticks":13228,"value":0.5},{"ticks":22772,"value":0.5},{"ticks":23758,"value":0.0}],"modifier":"maximum"}
+                "minecraft:visual/star_brightness":{"keyframes":[{"ticks":11373,"value":0.0},{"ticks":13228,"value":0.5},{"ticks":22772,"value":0.5},{"ticks":23758,"value":0.0}],"modifier":"maximum"},
+                "minecraft:visual/sky_light_color":{"keyframes":[{"ticks":730,"value":"#ffffff"},{"ticks":11270,"value":"#ffffff"},{"ticks":13140,"value":"#7a7aff"},{"ticks":22860,"value":"#7a7aff"}],"modifier":"multiply"},
+                "minecraft:visual/sky_light_factor":{"keyframes":[{"ticks":730,"value":1.0},{"ticks":11270,"value":1.0},{"ticks":13140,"value":0.24},{"ticks":22860,"value":0.24}],"modifier":"multiply"}
             }}"##
                 .to_vec(),
         );
@@ -489,6 +502,16 @@ mod tests {
             night.sun_angle
         );
         assert_eq!(night.star_brightness, 0.5);
+        // The lightmap's two inputs: the timeline multiplies the registered defaults,
+        // opaque white and 1.
+        assert_eq!(noon.sky_light_color, 0xFFFF_FFFF);
+        assert_eq!(noon.sky_light_factor, 1.0);
+        assert_eq!(night.sky_light_color, 0xFF7A_7AFF);
+        assert!((night.sky_light_factor - 0.24).abs() < 1e-6);
+        // Half way down the dusk ramp: each 8-bit channel lerped as stored.
+        let dusk = sample(&s, "minecraft:overworld", "minecraft:plains", 12205).unwrap();
+        assert_eq!(dusk.sky_light_color, 0xFFBC_BCFF);
+        assert!((dusk.sky_light_factor - 0.62).abs() < 1e-5);
         // Day 3 at noon: the same as day 0.
         let later = sample(
             &s,

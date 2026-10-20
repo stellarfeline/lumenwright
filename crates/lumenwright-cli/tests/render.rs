@@ -522,6 +522,9 @@ fn gpu_matches_cpu_in_quick_mode() {
 const DAY_SUN: &[&str] = &["--sun-altitude", "40"];
 const DUSK_SUN: &[&str] = &["--sun-altitude", "-0.5"];
 const SUN_IN_VIEW: &[&str] = &["--sun-altitude", "8", "--sun-azimuth", "330"];
+/// The game's sky in the morning and at the setting sun.
+const GAME_DAY: &[&str] = &["--sky", "game", "--time", "4000"];
+const GAME_DUSK: &[&str] = &["--sky", "game", "--time", "12800"];
 /// A camera on the showcase looking at the [`SUN_IN_VIEW`] sun with a 12 degree view.
 const SUN_VIEW: &[&str] = &[
     "--camera",
@@ -546,6 +549,8 @@ fn gpu_matches_cpu_in_hq_mode() {
         ("showcase", showcase(), &[][..], DAY_SUN),
         ("showcase-dusk", showcase(), &[][..], DUSK_SUN),
         ("showcase-sun", showcase(), SUN_VIEW, SUN_IN_VIEW),
+        ("showcase-game-day", showcase(), &[][..], GAME_DAY),
+        ("showcase-game-dusk", showcase(), &[][..], GAME_DUSK),
         ("block-entities", gallery(), &GALLERY_VIEW[..], DAY_SUN),
         (
             "items",
@@ -662,6 +667,62 @@ fn gpu_draws_the_sky_as_the_cpu_does() {
     assert!(worst <= 2, "{worst}/255");
 }
 
+/// The game's sky is two maps the host draws and every backend reads the same way: a
+/// frame that looks at the setting sun, its glow and the dusk sky (the lens's map) agrees
+/// between the CPU and the GPU within 2/255 everywhere.
+#[test]
+fn gpu_draws_the_game_sky_as_the_cpu_does() {
+    let jar = require_jar!();
+    if !gpu_available() {
+        eprintln!("skipping: no GPU adapter");
+        return;
+    }
+    let dir = tmp("parity-game-sky");
+    let args = |b: &'static str| {
+        vec![
+            "--mode",
+            "hq",
+            "--backend",
+            b,
+            "--spp",
+            "4",
+            "--width",
+            "160",
+            "--height",
+            "90",
+            "--camera",
+            "18.5,120,22.5",
+            "--look-at",
+            "-80,125,22.5",
+            "--fov",
+            "90",
+            "--sky",
+            "game",
+            "--time",
+            "12800",
+        ]
+    };
+    let (cpu, gpu) = (dir.join("sky-cpu.png"), dir.join("sky-gpu.png"));
+    render(showcase(), &jar, &cpu, &args("cpu")).unwrap();
+    render(showcase(), &jar, &gpu, &args("gpu")).unwrap();
+    let (a, b) = (load(&cpu), load(&gpu));
+    let worst = a
+        .pixels()
+        .zip(b.pixels())
+        .flat_map(|(p, q)| (0..3).map(move |i| (p.0[i] as i32 - q.0[i] as i32).abs()))
+        .max()
+        .unwrap();
+    let mean_red = a.pixels().map(|p| p.0[0] as f64).sum::<f64>() / (a.width() * a.height()) as f64;
+    eprintln!(
+        "hq game sky: largest channel difference {worst}/255 between CPU and GPU (mean red {mean_red:.1})"
+    );
+    assert!(
+        mean_red > 60.0,
+        "the frame shows the dusk sky: mean red {mean_red:.1}"
+    );
+    assert!(worst <= 2, "{worst}/255");
+}
+
 /// The CUDA kernel is the CPU kernel compiled to PTX: an HQ frame agrees with
 /// the CPU's within the GPU bounds above. Quick mode on CUDA is the CPU rasterizer.
 #[cfg(feature = "cuda")]
@@ -677,6 +738,8 @@ fn cuda_matches_cpu_in_hq_mode() {
         ("showcase", showcase(), &[][..], DAY_SUN),
         ("showcase-dusk", showcase(), &[][..], DUSK_SUN),
         ("showcase-sun", showcase(), SUN_VIEW, SUN_IN_VIEW),
+        ("showcase-game-day", showcase(), &[][..], GAME_DAY),
+        ("showcase-game-dusk", showcase(), &[][..], GAME_DUSK),
         ("block-entities", gallery(), &GALLERY_VIEW[..], DAY_SUN),
         (
             "items",

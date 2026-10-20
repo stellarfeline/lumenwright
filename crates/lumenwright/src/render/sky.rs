@@ -741,6 +741,178 @@ impl Preetham {
     }
 }
 
+// ---- The game's sky in HQ mode ------------------------------------------------------
+//
+// Ported from Delvewright's engine (GPL-3.0, stellarfeline/delvewright at 0fd300da7:
+// `crates/delvec/src/compiler/view/scene.rs` — `lightmap_sky`, `sky_cell` — and
+// `crates/delvec/src/compiler/view/sky_image.rs` — `sky_map`), which lights a Chunky scene
+// as the pinned 1.21.11 client lights the same tick. The engine's method:
+//
+// 1. The game lights the world from the sky alone. A cell open to the sky is drawn at the
+//    lightmap's colour for sky light 15 whatever the sun's direction, and nothing casts a
+//    shadow from the sun. So the sun casts no light, and the light the sky casts is that
+//    colour decoded to linear: a Lambertian top face under an open sky of that radiance
+//    returns its albedo times it, so it shows at the colour the game draws it.
+// 2. What the lens sees is the client's own sky at the tick (the quick-mode sky, which is
+//    the client's `SkyRenderer` evaluated per direction).
+// 3. The light keeps the client's sky's directions — warm on the sun's side at dusk —
+//    scaled, plus the least uniform veil, so that its cosine-weighted mean over the upper
+//    hemisphere is the lightmap's colour in every channel.
+//
+// Where Lumenwright departs from the engine, the kernel lets it: Chunky shows the lens and
+// casts the light from one map (`Sky.getSkyDiffuseColorInner` feeds both, scaled by
+// `apparentSkyLight` or `skyLight`), so the engine's lens sees the veil too, which pales
+// the noon zenith. Lumenwright's lens sees the client's sky alone, with its sun, moon and
+// stars (which the engine's renderer cannot draw), and only the light carries the veil.
+
+/// The client's `gamma` option at its default, 0.5: the lightmap's `BrightnessFactor`
+/// (the 1.21.11 client's `Options` builds `options.gamma` with the default `0.5d`;
+/// `LightTexture` reads it).
+pub const DEFAULT_BRIGHTNESS: f32 = 0.5;
+
+/// The size of the map the lens sees, in texels: 2048 × 1024, about 0.18° a texel, so the
+/// client's sun texture (32 texels over 33.4°) is drawn at about six map texels a
+/// texture texel. Lumenwright's.
+pub const LENS_MAP: [u32; 2] = [2048, 1024];
+
+/// The size of the map of the light the sky casts: one degree a texel, the engine's
+/// (`sky_image::WIDTH`, `HEIGHT`). It holds no drawn bodies, only the sky's slow
+/// gradients.
+pub const LIGHT_MAP: [u32; 2] = [360, 180];
+
+/// The largest factor the light map may scale the client's sky by: Chunky's
+/// `Sky.MAX_INTENSITY`, 50, the bound the engine takes (`sky_image::MAX_SKY_LIGHT`). Under
+/// a black night sky the light is the veil alone, `L / 50` scaled by 50.
+pub const MAX_SKY_LIGHT: f32 = 50.0;
+
+/// **The colour the pinned client's lightmap gives a cell open to the whole sky** (sky
+/// light 15, block light 0), as the display values the game draws it at, from
+/// `visual/sky_light_factor`, `visual/sky_light_color` (sRGB 0..1) and the `gamma`
+/// option. The 1.21.11 client's `assets/minecraft/shaders/core/lightmap.fsh`, with the
+/// uniforms `LightTexture.updateLightTexture` sets in the overworld: `SkyFactor` and
+/// `SkyLightColor` the two attributes, `AmbientLightFactor` the dimension's
+/// `ambient_light` 0, no darkness, night vision or boss fog. At level 15 `get_brightness`
+/// is 1, so the sky term is the factor times the colour; then `mix(·, 0.75, 0.04)`, the
+/// clamp, `notGamma` mixed in by the brightness, and a second `mix(·, 0.75, 0.04)`. The
+/// lightmap is an RGBA8 texture, so the value is the nearest 8-bit level.
+pub fn lightmap_sky(factor: f32, colour: Vec3, brightness: f32) -> Vec3 {
+    let mix75 = |c: Vec3| c * 0.96 + Vec3::splat(0.75 * 0.04);
+    let c = mix75(colour * factor).clamp(Vec3::ZERO, Vec3::ONE);
+    let max = c.max_element();
+    let not_gamma = if max > 0.0 {
+        let inv = 1.0 - max;
+        c * ((1.0 - inv * inv * inv * inv) / max)
+    } else {
+        c
+    };
+    let c = mix75(c + (not_gamma - c) * brightness);
+    (c * 255.0).round() / 255.0
+}
+
+/// The direction of texel `(i, j)` of a `w` × `h` equirectangular map, as the kernel's
+/// `map_lookup` reads it: its centre at azimuth `(i + ½) / w` turns from +x towards +z
+/// and height `(j + ½) / h · π − π/2`, row 0 at the nadir.
+pub fn map_direction(i: u32, j: u32, w: u32, h: u32) -> Vec3 {
+    let az = (i as f32 + 0.5) / w as f32 * std::f32::consts::TAU;
+    let el = (j as f32 + 0.5) / h as f32 * std::f32::consts::PI - std::f32::consts::FRAC_PI_2;
+    Vec3::new(el.cos() * az.cos(), el.sin(), el.cos() * az.sin())
+}
+
+/// The client's sky drawn into a `w` × `h` map, decoded to linear (`c^2.2`, as the kernel
+/// decodes a texel).
+fn draw_map(
+    sky: &QuickSky,
+    w: u32,
+    h: u32,
+    atlas: &[u32],
+    atlas_w: u32,
+    stars: &[u32],
+) -> Vec<Vec3> {
+    use rayon::prelude::*;
+    (0..w * h)
+        .into_par_iter()
+        .map(|k| {
+            let d = map_direction(k % w, k / w, w, h);
+            let c = sky.background(d, atlas, atlas_w, stars);
+            c.powf(lumenwright_kernel::math::GAMMA)
+        })
+        .collect()
+}
+
+/// The two maps the kernel reads under the game's sky ([`lumenwright_kernel::Params`]
+/// `sky_map`), and how the light was made.
+#[derive(Clone, Debug)]
+pub struct GameSkyMaps {
+    /// The lens's map ([`LENS_MAP`]), then the light's ([`LIGHT_MAP`]), linear RGB.
+    pub buffer: Vec<f32>,
+    /// `Params::sky_map`: the two maps' sizes.
+    pub sizes: [f32; 4],
+    /// The lightmap's colour decoded: the light an open top face takes, linear.
+    pub light: Vec3,
+    /// The cosine-weighted mean of the client's sky over the upper hemisphere, linear.
+    pub mean: Vec3,
+    /// The factor the client's sky is scaled by in the light: the largest, up to
+    /// [`MAX_SKY_LIGHT`], that leaves the veil non-negative in every channel.
+    pub scale: f32,
+    /// The uniform radiance added to the client's sky before the scale.
+    pub veil: Vec3,
+}
+
+/// **The game's sky for one frame.** `lens` is the client's sky as the lens sees it;
+/// `light` the same sky with nothing drawn in it (no sun, moon or stars, which cast no
+/// light in the game); `sky_light_factor` and `sky_light_color` (sRGB 0..1) the lightmap's
+/// two attributes at the tick.
+///
+/// The light map is `scale × (G + veil)` for the client's sky `G` drawn in `light`: with
+/// `Ē` its cosine-weighted mean over the upper hemisphere and `L` the lightmap's colour
+/// decoded, `scale = min(MAX_SKY_LIGHT, min over channels of L / Ē)` and `veil = L / scale
+/// − Ē`, so a top face open to the whole map takes exactly `L` (the engine's
+/// `sky_image::sky_map`, the least uniform veil that makes the light exact).
+pub fn game_sky_maps(
+    lens: &QuickSky,
+    light: &QuickSky,
+    sky_light_factor: f32,
+    sky_light_color: Vec3,
+    atlas: &[u32],
+    atlas_w: u32,
+    stars: &[u32],
+) -> GameSkyMaps {
+    let [lw, lh] = LENS_MAP;
+    let [gw, gh] = LIGHT_MAP;
+    let seen = draw_map(lens, lw, lh, atlas, atlas_w, stars);
+    let game = draw_map(light, gw, gh, atlas, atlas_w, stars);
+    let (mut acc, mut weight) = (glam::DVec3::ZERO, 0.0f64);
+    for (k, c) in game.iter().enumerate() {
+        let d = map_direction(k as u32 % gw, k as u32 / gw, gw, gh);
+        if d.y > 0.0 {
+            let w = (d.y * (1.0 - d.y * d.y).max(0.0).sqrt()) as f64;
+            acc += c.as_dvec3() * w;
+            weight += w;
+        }
+    }
+    let mean = (acc / weight).as_vec3();
+    let target = lightmap_sky(sky_light_factor, sky_light_color, DEFAULT_BRIGHTNESS)
+        .powf(lumenwright_kernel::math::GAMMA);
+    let mut scale = MAX_SKY_LIGHT;
+    for k in 0..3 {
+        if mean[k] > 0.0 {
+            scale = scale.min(target[k] / mean[k]);
+        }
+    }
+    let veil = (target / scale - mean).max(Vec3::ZERO);
+    let mut buffer = Vec::with_capacity((seen.len() + game.len()) * 3);
+    buffer.extend(seen.iter().flat_map(|c| c.to_array()));
+    buffer.extend(game.iter().flat_map(|c| ((*c + veil) * scale).to_array()));
+    GameSkyMaps {
+        buffer,
+        sizes: [lw as f32, lh as f32, gw as f32, gh as f32],
+        light: target,
+        mean,
+        scale,
+        veil,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1182,6 +1354,174 @@ mod tests {
             "no direction near a sun brighter than the cache's limit"
         );
         assert!(worst < 1e-4, "{worst:.2e}");
+    }
+
+    /// `lightmap.fsh` of the 1.21.11 client transcribed in `f64`, every uniform at its
+    /// overworld value, at sky light 15 and block light 0.
+    fn lightmap_fsh(sky_factor: f64, sky_colour: [f64; 3], brightness: f64) -> [f64; 3] {
+        let get_brightness = |level: f64| level / (4.0 - 3.0 * level);
+        let block = get_brightness(0.0) * 1.5;
+        // `floor(texCoord.y * 16) / 15` at sky light 15.
+        let level = 15.0f64;
+        let sky = get_brightness(level / 15.0) * sky_factor;
+        let mut c = [
+            block,
+            block * ((block * 0.6 + 0.4) * 0.6 + 0.4),
+            block * (block * block * 0.6 + 0.4),
+        ];
+        // mix(color, AmbientColor, AmbientLightFactor = 0).
+        for k in 0..3 {
+            c[k] += sky_colour[k] * sky;
+            c[k] = c[k] * 0.96 + 0.75 * 0.04;
+            // DarkenWorldFactor 0, no night vision, DarknessScale 0.
+            c[k] = c[k].clamp(0.0, 1.0);
+        }
+        let max = c[0].max(c[1]).max(c[2]);
+        let inv = 1.0 - max;
+        let scaled = 1.0 - inv * inv * inv * inv;
+        std::array::from_fn(|k| {
+            let ng = c[k] * (scaled / max);
+            let v = c[k] + (ng - c[k]) * brightness;
+            v * 0.96 + 0.75 * 0.04
+        })
+    }
+
+    /// The lightmap is the client's shader at sky light 15, read at its 8-bit level; at the
+    /// setting sun (tick 12782: factor 0.385497, colour `#9393ff`) its light, decoded, is
+    /// the engine's `sky_cell` light 0.374446 (peak channel) to within that level.
+    #[test]
+    fn the_sky_light_is_the_clients_lightmap() {
+        let mut checked = 0;
+        for f in [0.0f32, 0.24, 0.385497, 0.62, 1.0] {
+            for col in [
+                [1.0f32, 1.0, 1.0],
+                [0x7a as f32 / 255.0, 0x7a as f32 / 255.0, 1.0],
+            ] {
+                for b in [0.0f32, 0.5, 1.0] {
+                    let got = lightmap_sky(f, Vec3::from(col), b);
+                    let want = lightmap_fsh(f as f64, col.map(f64::from), b as f64);
+                    for k in 0..3 {
+                        assert!(
+                            (got[k] as f64 - want[k]).abs() <= 0.5 / 255.0 + 1e-6,
+                            "{f} {col:?} {b}: {got} vs {want:?}"
+                        );
+                        assert_eq!((got[k] * 255.0).fract(), 0.0, "an 8-bit level");
+                    }
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, 30);
+        let c = 0x93 as f32 / 255.0;
+        let l = lightmap_sky(0.385497, Vec3::new(c, c, 1.0), DEFAULT_BRIGHTNESS)
+            .powf(lumenwright_kernel::math::GAMMA);
+        let engine = 0.374446f32;
+        let level = (engine.powf(1.0 / 2.2) * 255.0).round() / 255.0;
+        assert!(
+            (l.z - level.powf(2.2)).abs() < 2e-3,
+            "{l} against the engine's {engine} at its 8-bit level"
+        );
+    }
+
+    /// A dusk sky as the client draws it (the timeline at tick 12800 over the overworld,
+    /// the camera facing the sun's side).
+    fn dusk_description(with_bodies: bool) -> SkyDescription {
+        SkyDescription {
+            sky: Vec3::new(0.18, 0.24, 0.37),
+            fog: Vec3::new(0.62, 0.40, 0.33),
+            sky_fog_end: 192.0,
+            render_fog: (172.8, 192.0),
+            env_fog: (0.0, 1024.0),
+            sky_disc: true,
+            sunrise: [0.98, 0.57, 0.25, 0.62],
+            sun_angle: 90.29,
+            sun: with_bodies.then_some((celestial_direction(90.29), [0.0, 0.0, 2.0, 2.0])),
+            moon: None,
+            star_angle: 90.29,
+            star_brightness: if with_bodies { 0.38 } else { 0.0 },
+        }
+    }
+
+    fn camera() -> CameraRays {
+        CameraRays {
+            forward: Vec3::new(-0.83, -0.35, 0.43).normalize(),
+            right: Vec3::new(-0.46, 0.0, -0.89).normalize(),
+            up: Vec3::Y,
+            tan_half_fov: 0.577,
+            aspect: 16.0 / 9.0,
+        }
+    }
+
+    /// The light the game's sky casts on a top face open to the whole sky is the
+    /// lightmap's colour in every channel: the cosine-weighted mean of the light's map
+    /// over the upper hemisphere, measured here by a second method (a midpoint rule on a
+    /// finer grid of directions through the kernel's own lookup), is the target; the
+    /// veil is non-negative and zero in the channel that bounds the scale; the sun is in
+    /// the lens's map and not in the light's.
+    #[test]
+    fn the_game_sky_casts_the_lightmaps_light() {
+        let atlas = vec![0xFFFF_FFFFu32; 4];
+        let cam = camera();
+        let lens = QuickSky::new(&cam, 16, 9, &dusk_description(true));
+        let bare = QuickSky::new(&cam, 16, 9, &dusk_description(false));
+        let colour = Vec3::new(0x92 as f32, 0x92 as f32, 0xff as f32) / 255.0;
+        let maps = game_sky_maps(&lens, &bare, 0.378182, colour, &atlas, 2, star_table());
+        let [lw, lh] = LENS_MAP;
+        let [gw, gh] = LIGHT_MAP;
+        assert_eq!(maps.buffer.len(), ((lw * lh + gw * gh) * 3) as usize);
+        assert!(maps.veil.min_element() >= 0.0, "{}", maps.veil);
+        assert!(
+            maps.veil.min_element() == 0.0 || maps.scale == MAX_SKY_LIGHT,
+            "{} {}",
+            maps.veil,
+            maps.scale
+        );
+        let params = lumenwright_kernel::Params {
+            sky_map: maps.sizes,
+            ..Default::default()
+        };
+        let view = lumenwright_kernel::SceneView {
+            params: &params,
+            grid: &[],
+            models: &[],
+            quads: &[],
+            atlas: &[],
+            emitters: &[],
+            emitter_grid: &[],
+            sky: &maps.buffer,
+        };
+        let (mut acc, mut wsum) = (glam::DVec3::ZERO, 0.0f64);
+        let (na, ne) = (720, 180);
+        for i in 0..na {
+            for j in 0..ne {
+                let az = (i as f64 + 0.5) / na as f64 * std::f64::consts::TAU;
+                let el = (j as f64 + 0.5) / ne as f64 * std::f64::consts::FRAC_PI_2;
+                let d = lumenwright_kernel::math::v3(
+                    (el.cos() * az.cos()) as f32,
+                    el.sin() as f32,
+                    (el.cos() * az.sin()) as f32,
+                );
+                let c = lumenwright_kernel::integrator::sky_light(&view, d);
+                let w = el.sin() * el.cos();
+                acc += glam::DVec3::new(c.x as f64, c.y as f64, c.z as f64) * w;
+                wsum += w;
+            }
+        }
+        let cast = acc / wsum;
+        eprintln!(
+            "game sky at dusk: light {} cast {cast} (scale {}, mean {}, veil {})",
+            maps.light, maps.scale, maps.mean, maps.veil
+        );
+        for k in 0..3 {
+            let rel = (cast[k] - maps.light[k] as f64).abs() / maps.light[k] as f64;
+            assert!(rel < 2e-3, "channel {k}: {cast} against {}", maps.light);
+        }
+        // The sun: drawn in the lens's map, absent from the light's.
+        let sun = celestial_direction(90.29);
+        let d = lumenwright_kernel::math::v3(sun.x, sun.y.max(0.01), sun.z);
+        let seen = lumenwright_kernel::integrator::sky_lens(&view, d);
+        let lit = lumenwright_kernel::integrator::sky_light(&view, d) / maps.scale;
+        assert!(seen.z > 0.9 && seen.z > lit.z + 0.3, "{seen:?} {lit:?}");
     }
 
     #[test]

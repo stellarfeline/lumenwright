@@ -14,7 +14,8 @@ use lumenwright::render::{BackendKind, Mode};
 use lumenwright::scene::camera::Camera;
 use lumenwright::world::Dimension;
 use lumenwright::{
-    ChunkRect, EntityPolicy, HqOptions, QuickOptions, Rendered, Request, Sky, WorldSource,
+    ChunkRect, EntityPolicy, HqOptions, HqSkyModel, QuickOptions, Rendered, Request, Sky,
+    WorldSource,
 };
 use lumenwright_cli::fixture::{self, TEXT_DISPLAYS, TextDisplayCase};
 use lumenwright_cli::jar;
@@ -144,8 +145,10 @@ fn request<'a>(world: &'a Path, jar: &'a Path, mode: Mode, cam: Camera) -> Reque
         sky: Sky::Vanilla {
             time: None,
             sun_dir: Some(sky::sun_direction(45.0, 160.0)),
-            sun_intensity: 1.5,
-            sky_intensity: 1.0,
+            hq: HqSkyModel::Chunky {
+                sun_intensity: 1.5,
+                sky_intensity: 1.0,
+            },
         },
     }
 }

@@ -719,3 +719,113 @@ fn a_later_coplanar_quad_is_met() {
     }
     assert_eq!(n, 32);
 }
+
+/// A scene whose sky is two maps: the lens's 4 × 2 (texel `(i, j)` holds `(i, j, 1)`) and
+/// the light's 2 × 2 (`(10 + i, 10 + j, 2)`).
+fn map_scene() -> TestScene {
+    let mut s = TestScene::new(false);
+    s.params.sky_map = [4.0, 2.0, 2.0, 2.0];
+    let mut sky = Vec::new();
+    for j in 0..2 {
+        for i in 0..4 {
+            sky.extend([i as f32, j as f32, 1.0]);
+        }
+    }
+    for j in 0..2 {
+        for i in 0..2 {
+            sky.extend([10.0 + i as f32, 10.0 + j as f32, 2.0]);
+        }
+    }
+    s.sky = sky;
+    s
+}
+
+/// A unit direction at `turns` of azimuth from +x towards +z and `el` radians up.
+fn sky_dir(turns: f32, el: f32) -> V3 {
+    let az = turns * std::f32::consts::TAU;
+    v3(el.cos() * az.cos(), el.sin(), el.cos() * az.sin())
+}
+
+fn near(a: V3, b: V3, tol: f32) -> bool {
+    (a.x - b.x).abs() <= tol && (a.y - b.y).abs() <= tol && (a.z - b.z).abs() <= tol
+}
+
+/// Each map is read at its texel centres exactly and bilinearly between them; the
+/// azimuth wraps across the seam at +x, the height holds at the outer rows' centres, and
+/// the light's map is the one after the lens's in the buffer.
+#[test]
+fn the_sky_maps_are_read_bilinearly() {
+    use crate::integrator::{sky_lens, sky_light};
+    use core::f32::consts::{FRAC_PI_2, FRAC_PI_4};
+    let s = map_scene();
+    let v = s.view();
+    let mut checked = 0;
+    for j in 0..2 {
+        for i in 0..4 {
+            let d = sky_dir(
+                (i as f32 + 0.5) / 4.0,
+                (j as f32 + 0.5) * FRAC_PI_2 - FRAC_PI_2,
+            );
+            let c = sky_lens(&v, d);
+            assert!(
+                near(c, v3(i as f32, j as f32, 1.0), 1e-3),
+                "({i}, {j}): {c:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 8);
+    // Across the seam, half way between the last column and the first.
+    let c = sky_lens(&v, sky_dir(0.0, -FRAC_PI_4));
+    assert!(near(c, v3(1.5, 0.0, 1.0), 1e-3), "{c:?}");
+    // Half way between the rows, and at the zenith and the nadir, held.
+    let c = sky_lens(&v, sky_dir(0.125, 0.0));
+    assert!(near(c, v3(0.0, 0.5, 1.0), 1e-3), "{c:?}");
+    assert!(near(
+        sky_lens(&v, v3(0.0, 1.0, 0.0)),
+        v3(1.5, 1.0, 1.0),
+        1e-3
+    ));
+    assert!(near(
+        sky_lens(&v, v3(0.0, -1.0, 0.0)),
+        v3(1.5, 0.0, 1.0),
+        1e-3
+    ));
+    // The light's map.
+    let c = sky_light(&v, sky_dir(0.25, FRAC_PI_4));
+    assert!(near(c, v3(10.0, 11.0, 2.0), 1e-3), "{c:?}");
+    let c = sky_light(&v, sky_dir(0.5, 0.0));
+    assert!(near(c, v3(10.5, 10.5, 2.0), 1e-3), "{c:?}");
+}
+
+/// Under the maps a camera ray that meets the sky sees the lens's map, and a surface is
+/// lit by the light's map alone: a white top face under a uniform light map of 0.3 shows
+/// 0.3 in every sample, whatever the lens's map holds, with no sun light.
+#[test]
+fn the_lens_sees_one_map_and_a_bounce_is_lit_by_the_other() {
+    let mut s = TestScene::new(false);
+    s.params.sky_map = [4.0, 2.0, 2.0, 2.0];
+    s.sky = [vec![5.0f32; 4 * 2 * 3], vec![0.3f32; 2 * 2 * 3]].concat();
+    s.params.frame = [1, 1, 0, 1];
+    s.params.cam_pos = [40.25, 20.0, 8.25, 1e-3];
+    s.params.cam_right = [1.0, 0.0, 0.0, 0.0];
+    s.params.sun_dir = [0.0, 1.0, 0.0, 0.9995];
+    // Down, at the uniform brick's top (y = 16).
+    s.params.cam_fwd = [0.0, -1.0, 0.0, 1.0];
+    s.params.cam_up = [0.0, 0.0, -1.0, 0.0];
+    for sample in 0..16 {
+        let c = crate::render_sample(&s.view(), 0, 0, sample);
+        assert!(near(c, v3(0.3, 0.3, 0.3), 1e-4), "{sample}: {c:?}");
+    }
+    // Up, at the sky.
+    s.params.cam_fwd = [0.0, 1.0, 0.0, 1.0];
+    s.params.cam_up = [0.0, 0.0, 1.0, 0.0];
+    let c = crate::render_sample(&s.view(), 0, 0, 0);
+    assert!(near(c, v3(5.0, 5.0, 5.0), 1e-4), "{c:?}");
+    // A sun that casts light lights the face too; the same with sun colour 0 does not.
+    s.params.cam_fwd = [0.0, -1.0, 0.0, 1.0];
+    s.params.cam_up = [0.0, 0.0, -1.0, 0.0];
+    s.params.sun_color = [1.0, 1.0, 1.0, 0.03];
+    let lit = crate::render_sample(&s.view(), 0, 0, 0);
+    assert!(lit.x > 1.0, "{lit:?}");
+}

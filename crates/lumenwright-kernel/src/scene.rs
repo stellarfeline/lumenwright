@@ -154,7 +154,7 @@ pub const EMITTER_SAMPLING_ALL: u32 = 3;
 /// offset x, offset y, offset z, 0]` (offsets in cells, `i32` bit cast).
 pub const EMITTER_GRID_HEADER: u32 = 8;
 
-/// Per-frame parameters (uniform buffer), 25 × vec4.
+/// Per-frame parameters (uniform buffer), 26 × vec4.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 pub struct Params {
@@ -217,6 +217,11 @@ pub struct Params {
     /// The sun texture's sprite in the atlas: x, y, width and height in texels; a width
     /// of 0 when the client jar has none.
     pub sun_sprite: [f32; 4],
+    /// The sky as two equirectangular maps in [`SceneView::sky`] (see
+    /// [`crate::integrator::sky_lens`]): x, y = the width and height of the map the lens
+    /// sees, z, w = those of the map of the light the sky casts, which follows it. A width
+    /// of 0 reads the sky cache instead.
+    pub sky_map: [f32; 4],
 }
 
 /// Borrowed view of all scene buffers.
@@ -241,9 +246,12 @@ pub struct SceneView<'a> {
     /// neighbours. Cells are cubes of the header's size in grid space, from the grid
     /// origin.
     pub emitter_grid: &'a [u32],
-    /// The sky cache (Chunky's `SkyCache`, see [`crate::integrator::sky_radiance`]):
-    /// `(n + 1)²` HSL triples for the resolution `n` in `misc_f.z`, entry `(i, j)` at
-    /// `(i (n + 1) + j) × 3`, `i` along the azimuth and `j` along the height.
+    /// The sky the integrator reads, in one of two layouts. With
+    /// [`Params::sky_map`]`.x` 0 it is the sky cache (Chunky's `SkyCache`, see
+    /// [`crate::integrator::sky_radiance`]): `(n + 1)²` HSL triples for the resolution
+    /// `n` in `misc_f.z`, entry `(i, j)` at `(i (n + 1) + j) × 3`, `i` along the azimuth
+    /// and `j` along the height. Otherwise it is two equirectangular maps of linear RGB,
+    /// the lens's then the light's ([`crate::integrator::sky_lens`]).
     pub sky: &'a [f32],
 }
 
