@@ -11,12 +11,15 @@ use serde::Deserialize;
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
 pub struct BlockState {
     #[serde(rename = "Name")]
+    /// Namespaced block id, e.g. `minecraft:oak_stairs`.
     pub name: String,
     #[serde(rename = "Properties", default)]
+    /// Block state properties, e.g. `facing=north`.
     pub properties: BTreeMap<String, String>,
 }
 
 impl BlockState {
+    /// A block state with no properties.
     pub fn new(name: &str) -> BlockState {
         BlockState {
             name: name.to_string(),
@@ -24,11 +27,13 @@ impl BlockState {
         }
     }
 
+    /// Returns the state with property `k` set to `v`.
     pub fn with(mut self, k: &str, v: &str) -> BlockState {
         self.properties.insert(k.to_string(), v.to_string());
         self
     }
 
+    /// The value of property `k`, if set.
     pub fn prop(&self, k: &str) -> Option<&str> {
         self.properties.get(k).map(|s| s.as_str())
     }
@@ -38,6 +43,7 @@ impl BlockState {
         self.name.strip_prefix("minecraft:").unwrap_or(&self.name)
     }
 
+    /// Whether this is `air`, `cave_air` or `void_air`.
     pub fn is_air(&self) -> bool {
         matches!(self.short_name(), "air" | "cave_air" | "void_air")
     }
@@ -60,24 +66,35 @@ impl std::fmt::Display for BlockState {
 
 /// One decoded 16³ section with chunk-local palettes.
 pub struct ParsedSection {
+    /// Section Y index (block Y divided by 16).
     pub y: i32,
+    /// The section's block palette.
     pub palette: Vec<BlockState>,
     /// 4096 palette indices (YZX order), or `None` when the palette has one entry.
     pub indices: Option<Vec<u16>>,
+    /// The section's biome palette, namespaced biome ids.
     pub biome_palette: Vec<String>,
     /// 64 biome palette indices (4×4×4, YZX order), or `None` for a single biome.
     pub biome_indices: Option<Vec<u8>>,
+    /// Stored sky light: 2048 bytes, one nibble per block (YZX order), or `None`.
     pub sky_light: Option<Vec<u8>>,
+    /// Stored block light: 2048 bytes, one nibble per block (YZX order), or `None`.
     pub block_light: Option<Vec<u8>>,
 }
 
+/// One decoded chunk.
 pub struct ParsedChunk {
+    /// Chunk X coordinate.
     pub x: i32,
+    /// Chunk Z coordinate.
     pub z: i32,
+    /// The chunk's `DataVersion`.
     pub data_version: i32,
+    /// Decoded sections, in the order stored.
     pub sections: Vec<ParsedSection>,
     /// Pre-1.17 worlds keep entities inside the chunk.
     pub legacy_entities: Vec<Value>,
+    /// Block entity compounds as stored in the chunk.
     pub block_entities: Vec<Value>,
 }
 
@@ -209,6 +226,8 @@ fn decode_section(s: SectionNbt) -> Option<ParsedSection> {
     })
 }
 
+/// Decodes a chunk from its decompressed NBT bytes, in either the 1.18+ or the
+/// 1.16/1.17 layout.
 pub fn parse_chunk(nbt: &[u8]) -> Result<ParsedChunk> {
     let c: ChunkNbt = fastnbt::from_bytes(nbt).context("decoding chunk NBT")?;
     if let Some(level) = c.level {

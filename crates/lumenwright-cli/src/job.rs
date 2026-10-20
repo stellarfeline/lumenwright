@@ -14,6 +14,7 @@ use lumenwright::{ChunkRect, EntityPolicy, HqOptions, QuickOptions, Request, Sky
 
 use crate::jar;
 use crate::output;
+use crate::unifont;
 use crate::values::{BackendArg, ModeArg, TonemapArg, UnknownEntitiesArg};
 
 #[derive(Clone, Debug, clap::Args)]
@@ -81,9 +82,15 @@ pub struct RenderArgs {
     /// HQ: sky radiance scale.
     #[arg(long, default_value_t = 1.0)]
     pub sky_intensity: f32,
-    /// HQ: emissive block strength.
-    #[arg(long, default_value_t = 6.0)]
+    /// HQ: scale of the light emissive blocks cast (1 = calibrated to the game's block light).
+    #[arg(long, default_value_t = 1.0)]
     pub emitter_intensity: f32,
+    /// HQ: brightness of emissive surfaces as the camera sees them.
+    #[arg(long, default_value_t = 1.5)]
+    pub emitter_glow: f32,
+    /// HQ: no next-event estimation towards emissive blocks (a noisier reference).
+    #[arg(long)]
+    pub no_light_sampling: bool,
     #[arg(long, default_value_t = 1.0)]
     pub exposure: f32,
     #[arg(long, value_enum, default_value_t = TonemapArg::Aces)]
@@ -94,13 +101,21 @@ pub struct RenderArgs {
     /// Quick: disable smooth lighting / ambient occlusion.
     #[arg(long)]
     pub flat_lighting: bool,
+    /// Quick: mip levels for block textures, 0 (off) to 4 (vanilla's default).
+    #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u32).range(0..=4))]
+    pub mipmap_levels: u32,
     /// Explicit Minecraft client jar (textures/models).
     #[arg(long)]
     pub minecraft_jar: Option<PathBuf>,
     /// Minecraft version whose jar to use (default: the world's version).
     #[arg(long)]
     pub mc_version: Option<String>,
-    /// Never download the client jar.
+    /// Directory holding the Unifont files of the launcher's asset index
+    /// (minecraft/font/include/unifont.json and the hex zip it names), which draw CJK
+    /// and every other character no bitmap font covers.
+    #[arg(long)]
+    pub unifont: Option<PathBuf>,
+    /// Never download the client jar or the Unifont.
     #[arg(long)]
     pub offline: bool,
     /// Resource packs (zip or directory), applied in order on top of vanilla.
@@ -202,12 +217,20 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
         version: version.as_deref(),
         allow_download: !a.offline,
     })?;
+    let unifont_dir = unifont::resolve_unifont(&unifont::UnifontRequest {
+        explicit: a.unifont.as_deref(),
+        version: jar::jar_version(&jar_path)
+            .as_deref()
+            .or(version.as_deref()),
+        allow_download: !a.offline,
+    })?;
     let opening = t.elapsed().as_secs_f64();
     let r = a.render_distance.max(1);
     let req = Request {
         world: WorldSource::Opened(&world),
         chunks: ChunkRect::around(cam.pos, r),
         jar: &jar_path,
+        unifont: Some(&unifont_dir),
         resource_packs: &a.resource_packs,
         camera: cam,
         mode: a.mode.into(),
@@ -225,12 +248,15 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             draw_distance: (r * 16) as f32,
             brightness: a.brightness,
             smooth: !a.flat_lighting,
+            mipmap_levels: a.mipmap_levels,
         },
         hq: HqOptions {
             spp: a.spp,
             max_bounces: a.max_bounces,
             seed: a.seed,
             emitter_intensity: a.emitter_intensity,
+            emitter_glow: a.emitter_glow,
+            light_sampling: !a.no_light_sampling,
             exposure: a.exposure,
             tonemap: a.tonemap.into(),
         },

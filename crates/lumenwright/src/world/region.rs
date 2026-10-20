@@ -25,6 +25,8 @@ impl Region {
         }
     }
 
+    /// Wraps region bytes already in memory. `path` names the file for errors and
+    /// for finding external `.mcc` chunks.
     pub fn from_bytes(path: PathBuf, data: Vec<u8>) -> Region {
         Region { path, data }
     }
@@ -68,6 +70,8 @@ impl Region {
     }
 }
 
+/// Decompresses a chunk payload by its compression type: 1 gzip, 2 zlib,
+/// 3 none, 4 LZ4 (lz4-java block stream).
 pub fn decompress(kind: u8, payload: &[u8]) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     match kind {

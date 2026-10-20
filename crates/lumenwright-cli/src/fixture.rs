@@ -17,6 +17,15 @@ use lumenwright::world::region::write_region;
 pub const DATA_VERSION: i32 = 4671;
 pub const VERSION_NAME: &str = "1.21.11";
 
+mod emitters;
+pub use emitters::{CANDLE_ROOM_VIEW, FLOOR_Y, TORCH_ROOM_VIEW, candle_room, torch_room};
+mod chinese;
+mod text_displays;
+pub use chinese::{
+    DISPLAY as CHINESE_DISPLAY, SIGN as CHINESE_SIGN, TEXT as CHINESE_TEXT, chinese_text_gallery,
+};
+pub use text_displays::{TEXT_DISPLAYS, TextDisplayCase, text_display_gallery};
+
 /// Region coordinates -> chunks (local x, local z, NBT bytes).
 type RegionChunks = BTreeMap<(i32, i32), Vec<(usize, usize, Vec<u8>)>>;
 
@@ -1272,6 +1281,171 @@ pub fn block_entity_gallery() -> FixtureWorld {
 
     w.spawn = [9, 66, 8];
     w.player = Some(([9.0, 70.0, 10.0], 180.0, 25.0));
+    w
+}
+
+fn stack(id: &str, extra: Vec<(&str, Value)>) -> Value {
+    let mut kv = vec![
+        ("id", s(&format!("minecraft:{id}"))),
+        ("count", Value::Int(1)),
+    ];
+    kv.extend(extra);
+    compound(kv)
+}
+
+/// Where each body of [`item_gallery`] stands, by name: the point its item is
+/// drawn at, for checking that something is drawn there.
+pub const ITEM_GALLERY_SPOTS: &[(&str, [f64; 3])] = &[
+    ("item (diamond)", [2.5, 65.15, 4.5]),
+    ("item (bricks, 20)", [4.5, 65.2, 4.5]),
+    ("item_frame (grass block)", [6.5, 66.5, 0.06]),
+    ("glow_item_frame (map)", [8.5, 66.5, 0.06]),
+    ("item_display (lantern, billboard)", [10.5, 66.0, 4.5]),
+    ("item_display (end rod)", [12.5, 66.0, 4.5]),
+    ("armor_stand helmet", [6.5, 66.75, 3.5]),
+    ("armor_stand chestplate", [6.5, 66.1, 3.5]),
+    ("armor_stand sword", [6.05, 65.7, 4.1]),
+    ("armor_stand shield", [7.08, 66.0, 3.7]),
+    ("mannequin helmet", [9.5, 66.85, 3.5]),
+    ("mannequin axe", [9.1, 65.7, 3.9]),
+    ("zombie pumpkin", [13.5, 66.9, 2.0]),
+];
+
+/// A south-facing view over [`item_gallery`] that has every spot in frame.
+pub const ITEM_GALLERY_VIEW: [&str; 6] = [
+    "--camera",
+    "7.5,67.6,9.5",
+    "--look-at",
+    "7.5,66.0,2.5",
+    "--fov",
+    "60",
+];
+
+/// One of every way Lumenwright draws an item, on a platform in front of a wall,
+/// all facing south (+Z): two dropped stacks (a flat item and a cluster of a block
+/// item), an item frame holding a block item and a glow frame holding a flat one
+/// on the wall, two item displays (a billboard and a block model), an armour stand
+/// with a helmet, a chestplate, a sword and a shield, a mannequin in armour holding
+/// an axe, and a zombie with a carved pumpkin on its head holding a sword. With
+/// `holding` false the holders stand empty and the dropped items and displays are
+/// left out, which is the same frame without its items.
+pub fn item_gallery(holding: bool) -> FixtureWorld {
+    let mut w = FixtureWorld::new();
+    for x in -3..19 {
+        for z in -3..12 {
+            w.set(x, 63, z, bs("stone"));
+            w.set(x, 64, z, bs("smooth_stone"));
+        }
+        for y in 65..69 {
+            w.set(x, y, -1, bs("stone_bricks"));
+        }
+    }
+    let y = 65.0;
+    let hold = |v: Vec<(&'static str, Value)>| if holding { v } else { vec![] };
+    if holding {
+        w.entity(
+            "item",
+            [2.5, y, 4.5],
+            0.0,
+            vec![
+                ("Item", stack("diamond", vec![])),
+                ("UUID", Value::IntArray(IntArray::new(vec![11, 22, 33, 44]))),
+            ],
+        );
+        w.entity(
+            "item",
+            [4.5, y, 4.5],
+            0.0,
+            vec![
+                (
+                    "Item",
+                    compound(vec![
+                        ("id", s("minecraft:bricks")),
+                        ("count", Value::Int(20)),
+                    ]),
+                ),
+                ("UUID", Value::IntArray(IntArray::new(vec![5, 6, 7, 8]))),
+            ],
+        );
+    }
+    // Frames on the wall's south face (block z = 0), facing south.
+    let frame = |w: &mut FixtureWorld, id: &str, x: f64, item: Option<Value>| {
+        let mut extra = vec![("Facing", Value::Byte(3))];
+        if let Some(i) = item {
+            extra.push(("Item", i));
+        }
+        w.entity(id, [x, 66.5, 0.03125], 0.0, extra);
+    };
+    frame(
+        &mut w,
+        "item_frame",
+        6.5,
+        holding.then(|| stack("grass_block", vec![])),
+    );
+    frame(
+        &mut w,
+        "glow_item_frame",
+        8.5,
+        holding.then(|| stack("map", vec![])),
+    );
+    if holding {
+        w.entity(
+            "item_display",
+            [10.5, 66.0, 4.5],
+            0.0,
+            vec![
+                ("item", stack("lantern", vec![])),
+                ("billboard", s("center")),
+            ],
+        );
+        w.entity(
+            "item_display",
+            [12.5, 66.0, 4.5],
+            30.0,
+            vec![("item", stack("end_rod", vec![]))],
+        );
+    }
+    let equipment = |kv: Vec<(&'static str, Value)>| ("equipment", compound(kv));
+    let mut stand = vec![("ShowArms", Value::Byte(1))];
+    stand.extend(hold(vec![equipment(vec![
+        ("head", stack("iron_helmet", vec![])),
+        ("chest", stack("diamond_chestplate", vec![])),
+        ("mainhand", stack("iron_sword", vec![])),
+        ("offhand", stack("shield", vec![])),
+    ])]));
+    w.entity("armor_stand", [6.5, y, 3.5], 0.0, stand);
+    w.entity(
+        "mannequin",
+        [9.5, y, 3.5],
+        0.0,
+        hold(vec![equipment(vec![
+            ("head", stack("golden_helmet", vec![])),
+            (
+                "chest",
+                stack(
+                    "leather_chestplate",
+                    vec![(
+                        "components",
+                        compound(vec![("minecraft:dyed_color", Value::Int(0x3B5DC9))]),
+                    )],
+                ),
+            ),
+            ("legs", stack("chainmail_leggings", vec![])),
+            ("feet", stack("iron_boots", vec![])),
+            ("mainhand", stack("diamond_axe", vec![])),
+        ])]),
+    );
+    w.entity(
+        "zombie",
+        [13.5, y, 2.0],
+        0.0,
+        hold(vec![equipment(vec![
+            ("head", stack("carved_pumpkin", vec![])),
+            ("mainhand", stack("stone_sword", vec![])),
+        ])]),
+    );
+    w.spawn = [7, 65, 8];
+    w.player = Some(([7.5, 66.0, 9.5], 180.0, 15.0));
     w
 }
 

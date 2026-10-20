@@ -9,6 +9,7 @@ use clap::Parser;
 use lumenwright_cli::fixture;
 use lumenwright_cli::jar;
 use lumenwright_cli::job::{self, RenderArgs};
+use lumenwright_cli::unifont;
 
 #[derive(Parser)]
 struct Wrap {
@@ -26,6 +27,23 @@ fn client_jar() -> Option<PathBuf> {
         allow_download: false,
     })
     .ok()
+}
+
+/// The Unifont directory (LUMENWRIGHT_UNIFONT, or the cache's), if there is one.
+fn client_unifont() -> Option<&'static Path> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        if let Ok(p) = std::env::var("LUMENWRIGHT_UNIFONT") {
+            return Some(PathBuf::from(p));
+        }
+        unifont::resolve_unifont(&unifont::UnifontRequest {
+            explicit: None,
+            version: Some(fixture::VERSION_NAME),
+            allow_download: false,
+        })
+        .ok()
+    })
+    .as_deref()
 }
 
 macro_rules! require_jar {
@@ -81,6 +99,63 @@ fn gallery() -> &'static Path {
     })
 }
 
+fn items_world(holding: bool) -> &'static Path {
+    static WITH: OnceLock<PathBuf> = OnceLock::new();
+    static WITHOUT: OnceLock<PathBuf> = OnceLock::new();
+    let (cell, name) = if holding {
+        (&WITH, "items")
+    } else {
+        (&WITHOUT, "items-empty")
+    };
+    cell.get_or_init(|| {
+        let d = tmp(name);
+        fixture::item_gallery(holding).write(&d).unwrap();
+        d
+    })
+}
+
+/// Projects a world point into a frame drawn from `cam` (pixel x, y).
+fn project(
+    cam: &lumenwright::scene::camera::Camera,
+    p: [f64; 3],
+    w: u32,
+    h: u32,
+) -> Option<(i32, i32)> {
+    let (f, r, u) = cam.basis();
+    let d = (lumenwright::glam::DVec3::from_array(p) - cam.pos).as_vec3();
+    let z = d.dot(f);
+    if z <= 0.0 {
+        return None;
+    }
+    let t = (cam.fov_y.to_radians() * 0.5).tan();
+    let x = d.dot(r) / (z * t * w as f32 / h as f32);
+    let y = d.dot(u) / (z * t);
+    Some((
+        ((x + 1.0) * 0.5 * w as f32) as i32,
+        ((1.0 - y) * 0.5 * h as f32) as i32,
+    ))
+}
+
+/// The most any channel moves between two frames within `radius` of a pixel.
+fn change_near(a: &image::RgbaImage, b: &image::RgbaImage, at: (i32, i32), radius: i32) -> i32 {
+    let mut most = 0;
+    for y in at.1 - radius..=at.1 + radius {
+        for x in at.0 - radius..=at.0 + radius {
+            if x < 0 || y < 0 || x >= a.width() as i32 || y >= a.height() as i32 {
+                continue;
+            }
+            let (p, q) = (
+                a.get_pixel(x as u32, y as u32),
+                b.get_pixel(x as u32, y as u32),
+            );
+            for i in 0..3 {
+                most = most.max((p.0[i] as i32 - q.0[i] as i32).abs());
+            }
+        }
+    }
+    most
+}
+
 /// Looks north over the three rows of the block-entity gallery.
 const GALLERY_VIEW: [&str; 6] = [
     "--camera",
@@ -90,6 +165,9 @@ const GALLERY_VIEW: [&str; 6] = [
     "--fov",
     "60",
 ];
+
+const UNIFONT_HINT: &str =
+    "the unifont: set LUMENWRIGHT_UNIFONT or run `lumenwright assets fetch-unifont 1.21.11`";
 
 fn render(
     world: &Path,
@@ -103,6 +181,8 @@ fn render(
         world.display().to_string(),
         "--minecraft-jar".into(),
         jar.display().to_string(),
+        "--unifont".into(),
+        client_unifont().expect(UNIFONT_HINT).display().to_string(),
         "--offline".into(),
         "--output".into(),
         out.display().to_string(),
@@ -262,6 +342,136 @@ fn hq_cpu_produces_a_lit_image() {
     assert!(top_blue.count() > 80);
 }
 
+/// A 192×192 plane of gravel, the texture with the most fine detail, under
+/// an empty sky.
+fn gravel_plane() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = tmp("gravel-plane");
+        let mut w = fixture::FixtureWorld::new();
+        for x in -96..96 {
+            for z in -96..96 {
+                w.set(
+                    x,
+                    64,
+                    z,
+                    lumenwright::world::BlockState::new("minecraft:gravel"),
+                );
+            }
+        }
+        w.write(&d).unwrap();
+        d
+    })
+}
+
+/// Luma (0..255) of every pixel in rows `rows`.
+fn luma_rows(img: &image::RgbaImage, rows: std::ops::Range<u32>) -> Vec<Vec<f32>> {
+    rows.map(|y| {
+        (0..img.width())
+            .map(|x| {
+                let p = img.get_pixel(x, y).0;
+                0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32
+            })
+            .collect()
+    })
+    .collect()
+}
+
+/// Mean squared 4-neighbour Laplacian: the image's high-frequency energy.
+fn laplacian_energy(l: &[Vec<f32>]) -> f32 {
+    let (mut sum, mut n) = (0f64, 0u64);
+    for y in 1..l.len() - 1 {
+        for x in 1..l[y].len() - 1 {
+            let v = 4.0 * l[y][x] - l[y - 1][x] - l[y + 1][x] - l[y][x - 1] - l[y][x + 1];
+            sum += (v * v) as f64;
+            n += 1;
+        }
+    }
+    (sum / n as f64) as f32
+}
+
+/// Mean absolute luma difference between two renders.
+fn mean_abs_diff(a: &[Vec<f32>], b: &[Vec<f32>]) -> f32 {
+    let (mut sum, mut n) = (0f64, 0u64);
+    for (ra, rb) in a.iter().zip(b) {
+        for (p, q) in ra.iter().zip(rb) {
+            sum += (p - q).abs() as f64;
+            n += 1;
+        }
+    }
+    (sum / n as f64) as f32
+}
+
+#[test]
+fn mipmaps_calm_distant_textures() {
+    let jar = require_jar!();
+    let dir = tmp("mipmaps");
+    // Three blocks over the plane, looking north 5.7° down: the horizon sits
+    // at row ~77 and rows 79..100 see the plane from about 140 down to 17
+    // blocks away, where one pixel spans 2 to 17 gravel texels across and
+    // several times that along the view.
+    let view = |x: f64, levels: u32, name: &str| {
+        let out = dir.join(format!("{name}.png"));
+        let cam = format!("{x},68.0,70.0");
+        let at = format!("{x},62.0,10.0");
+        let lv = levels.to_string();
+        render(
+            gravel_plane(),
+            &jar,
+            &out,
+            &[
+                "--backend",
+                "cpu",
+                "--width",
+                "320",
+                "--height",
+                "180",
+                "--camera",
+                &cam,
+                "--look-at",
+                &at,
+                "--render-distance",
+                "10",
+                "--time",
+                "6000",
+                "--mipmap-levels",
+                &lv,
+            ],
+        )
+        .unwrap();
+        load(&out)
+    };
+    let band = 79..100;
+    let mut measured = Vec::new();
+    for levels in [0u32, 4] {
+        let a = luma_rows(&view(0.5, levels, &format!("l{levels}")), band.clone());
+        // A sideways step of 0.05 blocks: under a pixel everywhere in the band.
+        let shifted = luma_rows(
+            &view(0.55, levels, &format!("l{levels}-shift")),
+            band.clone(),
+        );
+        let energy = laplacian_energy(&a);
+        let shimmer = mean_abs_diff(&a, &shifted);
+        eprintln!(
+            "mipmap levels {levels}: high-frequency energy {energy:.1}, mean |luma change| under a 0.05-block shift {shimmer:.2}/255 (rows {band:?}, 320 px wide)"
+        );
+        measured.push((energy, shimmer));
+    }
+    let (off, on) = (measured[0], measured[1]);
+    assert!(
+        on.0 < off.0 * 0.5,
+        "mipmaps should at least halve the far plane's high-frequency energy: {:.1} vs {:.1}",
+        on.0,
+        off.0
+    );
+    assert!(
+        on.1 < off.1 * 0.5,
+        "mipmaps should at least halve the shimmer under a sub-pixel move: {:.2} vs {:.2}",
+        on.1,
+        off.1
+    );
+}
+
 #[test]
 fn gpu_matches_cpu_in_quick_mode() {
     let jar = require_jar!();
@@ -273,6 +483,7 @@ fn gpu_matches_cpu_in_quick_mode() {
     for (name, world, view) in [
         ("showcase", showcase(), &[][..]),
         ("block-entities", gallery(), &GALLERY_VIEW[..]),
+        ("items", items_world(true), &fixture::ITEM_GALLERY_VIEW[..]),
     ] {
         let args = |b: &'static str| {
             let mut v = vec!["--backend", b, "--width", "320", "--height", "180"];
@@ -292,6 +503,10 @@ fn gpu_matches_cpu_in_quick_mode() {
             .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 8))
             .count() as f32
             / (a.width() * a.height()) as f32;
+        eprintln!(
+            "quick {name}: {:.3}% of pixels differ by more than 8/255 between CPU and GPU",
+            off * 100.0
+        );
         assert!(
             off < 0.01,
             "{name}: {:.3}% of pixels differ between CPU and GPU",
@@ -311,6 +526,7 @@ fn gpu_matches_cpu_in_hq_mode() {
     for (name, world, view) in [
         ("showcase", showcase(), &[][..]),
         ("block-entities", gallery(), &GALLERY_VIEW[..]),
+        ("items", items_world(true), &fixture::ITEM_GALLERY_VIEW[..]),
     ] {
         let args = |b: &'static str| {
             let mut v = vec![
@@ -344,6 +560,10 @@ fn gpu_matches_cpu_in_hq_mode() {
         };
         let (la, lb) = (lum(&a), lum(&b));
         let rel = (la - lb).abs() / la.max(1.0);
+        eprintln!(
+            "hq {name}: mean luminance differs by {:.3}% between CPU and GPU",
+            rel * 100.0
+        );
         assert!(
             rel < 0.03,
             "{name}: mean luminance differs by {:.2}%",
@@ -356,6 +576,79 @@ fn gpu_matches_cpu_in_hq_mode() {
             .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 16))
             .count() as f32
             / (a.width() * a.height()) as f32;
+        eprintln!(
+            "hq {name}: {:.3}% of pixels differ by more than 16/255 between CPU and GPU",
+            off * 100.0
+        );
+        assert!(off < 0.02, "{name}: {:.2}% of pixels differ", off * 100.0);
+    }
+}
+
+/// The CUDA kernel is the CPU kernel compiled to PTX: an HQ frame agrees with
+/// the CPU's within the GPU bounds above. Quick mode on CUDA is the CPU rasterizer.
+#[cfg(feature = "cuda")]
+#[test]
+fn cuda_matches_cpu_in_hq_mode() {
+    let jar = require_jar!();
+    if let Err(e) = lumenwright::render::create_backend(lumenwright::render::BackendKind::Cuda) {
+        eprintln!("skipping: no CUDA device ({e:#})");
+        return;
+    }
+    let dir = tmp("parity-cuda");
+    for (name, world, view) in [
+        ("showcase", showcase(), &[][..]),
+        ("block-entities", gallery(), &GALLERY_VIEW[..]),
+        ("items", items_world(true), &fixture::ITEM_GALLERY_VIEW[..]),
+    ] {
+        let args = |b: &'static str| {
+            let mut v = vec![
+                "--mode",
+                "hq",
+                "--backend",
+                b,
+                "--spp",
+                "16",
+                "--width",
+                "160",
+                "--height",
+                "90",
+                "--sun-altitude",
+                "40",
+            ];
+            v.extend_from_slice(view);
+            v
+        };
+        let (cpu, gpu) = (
+            dir.join(format!("{name}-cpu.png")),
+            dir.join(format!("{name}-cuda.png")),
+        );
+        render(world, &jar, &cpu, &args("cpu")).unwrap();
+        let rep = render(world, &jar, &gpu, &args("cuda")).unwrap();
+        assert!(rep.backend.contains("cuda"), "{}", rep.backend);
+        let (a, b) = (load(&cpu), load(&gpu));
+        let lum = |img: &image::RgbaImage| {
+            img.pixels()
+                .map(|p| p.0[0] as f64 * 0.2126 + p.0[1] as f64 * 0.7152 + p.0[2] as f64 * 0.0722)
+                .sum::<f64>()
+        };
+        let (la, lb) = (lum(&a), lum(&b));
+        let rel = (la - lb).abs() / la.max(1.0);
+        let off = a
+            .pixels()
+            .zip(b.pixels())
+            .filter(|(p, q)| (0..3).any(|i| (p.0[i] as i32 - q.0[i] as i32).abs() > 16))
+            .count() as f32
+            / (a.width() * a.height()) as f32;
+        eprintln!(
+            "hq {name}: CUDA mean luminance differs by {:.3}%, {:.3}% of pixels by more than 16/255",
+            rel * 100.0,
+            off * 100.0
+        );
+        assert!(
+            rel < 0.03,
+            "{name}: mean luminance differs by {:.2}%",
+            rel * 100.0
+        );
         assert!(off < 0.02, "{name}: {:.2}% of pixels differ", off * 100.0);
     }
 }
@@ -393,6 +686,8 @@ fn cli_info_and_render() {
         .arg(showcase())
         .arg("--minecraft-jar")
         .arg(&jar)
+        .arg("--unifont")
+        .arg(client_unifont().expect(UNIFONT_HINT))
         .arg("--output")
         .arg(&png)
         .status()
@@ -545,4 +840,331 @@ fn sign_text_reads_in_both_modes() {
         );
         assert!(r > r0 + 0.002, "{mode}: red pixels {r:.4}, {r0:.4} without");
     }
+}
+
+#[test]
+fn items_draw_in_both_modes() {
+    let jar = require_jar!();
+    let dir = tmp("item-modes");
+    let kinds = [
+        ("item", 2),
+        ("item_display", 2),
+        ("item_frame", 1),
+        ("glow_item_frame", 1),
+        ("armor_stand", 1),
+        ("mannequin", 1),
+        ("zombie", 1),
+    ];
+    let items = [
+        "diamond",
+        "bricks",
+        "grass_block",
+        "map",
+        "lantern",
+        "end_rod",
+        "iron_helmet",
+        "diamond_chestplate",
+        "iron_sword",
+        "shield",
+        "golden_helmet",
+        "leather_chestplate",
+        "chainmail_leggings",
+        "iron_boots",
+        "diamond_axe",
+        "carved_pumpkin",
+        "stone_sword",
+    ];
+    for mode in ["quick", "hq"] {
+        let mut args = vec![
+            "--mode",
+            mode,
+            "--backend",
+            "cpu",
+            "--spp",
+            "8",
+            "--width",
+            "640",
+            "--height",
+            "360",
+            "--sun-altitude",
+            "45",
+        ];
+        args.extend_from_slice(&fixture::ITEM_GALLERY_VIEW);
+        let with = dir.join(format!("{mode}-with.png"));
+        let rep = render(items_world(true), &jar, &with, &args).unwrap();
+        let st = &rep.entity_stats;
+        for (kind, n) in kinds {
+            assert_eq!(st.rendered.get(kind), Some(&n), "{mode} {kind}: {st:?}");
+        }
+        assert!(
+            st.skipped.is_empty() && st.fallback_boxes.is_empty(),
+            "{st:?}"
+        );
+        for id in items {
+            assert_eq!(st.items_rendered.get(id), Some(&1), "{mode} {id}: {st:?}");
+        }
+        assert_eq!(
+            st.items_rendered.values().sum::<usize>(),
+            items.len(),
+            "{st:?}"
+        );
+        assert!(st.items_skipped.is_empty(), "{st:?}");
+        // The same frame with the holders empty: every item's spot changes.
+        let without = dir.join(format!("{mode}-without.png"));
+        let bare = render(items_world(false), &jar, &without, &args).unwrap();
+        assert!(bare.entity_stats.items_rendered.is_empty());
+        let (a, b) = (load(&with), load(&without));
+        let mut blank = Vec::new();
+        for (spot, p) in fixture::ITEM_GALLERY_SPOTS {
+            let at = project(&rep.camera, *p, a.width(), a.height())
+                .unwrap_or_else(|| panic!("{spot} is behind the camera"));
+            let moved = change_near(&a, &b, at, 3);
+            if moved <= 24 {
+                blank.push(format!("{spot} (pixel {at:?}, largest change {moved})"));
+            }
+        }
+        assert!(blank.is_empty(), "{mode}: nothing drawn at {blank:?}");
+    }
+}
+
+#[test]
+fn every_item_definition_in_the_jar_resolves() {
+    use lumenwright::assets::items::DisplayContext;
+    use lumenwright::assets::items::ItemStack;
+    use lumenwright::scene::items::ItemBakery;
+    let jar = require_jar!();
+    let store = lumenwright::assets::load_resources(&jar, client_unifont(), &[]).unwrap();
+    let defs = store.paths_ending_with(".json");
+    let defs: Vec<&String> = defs
+        .iter()
+        .filter(|p| p.starts_with("assets/minecraft/items/"))
+        .collect();
+    assert!(defs.len() > 1000, "{} item definitions", defs.len());
+    let mut bakery = ItemBakery::new(&store);
+    let (mut drawn, mut special) = (0, std::collections::BTreeMap::<String, usize>::new());
+    for path in &defs {
+        let name = path
+            .trim_start_matches("assets/minecraft/items/")
+            .trim_end_matches(".json");
+        let stack = ItemStack {
+            id: format!("minecraft:{name}"),
+            count: 1,
+            components: Default::default(),
+        };
+        for ctx in [
+            DisplayContext::Ground,
+            DisplayContext::Fixed,
+            DisplayContext::ThirdPersonRightHand,
+        ] {
+            let p = bakery.prepare(&stack, ctx);
+            for why in &p.undrawn {
+                // Only the Java-drawn special models other than the shield go undrawn.
+                let kind = why
+                    .strip_prefix("special model ")
+                    .unwrap_or_else(|| panic!("{name} ({}): {why}", ctx.name()));
+                if ctx == DisplayContext::Fixed {
+                    *special.entry(kind.to_string()).or_default() += 1;
+                }
+            }
+            if ctx == DisplayContext::Fixed && p.drawn() {
+                drawn += 1;
+            }
+        }
+    }
+    let undrawn: usize = special.values().sum();
+    eprintln!(
+        "{} item definitions: {drawn} drawn, {undrawn} special (not drawn): {special:?}",
+        defs.len()
+    );
+    assert_eq!(drawn + undrawn, defs.len(), "{special:?}");
+}
+
+fn torch_room() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = tmp("torch-room");
+        fixture::torch_room().write(&d).unwrap();
+        d
+    })
+}
+
+/// Reads a little-endian PFM (rows bottom to top) into top-to-bottom RGB.
+fn read_pfm(p: &Path) -> (u32, u32, Vec<[f32; 3]>) {
+    let bytes = std::fs::read(p).unwrap();
+    let mut fields = Vec::new();
+    let mut at = 0;
+    while fields.len() < 4 {
+        let start = at;
+        while !bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        fields.push(String::from_utf8_lossy(&bytes[start..at]).to_string());
+        at += 1;
+    }
+    let (w, h): (u32, u32) = (fields[1].parse().unwrap(), fields[2].parse().unwrap());
+    let floats: Vec<f32> = bytes[at..]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
+        .collect();
+    let mut out = vec![[0.0; 3]; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = (((h - 1 - y) * w + x) * 3) as usize;
+            out[(y * w + x) as usize] = [floats[i], floats[i + 1], floats[i + 2]];
+        }
+    }
+    (w, h, out)
+}
+
+/// The block light the game gives the floor `d` blocks from the torch, against the
+/// light level an HQ render of the same floor reads as. The quick render (the game's
+/// lightmap over the save's block light) is the scale: each HQ floor pixel, tonemapped,
+/// is placed on the curve of quick pixel values by light level. The mean absolute
+/// difference over light levels 12 down to 3 (distances 2 to 11) must be at most 1.5
+/// levels and no single level off by more than 3. Physical light cannot follow the
+/// game's straight line: inverse-square falloff is brighter than the game close to the
+/// torch, and light bounced off the room's white walls, which the game does not model,
+/// lifts the far floor (measured with `LEVEL_15_POWER` = 600 on the CPU at 256 spp:
+/// mean 0.76, worst 2.11, the far floor reading about two levels high). The bounds
+/// hold the calibration to that shape: a power off by a factor of two in either
+/// direction exceeds them.
+#[test]
+fn emitter_calibration() {
+    let jar = require_jar!();
+    let dir = tmp("calibration");
+    let (w, h) = (320u32, 180u32);
+    let size = [
+        "--width",
+        "320",
+        "--height",
+        "180",
+        "--time",
+        "18000",
+        "--render-distance",
+        "3",
+    ];
+    let mut quick_args = vec!["--mode", "quick", "--backend", "cpu"];
+    quick_args.extend_from_slice(&size);
+    quick_args.extend_from_slice(&fixture::TORCH_ROOM_VIEW);
+    let quick = render(torch_room(), &jar, &dir.join("quick.png"), &quick_args).unwrap();
+    let pfm = dir.join("hq.pfm");
+    let pfm_arg = pfm.display().to_string();
+    let mut hq_args = vec![
+        "--mode",
+        "hq",
+        "--backend",
+        "cpu",
+        "--spp",
+        "256",
+        "--hdr-output",
+        &pfm_arg,
+    ];
+    hq_args.extend_from_slice(&size);
+    hq_args.extend_from_slice(&fixture::TORCH_ROOM_VIEW);
+    render(torch_room(), &jar, &dir.join("hq.png"), &hq_args).unwrap();
+    let q = load(&dir.join("quick.png"));
+    let (pw, ph, hdr) = read_pfm(&pfm);
+    assert_eq!((pw, ph), (w, h));
+
+    let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    let floor = fixture::FLOOR_Y as f64 + 1.0;
+    let mut quick_v = Vec::new(); // display luma 0..1 by distance 1..=15
+    let mut hq_lin = Vec::new(); // linear HDR by distance
+    for d in 1..=15 {
+        let (px, py) = project(&quick.camera, [d as f64 + 0.5, floor, 0.5], w, h).unwrap();
+        let (mut a, mut b, mut n) = (0.0f32, [0.0f32; 3], 0.0f32);
+        for y in py - 1..=py + 1 {
+            for x in px - 1..=px + 1 {
+                let p = q.get_pixel(x as u32, y as u32).0;
+                a += luma([p[0] as f32, p[1] as f32, p[2] as f32]) / 255.0;
+                let c = hdr[(y as u32 * w + x as u32) as usize];
+                for i in 0..3 {
+                    b[i] += c[i];
+                }
+                n += 1.0;
+            }
+        }
+        quick_v.push(a / n);
+        hq_lin.push([b[0] / n, b[1] / n, b[2] / n]);
+    }
+    // The light level a display value reads as on the quick curve (level 14 - d at d).
+    let level_of = |v: f32| -> f32 {
+        if v >= quick_v[0] {
+            return 13.0;
+        }
+        for i in 0..quick_v.len() - 1 {
+            let (hi, lo) = (quick_v[i], quick_v[i + 1]);
+            if v <= hi && v >= lo {
+                let f = if hi > lo { (hi - v) / (hi - lo) } else { 0.0 };
+                return (13 - i as i32) as f32 - f;
+            }
+        }
+        -1.0
+    };
+    let shown = |k: f32| -> Vec<f32> {
+        hq_lin
+            .iter()
+            .map(|c| {
+                let px = lumenwright::render::post::tonemap(
+                    &[[c[0] * k, c[1] * k, c[2] * k]],
+                    1.0,
+                    lumenwright::render::post::Tonemap::Aces,
+                )[0];
+                let ch = |s: u32| ((px >> s) & 0xFF) as f32 / 255.0;
+                luma([ch(0), ch(8), ch(16)])
+            })
+            .collect()
+    };
+    let errors = |k: f32| -> Vec<f32> {
+        shown(k)
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| level_of(v) - (13 - i as i32) as f32)
+            .collect()
+    };
+    let band = 1..11; // distances 2..=11, levels 12..=3
+    let mean_abs = |e: &[f32]| e[band.clone()].iter().map(|x| x.abs()).sum::<f32>() / 10.0;
+    let at_one = errors(1.0);
+    let shown_one = shown(1.0);
+    eprintln!("torch calibration (distance, game level, quick luma, hq luma, hq reads as level):");
+    for d in 1..=15usize {
+        eprintln!(
+            "  {d:2} {:3} {:.3} {:.3} {:6.2}",
+            14 - d as i32,
+            quick_v[d - 1],
+            shown_one[d - 1],
+            (13 - (d as i32 - 1)) as f32 + at_one[d - 1]
+        );
+    }
+    // The power multiplier that would fit best, on a log grid from 1/32 to 32.
+    let (mut best_k, mut best_e) = (1.0f32, f32::MAX);
+    for i in -50..=50 {
+        let k = 2f32.powf(i as f32 / 10.0);
+        let e = mean_abs(&errors(k));
+        if e < best_e {
+            (best_k, best_e) = (k, e);
+        }
+    }
+    let worst = at_one[band.clone()]
+        .iter()
+        .fold(0.0f32, |m, x| m.max(x.abs()));
+    eprintln!(
+        "torch calibration: mean |level error| {:.2} (worst {worst:.2}) over levels 12..3; \
+         best power multiplier {best_k:.3} gives {best_e:.2}",
+        mean_abs(&at_one)
+    );
+    let (half, double) = (mean_abs(&errors(0.5)), mean_abs(&errors(2.0)));
+    eprintln!(
+        "torch calibration: mean |level error| {half:.2} at half the power, {double:.2} at double"
+    );
+    assert!(
+        mean_abs(&at_one) <= 1.5,
+        "mean level error {:.2}",
+        mean_abs(&at_one)
+    );
+    assert!(worst <= 3.0, "worst level error {worst:.2}");
+    // The bounds bind: half or double the calibrated power fails them.
+    assert!(half > 1.5 && double > 1.5, "{half:.2} / {double:.2}");
 }

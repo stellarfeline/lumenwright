@@ -1,0 +1,100 @@
+# Lumenwright CI: every pull request and every push to main.
+#
+# No GPU jobs: GitHub-hosted runners have no GPU. The GPU parity tests therefore skip
+# on their "no GPU adapter" branch; the test job prints that skip count in its log
+# instead of letting it pass unseen. GPU behaviour is verified on a developer machine.
+#
+# Toolchain: the repository carries no rust-toolchain.toml and no rust-version, so the
+# version the local gate runs used (1.97.1) is pinned here.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, "ci/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: "1.97.1"
+  # The Minecraft client version the tests render against.
+  MC_VERSION: "1.21.11"
+  MC_JAR_SHA1: "ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd"
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component clippy
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - name: Fetch the pinned Minecraft client jar (official URL, SHA-1 checked)
+        run: |
+          set -euo pipefail
+          manifest=$(curl -fsSL https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)
+          vurl=$(jq -r --arg v "$MC_VERSION" '.versions[] | select(.id==$v) | .url' <<<"$manifest")
+          test -n "$vurl"
+          meta=$(curl -fsSL "$vurl")
+          jarurl=$(jq -r '.downloads.client.url' <<<"$meta")
+          mkdir -p "$RUNNER_TEMP/mc"
+          curl -fsSL -o "$RUNNER_TEMP/mc/client.jar" "$jarurl"
+          echo "$MC_JAR_SHA1  $RUNNER_TEMP/mc/client.jar" | sha1sum -c -
+          echo "LUMENWRIGHT_MC_JAR=$RUNNER_TEMP/mc/client.jar" >> "$GITHUB_ENV"
+      - name: Fetch the Unifont (the version's asset index, SHA-1 and size checked)
+        run: |
+          set -euo pipefail
+          cargo build -p lumenwright-cli
+          export LUMENWRIGHT_CACHE="$RUNNER_TEMP/lw-cache"
+          dir=$(./target/debug/lumenwright assets fetch-unifont "$MC_VERSION")
+          echo "LUMENWRIGHT_UNIFONT=$dir" >> "$GITHUB_ENV"
+      - name: Test, and count the tests that skipped
+        run: |
+          set -euo pipefail
+          cargo test --workspace --no-fail-fast -- --nocapture 2>&1 | tee test.log
+          jar_skips=$(grep -c 'skipping: no Minecraft' test.log || true)
+          gpu_skips=$(grep -c 'skipping: no GPU adapter' test.log || true)
+          ran=$(grep -E '^test result:' test.log | sed -E 's/.* ([0-9]+) passed.*/\1/' | paste -sd+ - | bc)
+          echo "::notice::tests passed: $ran; skipped for lack of the client jar: $jar_skips; skipped for lack of a GPU adapter: $gpu_skips"
+          if [ "$jar_skips" -ne 0 ]; then
+            echo "the client jar was provided yet $jar_skips tests skipped for lack of it"
+            exit 1
+          fi
+
+  doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - run: cargo publish --dry-run --workspace

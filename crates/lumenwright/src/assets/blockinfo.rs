@@ -6,11 +6,17 @@ use crate::world::BlockState;
 /// Where a face with `tintindex >= 0` takes its colour from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TintKind {
+    /// Untinted.
     None,
+    /// The biome's grass colour.
     Grass,
+    /// The biome's foliage colour.
     Foliage,
+    /// The biome's dry-foliage colour.
     DryFoliage,
+    /// The biome's water colour.
     Water,
+    /// A fixed colour, `0xRRGGBB`, whatever the biome.
     Fixed(u32),
 }
 
@@ -18,6 +24,7 @@ fn name(s: &BlockState) -> &str {
     s.short_name()
 }
 
+/// Where the tinted faces of a block state take their colour from.
 pub fn tint_kind(s: &BlockState) -> TintKind {
     let n = name(s);
     match n {
@@ -120,10 +127,12 @@ pub fn emissive_texture(s: &BlockState, texture: &str) -> bool {
     }
 }
 
+/// The block is water or a bubble column.
 pub fn is_water(s: &BlockState) -> bool {
     matches!(name(s), "water" | "bubble_column")
 }
 
+/// The block is lava.
 pub fn is_lava(s: &BlockState) -> bool {
     name(s) == "lava"
 }

@@ -27,7 +27,7 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
     let uniforms = Uniforms {
         view_proj: f.view_proj.to_cols_array_2d(),
         sky: f.sky,
-        atlas_size: [f.atlas_size[0], f.atlas_size[1], 0, 0],
+        atlas_size: [f.atlas_size[0], f.atlas_size[1], f.mip_levels, f.mip_rows],
     };
     let ubuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("quick uniforms"),
@@ -35,6 +35,18 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
         usage: wgpu::BufferUsages::UNIFORM,
     });
     let atlas = gpu.storage_buffer("atlas", bytemuck::cast_slice(f.atlas_pixels))?;
+    let mips = gpu.storage_buffer("atlas mips", bytemuck::cast_slice(f.atlas_mips))?;
+    let stars = gpu.storage_buffer("stars", bytemuck::cast_slice(f.stars))?;
+    let storage = |binding: u32| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    };
 
     let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("quick bgl"),
@@ -49,16 +61,9 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
                 },
                 count: None,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
+            storage(1),
+            storage(2),
+            storage(3),
         ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -72,6 +77,14 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: atlas.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: mips.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: stars.as_entire_binding(),
             },
         ],
     });
@@ -88,7 +101,10 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
         step_mode: wgpu::VertexStepMode::Vertex,
         attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Unorm8x4],
     };
-    let make_pipeline = |fs: &str, blend: Option<wgpu::BlendState>, depth_write: bool| {
+    let make_pipeline = |fs: &str,
+                         blend: Option<wgpu::BlendState>,
+                         depth_write: bool,
+                         depth_compare: wgpu::CompareFunction| {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(fs),
             layout: Some(&layout),
@@ -107,7 +123,7 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: depth_format,
                 depth_write_enabled: Some(depth_write),
-                depth_compare: Some(wgpu::CompareFunction::Less),
+                depth_compare: Some(depth_compare),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -126,11 +142,19 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
             cache: None,
         })
     };
-    let opaque = make_pipeline("fs_opaque", None, true);
+    let opaque = make_pipeline("fs_opaque", None, true, wgpu::CompareFunction::Less);
     let translucent = make_pipeline(
         "fs_translucent",
         Some(wgpu::BlendState::ALPHA_BLENDING),
         false,
+        wgpu::CompareFunction::Less,
+    );
+    // See-through text displays: blended over everything, no depth test.
+    let see_through = make_pipeline(
+        "fs_translucent",
+        Some(wgpu::BlendState::ALPHA_BLENDING),
+        false,
+        wgpu::CompareFunction::Always,
     );
     let sky = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("sky"),
@@ -215,6 +239,7 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
     };
     let ibuf_o = mk_index(&mesh.opaque);
     let ibuf_t = mk_index(&mesh.translucent);
+    let ibuf_s = mk_index(&mesh.see_through);
 
     let mut enc = device.create_command_encoder(&Default::default());
     {
@@ -254,6 +279,11 @@ pub fn render(gpu: &GpuBackend, f: &QuickFrame) -> Result<Vec<u32>> {
             pass.set_pipeline(&translucent);
             pass.set_index_buffer(ibuf_t.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..mesh.translucent.len() as u32, 0, 0..1);
+        }
+        if !mesh.see_through.is_empty() {
+            pass.set_pipeline(&see_through);
+            pass.set_index_buffer(ibuf_s.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..mesh.see_through.len() as u32, 0, 0..1);
         }
     }
     let row = (f.width * 4).div_ceil(256) * 256;

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use lumenwright::world::{Dimension, World};
-use lumenwright_cli::jar;
 use lumenwright_cli::job::{self, RenderArgs};
+use lumenwright_cli::{jar, unifont};
 
 /// Offline headless renderer for Minecraft Java Edition worlds.
 #[derive(Parser)]
@@ -53,6 +53,15 @@ enum Cmd {
         /// Instead of the showcase, one of every block entity Lumenwright draws.
         #[arg(long, conflicts_with = "lineup")]
         block_entities: bool,
+        /// Instead of the showcase, one of every way Lumenwright draws an item.
+        #[arg(long, conflicts_with_all = ["lineup", "block_entities"])]
+        items: bool,
+        /// Instead of the showcase, a closed room lit by one torch.
+        #[arg(long, conflicts_with_all = ["lineup", "block_entities", "items"])]
+        torch_room: bool,
+        /// Instead of the showcase, a closed room lit by candles.
+        #[arg(long, conflicts_with_all = ["lineup", "block_entities", "items", "torch_room"])]
+        candle_room: bool,
     },
 }
 
@@ -60,7 +69,10 @@ enum Cmd {
 enum AssetsCmd {
     /// Download a client jar from Mojang into the cache ("latest" for the latest release).
     Fetch { version: String },
-    /// Show which jar would be used for a version.
+    /// Download the Unifont of a version's asset index (the font that draws CJK text)
+    /// into the cache ("latest" for the latest release).
+    FetchUnifont { version: String },
+    /// Show which jar and which unifont would be used for a version.
     Which { version: Option<String> },
 }
 
@@ -101,6 +113,10 @@ fn main() -> Result<()> {
                 let p = jar::download_client_jar(&version)?;
                 println!("{}", p.display());
             }
+            AssetsCmd::FetchUnifont { version } => {
+                let p = unifont::download_unifont(&version)?;
+                println!("{}", p.display());
+            }
             AssetsCmd::Which { version } => {
                 let p = jar::resolve_jar(&jar::JarRequest {
                     explicit: None,
@@ -112,6 +128,14 @@ fn main() -> Result<()> {
                     p.display(),
                     jar::jar_version(&p).unwrap_or_else(|| "?".into())
                 );
+                match unifont::resolve_unifont(&unifont::UnifontRequest {
+                    explicit: None,
+                    version: jar::jar_version(&p).as_deref().or(version.as_deref()),
+                    allow_download: false,
+                }) {
+                    Ok(d) => println!("unifont {}", d.display()),
+                    Err(e) => println!("unifont not cached: {e:#}"),
+                }
             }
         },
         Cmd::Backends => backends(),
@@ -119,8 +143,17 @@ fn main() -> Result<()> {
             dir,
             lineup,
             block_entities,
+            items,
+            torch_room,
+            candle_room,
         } => {
-            let (what, world) = if block_entities {
+            let (what, world) = if torch_room {
+                ("torch room", lumenwright_cli::fixture::torch_room())
+            } else if candle_room {
+                ("candle room", lumenwright_cli::fixture::candle_room())
+            } else if items {
+                ("item gallery", lumenwright_cli::fixture::item_gallery(true))
+            } else if block_entities {
                 (
                     "block-entity gallery",
                     lumenwright_cli::fixture::block_entity_gallery(),

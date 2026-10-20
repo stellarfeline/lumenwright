@@ -2,22 +2,31 @@
 
 use crate::math::{V3, abs, floor, max, min, v3};
 use crate::scene::{
-    ALPHA_CUTOUT, ALPHA_TRANSLUCENT, BRICK_WORDS, EMPTY, FLAG_ALPHA_MASK, GpuQuad, OV_CELL_WORDS,
-    SceneView, UNIFORM,
+    ALPHA_CUTOUT, ALPHA_TRANSLUCENT, BRICK_WORDS, EMPTY, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY, GpuQuad,
+    OV_CELL_WORDS, SceneView, UNIFORM,
 };
 
+/// The nearest surface a ray hit.
 #[derive(Clone, Copy, Debug)]
 pub struct Hit {
+    /// Distance along the ray direction to the hit, in blocks for a unit direction.
     pub t: f32,
+    /// Index of the hit quad in [`SceneView::quads`].
     pub quad: u32,
     /// Texel at the hit (rgba8, sRGB).
     pub texel: u32,
+    /// The hit's parametric coordinates on the quad, `p0 + s*eu + t*ev`.
+    pub s: f32,
+    /// See `s`.
+    pub tt: f32,
 }
 
 const NO_HIT: Hit = Hit {
     t: f32::INFINITY,
     quad: u32::MAX,
     texel: 0,
+    s: 0.0,
+    tt: 0.0,
 };
 const MAX_STEPS: u32 = 65536;
 
@@ -59,23 +68,60 @@ pub fn quad_texel(scene: &SceneView, q: &GpuQuad, s: f32, t: f32) -> u32 {
     scene.texel(u, v)
 }
 
-/// Tests a quad, applying alpha testing. Updates `best` when closer.
+/// Tests a quad, applying alpha testing and front-only culling. Updates `best`
+/// when closer.
 #[inline(always)]
 fn test_quad(scene: &SceneView, qi: u32, o: V3, d: V3, tmin: f32, best: &mut Hit) {
     let q = &scene.quads[qi as usize];
     if let Some((t, s, tt)) = intersect_quad(q, o, d, tmin, best.t) {
+        // Tested after the intersection: with the test ahead of it, the PTX build's
+        // multi-sample launches disagreed with the CPU on text pixels (cause not
+        // established), and an intersection is rarer than a test.
+        if q.flags() & FLAG_FRONT_ONLY != 0 && q.normal().dot(d) >= 0.0 {
+            return;
+        }
         let texel = quad_texel(scene, q, s, tt);
         let alpha = texel >> 24;
         let mode = q.flags() & FLAG_ALPHA_MASK;
         if (mode == ALPHA_CUTOUT && alpha < 128) || (mode == ALPHA_TRANSLUCENT && alpha == 0) {
             return;
         }
-        *best = Hit { t, quad: qi, texel };
+        *best = Hit {
+            t,
+            quad: qi,
+            texel,
+            s,
+            tt,
+        };
+    }
+}
+
+/// Whether a quad index is one of the see-through quads.
+#[inline(always)]
+pub fn is_see_through(scene: &SceneView, qi: u32) -> bool {
+    let st = scene.params.see_through;
+    qi >= st[0] && qi - st[0] < st[1]
+}
+
+/// The closest see-through quad along `o + t*d` with `t > tmin`, whatever lies in
+/// front of it (`o` grid-relative).
+pub fn see_through_hit(scene: &SceneView, o: V3, d: V3, tmin: f32) -> Option<Hit> {
+    let st = scene.params.see_through;
+    let mut best = NO_HIT;
+    for i in 0..st[1] {
+        test_quad(scene, st[0] + i, o, d, tmin, &mut best);
+    }
+    if best.quad != u32::MAX {
+        Some(best)
+    } else {
+        None
     }
 }
 
 /// Finds the closest surface along the ray `o + t*d`, `t ∈ (tmin, tmax)`.
 /// `o` is in grid-relative coordinates.
+// On CUDA the whole path tracer is one function: see `pt_render` in crates/lumenwright-ptx.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
 pub fn trace(scene: &SceneView, o: V3, d: V3, tmin: f32, tmax: f32) -> Option<Hit> {
     let p = scene.params;
     let dims = p.grid_dims;
@@ -267,4 +313,5 @@ fn _assert_layout() {
     const _: () = assert!(core::mem::size_of::<GpuQuad>() == 80);
     const _: () = assert!(core::mem::size_of::<crate::scene::Params>() == 256);
     const _: () = assert!(core::mem::size_of::<crate::scene::GpuModel>() == 16);
+    const _: () = assert!(core::mem::size_of::<crate::scene::GpuLight>() == 32);
 }

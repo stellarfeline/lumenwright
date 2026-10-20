@@ -21,18 +21,23 @@ use crate::assets::atlas::{AtlasBuilder, load_texture};
 use crate::assets::font::Font;
 use crate::assets::lang::{DEFAULT_LANGUAGE, Lang};
 use crate::assets::source::{norm_loc, split_loc};
+use crate::assets::unifont;
 use crate::world::nbt::{self, Compound};
 use crate::world::{BlockState, BlockVolume, Registry};
 
 const BUILTIN_MODELS: &str = include_str!("../../assets/block_entity_models.json");
 
 #[derive(Deserialize)]
+/// The block-entity models bundled with the crate (`assets/block_entity_models.json`).
 pub struct BlockEntityModels {
+    /// Version of the file format.
     pub format: u32,
+    /// Model definitions by name.
     pub models: HashMap<String, ModelDef>,
 }
 
 impl BlockEntityModels {
+    /// Parses the bundled model file.
     pub fn load_builtin() -> BlockEntityModels {
         serde_json::from_str(BUILTIN_MODELS).expect("bundled block_entity_models.json is valid")
     }
@@ -43,11 +48,15 @@ impl BlockEntityModels {
 pub struct BlockEntity {
     /// Namespaced id, e.g. `minecraft:sign`.
     pub id: String,
+    /// World block coordinates.
     pub pos: [i32; 3],
+    /// The whole record as read from the chunk.
     pub nbt: Compound,
 }
 
 impl BlockEntity {
+    /// Reads a record from a chunk's `block_entities` list; `None` when it has no
+    /// `id` or no integer `x`, `y`, `z`.
     pub fn from_nbt(v: &Value) -> Option<BlockEntity> {
         let c = nbt::compound(v)?;
         let id = norm_loc(nbt::get_str(c, "id")?);
@@ -59,6 +68,7 @@ impl BlockEntity {
         })
     }
 
+    /// The id without a `minecraft:` namespace.
     pub fn short_id(&self) -> &str {
         self.id.strip_prefix("minecraft:").unwrap_or(&self.id)
     }
@@ -78,6 +88,8 @@ impl BlockEntity {
     }
 }
 
+/// Reads every well-formed record of a chunk's `block_entities`, sorted by
+/// y, then z, then x.
 pub fn parse_all(values: &[Value]) -> Vec<BlockEntity> {
     let mut out: Vec<BlockEntity> = values.iter().filter_map(BlockEntity::from_nbt).collect();
     out.sort_by_key(|b| (b.pos[1], b.pos[2], b.pos[0]));
@@ -85,6 +97,7 @@ pub fn parse_all(values: &[Value]) -> Vec<BlockEntity> {
 }
 
 #[derive(Default, Debug, Clone)]
+/// Per-kind counts of the block entities a scene drew and skipped.
 pub struct BlockEntityStats {
     /// Drawn block entities by kind (`sign`, `bell`, `chest`...).
     pub rendered: BTreeMap<String, usize>,
@@ -92,6 +105,7 @@ pub struct BlockEntityStats {
     pub skipped: BTreeMap<String, usize>,
     /// Sign lines with text, and glyphs drawn for them.
     pub text_lines: usize,
+    /// Glyphs drawn for the sign lines.
     pub glyphs: usize,
 }
 
@@ -145,10 +159,13 @@ pub struct BlockEntityPlan {
     planned: Vec<Planned>,
     textures: Vec<String>,
     generated: Vec<(String, u32, u32, Vec<u32>)>,
+    /// What the plan draws and skips, by kind.
     pub stats: BlockEntityStats,
 }
 
 impl BlockEntityPlan {
+    /// Adds the textures the plan samples to the atlas, including the textures it
+    /// composited (banners).
     pub fn register_textures(&mut self, ab: &mut AtlasBuilder) {
         for t in &self.textures {
             ab.add(t);
@@ -158,6 +175,7 @@ impl BlockEntityPlan {
         }
     }
 
+    /// Whether the plan draws nothing.
     pub fn is_empty(&self) -> bool {
         self.planned.is_empty()
     }
@@ -165,15 +183,22 @@ impl BlockEntityPlan {
 
 /// Context for planning: where blocks are and who looks at them.
 pub struct PlanContext<'a> {
+    /// Resources the models, textures and font come from.
     pub store: &'a ResourceStore,
+    /// Block states by id.
     pub registry: &'a Registry,
+    /// The loaded blocks, read to match each block entity to its block.
     pub volume: &'a BlockVolume,
+    /// Integer world origin of the scene coordinates.
     pub origin: [i32; 3],
     /// Camera position in world coordinates (glowing-text outlines are drawn within
     /// 16 blocks, as in `AbstractSignRenderer`).
     pub eye: Option<[f64; 3]>,
 }
 
+/// Plans the geometry of every block entity in `list` that lies inside the
+/// volume, and records which kinds it draws or skips. Quads are emitted once
+/// the atlas exists.
 pub fn plan(ctx: &PlanContext, list: &[BlockEntity]) -> BlockEntityPlan {
     let mut font: Option<(Font, Lang)> = None;
     let mut out = BlockEntityPlan {
@@ -221,9 +246,16 @@ pub fn plan(ctx: &PlanContext, list: &[BlockEntity]) -> BlockEntityPlan {
         match kind {
             Some(kind) => {
                 for d in &draws {
-                    if let Draw::Model { texture, .. } | Draw::Glyph { texture, .. } = d
-                        && !texture.starts_with("lumenwright:")
+                    let (Draw::Model { texture, .. } | Draw::Glyph { texture, .. }) = d;
+                    if let Some((font, _)) = &font
+                        && texture.starts_with(unifont::TEXTURE_PREFIX)
                     {
+                        if !out.generated.iter().any(|g| &g.0 == texture)
+                            && let Some((w, h, px)) = font.generated_texture(texture)
+                        {
+                            out.generated.push((texture.clone(), w, h, px));
+                        }
+                    } else if !texture.starts_with("lumenwright:") {
                         out.textures.push(texture.clone());
                     }
                 }
@@ -355,12 +387,6 @@ pub fn dye_diffuse_color(name: &str) -> Option<u32> {
     })
 }
 
-/// `ARGB.scaleRGB(color, f)`.
-fn scale_rgb(c: u32, f: f32) -> u32 {
-    let ch = |s: u32| ((((c >> s) & 0xFF) as f32 * f) as u32) << s;
-    ch(16) | ch(8) | ch(0)
-}
-
 #[allow(clippy::too_many_arguments)]
 fn plan_sign(
     ctx: &PlanContext,
@@ -451,7 +477,7 @@ fn plan_sign(
         let dark = if color == "black" && glowing {
             0xF0EBCC
         } else {
-            scale_rgb(text_color, 0.4)
+            text::scale_rgb(text_color, 0.4)
         };
         let (main, outline) = if glowing {
             (text_color, (color == "black" || near).then_some(dark))
@@ -526,37 +552,27 @@ fn glyph_draws(
     forced: bool,
     draws: &mut Vec<Draw>,
 ) {
-    for p in placed {
-        let Some(g) = font.glyph(p.c) else {
-            continue;
-        };
-        let rgb = if forced {
-            color
-        } else {
-            p.color.unwrap_or(color)
-        };
-        let w = g.cell[2] * g.scale;
-        let h = g.cell[3] * g.scale;
-        let top = y + 7.0 - g.ascent;
-        let copies: &[f32] = if p.bold { &[0.0, 1.0] } else { &[0.0] };
-        for &bx in copies {
-            let left = x + p.x + bx;
-            draws.push(Draw::Glyph {
-                texture: g.texture.clone(),
-                tex_size: g.texture_size,
-                uv: [
-                    g.cell[0],
-                    g.cell[1],
-                    g.cell[0] + g.cell[2],
-                    g.cell[1] + g.cell[3],
-                ],
-                p0: m.transform_point3(Vec3::new(left, top, z)),
-                eu: m.transform_vector3(Vec3::new(w, 0.0, 0.0)),
-                ev: m.transform_vector3(Vec3::new(0.0, h, 0.0)),
-                rgb,
-                full_bright,
-            });
-        }
+    let mut quads = Vec::new();
+    text::glyph_quads(
+        font,
+        placed,
+        Vec3::new(x, y, z),
+        color,
+        forced,
+        false,
+        &mut quads,
+    );
+    for g in quads {
+        draws.push(Draw::Glyph {
+            texture: g.texture,
+            tex_size: g.tex_size,
+            uv: g.uv,
+            p0: m.transform_point3(g.p0),
+            eu: m.transform_vector3(g.eu),
+            ev: m.transform_vector3(g.ev),
+            rgb: g.rgb,
+            full_bright,
+        });
     }
 }
 
@@ -1129,7 +1145,7 @@ mod tests {
     #[test]
     fn dye_colours_match_dyecolor() {
         assert_eq!(dye_text_color("black"), 0);
-        assert_eq!(scale_rgb(0xFFFFFF, 0.4), 0x666666);
+        assert_eq!(text::scale_rgb(0xFFFFFF, 0.4), 0x666666);
         assert_eq!(dye_diffuse_color("red"), Some(0xB02E26));
         assert_eq!(dye_diffuse_color("nope"), None);
     }

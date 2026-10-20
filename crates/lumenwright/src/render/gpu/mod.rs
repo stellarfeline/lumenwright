@@ -9,6 +9,9 @@ use wgpu::util::DeviceExt;
 
 use super::{Backend, BackendKind, HqFrame, QuickFrame};
 
+/// The wgpu backend: Metal, Vulkan or DX12, chosen by the [`BackendKind`] it
+/// is opened with. Quick mode runs a render pipeline; HQ mode runs the
+/// path tracer as a WGSL compute shader.
 pub struct GpuBackend {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -27,7 +30,9 @@ fn backends_for(kind: BackendKind) -> Result<wgpu::Backends> {
 
 fn request_adapter(kind: BackendKind) -> Result<wgpu::Adapter> {
     let backends = backends_for(kind)?;
-    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+    // wgpu's environment flags apply (`WGPU_VALIDATION`, `WGPU_DEBUG`,
+    // `WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER`, ...); the backends are ours.
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle_from_env();
     desc.backends = backends;
     let instance = wgpu::Instance::new(desc);
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -51,6 +56,10 @@ pub fn probe(kind: BackendKind) -> Result<String> {
 }
 
 impl GpuBackend {
+    /// Opens a GPU device for `kind` ([`BackendKind::Metal`], [`BackendKind::Vulkan`],
+    /// [`BackendKind::Dx12`], or [`BackendKind::Gpu`] / [`BackendKind::Auto`] for any
+    /// primary API). Fails when no hardware adapter is found; a software adapter
+    /// is refused.
     pub fn new(kind: BackendKind) -> Result<GpuBackend> {
         let adapter = request_adapter(kind)?;
         let info = adapter.get_info();

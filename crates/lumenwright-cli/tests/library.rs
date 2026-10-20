@@ -17,6 +17,7 @@ use lumenwright::{
 };
 use lumenwright_cli::fixture;
 use lumenwright_cli::jar;
+use lumenwright_cli::unifont;
 
 fn client_jar() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("LUMENWRIGHT_MC_JAR") {
@@ -28,6 +29,23 @@ fn client_jar() -> Option<PathBuf> {
         allow_download: false,
     })
     .ok()
+}
+
+/// The Unifont directory (LUMENWRIGHT_UNIFONT, or the cache's), if there is one.
+fn client_unifont() -> Option<&'static Path> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        if let Ok(p) = std::env::var("LUMENWRIGHT_UNIFONT") {
+            return Some(PathBuf::from(p));
+        }
+        unifont::resolve_unifont(&unifont::UnifontRequest {
+            explicit: None,
+            version: Some(fixture::VERSION_NAME),
+            allow_download: false,
+        })
+        .ok()
+    })
+    .as_deref()
 }
 
 macro_rules! require_jar {
@@ -77,6 +95,7 @@ fn request<'a>(world: &'a Path, jar: &'a Path, mode: Mode) -> Request<'a> {
         },
         chunks: ChunkRect::around(cam.pos, RADIUS),
         jar,
+        unifont: client_unifont(),
         resource_packs: &[],
         camera: cam,
         mode,
@@ -109,6 +128,8 @@ fn cli_png(world: &Path, jar: &Path, mode: &str, out: &Path) -> image::RgbaImage
         .arg(world)
         .arg("--minecraft-jar")
         .arg(jar)
+        .arg("--unifont")
+        .arg(client_unifont().expect("the unifont: set LUMENWRIGHT_UNIFONT or run `lumenwright assets fetch-unifont 1.21.11`"))
         .arg("--output")
         .arg(out)
         .args(["--mode", mode, "--width", "192", "--height", "108"])
@@ -194,6 +215,111 @@ fn a_stated_sky_is_drawn_as_given() {
     assert_eq!(red, 192 * 108, "the stated sky colour fills the frame");
 }
 
+/// A JSON file from the client jar.
+fn jar_json(jar: &Path, name: &str) -> serde_json::Value {
+    let f = std::fs::File::open(jar).unwrap();
+    let mut z = zip::ZipArchive::new(f).unwrap();
+    let mut e = z.by_name(name).unwrap();
+    let mut s = String::new();
+    std::io::Read::read_to_string(&mut e, &mut s).unwrap();
+    serde_json::from_str(&s).unwrap()
+}
+
+fn hex_rgb(v: &serde_json::Value) -> [i32; 3] {
+    let n = i32::from_str_radix(v.as_str().unwrap().trim_start_matches('#'), 16).unwrap();
+    [(n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF]
+}
+
+/// A linear colour track of `day.json` at `ticks`, read straight from its
+/// keyframes: the two around `ticks` (wrapping over the 24000-tick period),
+/// each channel `a + floor(f * (b - a))` as the client's `ARGB.srgbLerp`.
+fn day_track(day: &serde_json::Value, track: &str, ticks: i64) -> [i32; 3] {
+    let keys: Vec<(i64, [i32; 3])> = day["tracks"][track]["keyframes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| (k["ticks"].as_i64().unwrap(), hex_rgb(&k["value"])))
+        .collect();
+    let t = ticks.rem_euclid(24000);
+    let i = keys.iter().rposition(|k| k.0 <= t);
+    let (a, b) = match i {
+        Some(i) if i + 1 < keys.len() => (keys[i], keys[i + 1]),
+        Some(i) => (keys[i], (keys[0].0 + 24000, keys[0].1)),
+        None => (
+            (keys[keys.len() - 1].0 - 24000, keys[keys.len() - 1].1),
+            keys[0],
+        ),
+    };
+    let f = (t - a.0) as f32 / (b.0 - a.0) as f32;
+    [0, 1, 2].map(|c| a.1[c] + (f * (b.1[c] - a.1[c]) as f32).floor() as i32)
+}
+
+#[test]
+fn quick_sky_follows_the_vanilla_day() {
+    let jar = require_jar!();
+    let dir = tmp("vanilla-sky");
+    let world = dir.join("world");
+    fixture::block_entity_gallery().write(&world).unwrap();
+    let day = jar_json(&jar, "data/minecraft/timeline/day.json");
+    let plains = jar_json(&jar, "data/minecraft/worldgen/biome/plains.json");
+    let overworld = jar_json(&jar, "data/minecraft/dimension_type/overworld.json");
+    let base_sky = hex_rgb(&plains["attributes"]["minecraft:visual/sky_color"]);
+    let base_fog = hex_rgb(&overworld["attributes"]["minecraft:visual/fog_color"]);
+    let mul = |a: [i32; 3], b: [i32; 3]| [0, 1, 2].map(|c| a[c] * b[c] / 255);
+    // Looking north, 60° up: no sunrise tint (the camera faces neither the east
+    // nor the west), the sun and moon 30° off the view at noon and midnight.
+    // Along that ray the sky disc (height 16, rim 512) is hit at radius
+    // 16 / tan 60°, so its fog is the vertex distances 16 and 512.25 mixed by
+    // radius / 512, over FogSkyEnd = 128 (8 chunks).
+    let s = 16.0 / 60f32.to_radians().tan() / 512.0;
+    let disc_fog = (16.0 * (1.0 - s) + 512.249_94 * s) / 128.0;
+    // The fog colour leans to the sky by 1 - lerp(min(512 / 16, 8) / 32, 0.25, 1)^0.25.
+    let lean = 1.0 - (0.25f32 + 0.75 * 0.25).powf(0.25);
+    for (name, ticks) in [("noon", 6000), ("dusk", 12500), ("midnight", 18000)] {
+        let sky = mul(
+            base_sky,
+            day_track(&day, "minecraft:visual/sky_color", ticks),
+        );
+        let fog0 = mul(
+            base_fog,
+            day_track(&day, "minecraft:visual/fog_color", ticks),
+        );
+        let fog = [0, 1, 2].map(|c| fog0[c] + (lean * (sky[c] - fog0[c]) as f32).floor() as i32);
+        let want = [0, 1, 2].map(|c| sky[c] as f32 + (fog[c] - sky[c]) as f32 * disc_fog);
+        let mut req = request(&world, &jar, Mode::Quick);
+        req.camera.yaw = 180.0;
+        req.camera.pitch = -60.0;
+        req.sky = Sky::Vanilla {
+            time: Some(ticks),
+            sun_dir: None,
+            sun_intensity: 1.5,
+            sky_intensity: 1.0,
+        };
+        let out = lumenwright::render(&req).unwrap();
+        // The median of the centre 5×5 pixels (a star may sit on one).
+        let (w, h) = (out.width as usize, out.height as usize);
+        let got = [0, 1, 2].map(|c| {
+            let mut v: Vec<u8> = (0..25)
+                .map(|i| out.rgba[((h / 2 - 2 + i / 5) * w + w / 2 - 2 + i % 5) * 4 + c])
+                .collect();
+            v.sort();
+            v[12]
+        });
+        eprintln!(
+            "{name} ({ticks}): sky #{:02x}{:02x}{:02x}, fog #{:02x}{:02x}{:02x}; zenith-side pixel {got:?}, vanilla {want:.1?}",
+            sky[0], sky[1], sky[2], fog[0], fog[1], fog[2]
+        );
+        for c in 0..3 {
+            assert!(
+                (got[c] as f32 - want[c]).abs() <= 2.0,
+                "{name}: channel {c} is {} where the vanilla sky gives {:.1}",
+                got[c],
+                want[c]
+            );
+        }
+    }
+}
+
 fn on_threads(n: usize, req: &Request) -> Rendered {
     rayon::ThreadPoolBuilder::new()
         .num_threads(n)
@@ -208,17 +334,43 @@ fn cpu_pixels_are_identical_across_thread_counts() {
     let dir = tmp("threads");
     let world = dir.join("world");
     fixture::showcase().write(&world).unwrap();
-    for mode in [Mode::Quick, Mode::Hq] {
-        let mut req = request(&world, &jar, mode);
-        req.camera = Camera {
-            // The showcase's own player view (fixture::showcase).
-            pos: DVec3::new(18.5, 72.0 + 1.62, 22.5),
-            yaw: 150.0,
-            pitch: 18.0,
-            fov_y: 70.0,
-        };
+    let items = dir.join("items");
+    fixture::item_gallery(true).write(&items).unwrap();
+    // The item gallery's view (fixture::ITEM_GALLERY_VIEW).
+    let item_eye = DVec3::new(7.5, 67.6, 9.5);
+    let (yaw, pitch) = Camera::look_at(item_eye, DVec3::new(7.5, 66.0, 2.5));
+    let views = [
+        (
+            &world,
+            Camera {
+                // The showcase's own player view (fixture::showcase).
+                pos: DVec3::new(18.5, 72.0 + 1.62, 22.5),
+                yaw: 150.0,
+                pitch: 18.0,
+                fov_y: 70.0,
+            },
+        ),
+        (
+            &items,
+            Camera {
+                pos: item_eye,
+                yaw,
+                pitch,
+                fov_y: 60.0,
+            },
+        ),
+    ];
+    for ((world, camera), mode) in views.iter().flat_map(|v| [(v, Mode::Quick), (v, Mode::Hq)]) {
+        let mut req = request(world, &jar, mode);
+        req.camera = *camera;
         req.chunks = ChunkRect::around(req.camera.pos, RADIUS);
         let one = on_threads(1, &req);
+        if world == &&items {
+            assert!(
+                one.entity_stats.items_rendered.values().sum::<usize>() > 0,
+                "no item drawn"
+            );
+        }
         assert!(one.backend.contains("1 thread"), "{}", one.backend);
         for n in [3, 8] {
             let many = on_threads(n, &req);

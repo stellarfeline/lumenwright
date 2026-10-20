@@ -9,23 +9,36 @@ use fastnbt::Value;
 use super::nbt::{self, Compound};
 
 #[derive(Clone, Debug, Default)]
+/// The single-player position stored in `level.dat`.
 pub struct PlayerInfo {
+    /// Feet position in world coordinates (blocks).
     pub pos: [f64; 3],
+    /// Yaw in degrees, Minecraft convention (0 = south, 90 = west).
     pub yaw: f32,
+    /// Pitch in degrees; positive looks down.
     pub pitch: f32,
+    /// Namespaced dimension id, e.g. `minecraft:overworld`.
     pub dimension: String,
 }
 
 #[derive(Clone, Debug, Default)]
+/// What `level.dat` says about the world.
 pub struct LevelInfo {
+    /// The world's name (`LevelName`).
     pub name: String,
+    /// The game version that last saved the world, e.g. `1.21.11`.
     pub version_name: Option<String>,
+    /// The save's `DataVersion`.
     pub data_version: Option<i32>,
+    /// World spawn in block coordinates.
     pub spawn: [i32; 3],
+    /// Time of day in ticks (`DayTime`); 6000 when absent.
     pub day_time: i64,
+    /// The single-player player, when the save has one.
     pub player: Option<PlayerInfo>,
 }
 
+/// Reads `level.dat` (gzip-compressed or raw NBT).
 pub fn read_level_dat(path: &Path) -> Result<LevelInfo> {
     let raw = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
     let mut bytes = Vec::new();
@@ -67,6 +80,8 @@ fn parse_level(d: &Compound) -> LevelInfo {
     }
 }
 
+/// Reads a player compound (`Pos`, `Rotation`, `Dimension`). Returns `None`
+/// without a position.
 pub fn parse_player(p: &Compound) -> Option<PlayerInfo> {
     let pos = nbt::get(p, "Pos").and_then(nbt::as_f64_list)?;
     let rot = nbt::get(p, "Rotation")

@@ -10,9 +10,12 @@ use rayon::prelude::*;
 
 use super::{Backend, HqFrame, QuickFrame};
 
+/// The CPU backend: the software rasterizer for quick mode and the shared
+/// Rust path-tracing kernel on rayon for HQ mode. It is always available.
 pub struct CpuBackend;
 
 impl CpuBackend {
+    /// Creates the CPU backend. It uses rayon's current thread pool.
     pub fn new() -> CpuBackend {
         CpuBackend
     }
@@ -51,6 +54,8 @@ impl Backend for CpuBackend {
             models: &s.models,
             quads: &s.quads,
             atlas: &s.atlas,
+            lights: &s.lights,
+            emitters: &s.emitters,
         };
         out.par_chunks_mut(w as usize)
             .enumerate()

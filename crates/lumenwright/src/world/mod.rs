@@ -22,13 +22,16 @@ pub type StateId = u32;
 /// Interns block states and biome names seen in the loaded area.
 #[derive(Default)]
 pub struct Registry {
+    /// Interned block states, indexed by [`StateId`].
     pub states: Vec<BlockState>,
     state_ids: HashMap<BlockState, StateId>,
+    /// Interned biome ids, indexed by biome id.
     pub biomes: Vec<String>,
     biome_ids: HashMap<String, u16>,
 }
 
 impl Registry {
+    /// A registry holding air as state `0` and `minecraft:plains` as biome `0`.
     pub fn new() -> Registry {
         let mut r = Registry::default();
         r.intern(&BlockState::new("minecraft:air"));
@@ -36,6 +39,7 @@ impl Registry {
         r
     }
 
+    /// Returns the id of `s`, interning it if new. Every air variant maps to `0`.
     pub fn intern(&mut self, s: &BlockState) -> StateId {
         if s.is_air()
             && let Some(&id) = self.state_ids.get(&BlockState::new("minecraft:air"))
@@ -51,6 +55,7 @@ impl Registry {
         id
     }
 
+    /// Returns the id of biome `b`, interning it if new.
     pub fn intern_biome(&mut self, b: &str) -> u16 {
         if let Some(&id) = self.biome_ids.get(b) {
             return id;
@@ -61,28 +66,40 @@ impl Registry {
         id
     }
 
+    /// The block state for an id. Panics on an id this registry did not issue.
     pub fn state(&self, id: StateId) -> &BlockState {
         &self.states[id as usize]
     }
 }
 
+/// The blocks of one 16³ section.
 pub enum SectionBlocks {
+    /// Every block is this state.
     Uniform(StateId),
+    /// A palette and one index into it per block.
     Paletted {
+        /// Distinct states in the section.
         palette: Vec<StateId>,
+        /// 4096 palette indices, in YZX order (`(y * 16 + z) * 16 + x`).
         indices: Box<[u16]>,
     },
 }
 
+/// One loaded 16³ section.
 pub struct Section {
+    /// The section's blocks.
     pub blocks: SectionBlocks,
+    /// Biome ids at 4×4×4 resolution, in YZX order.
     pub biomes: [u16; 64],
+    /// Stored sky light: 2048 bytes, one nibble per block, or `None`.
     pub sky_light: Option<Box<[u8]>>,
+    /// Stored block light: 2048 bytes, one nibble per block, or `None`.
     pub block_light: Option<Box<[u8]>>,
 }
 
 impl Section {
     #[inline]
+    /// The block at section-local coordinates (each `0..16`).
     pub fn block(&self, lx: usize, ly: usize, lz: usize) -> StateId {
         match &self.blocks {
             SectionBlocks::Uniform(s) => *s,
@@ -92,6 +109,7 @@ impl Section {
         }
     }
 
+    /// Whether the section is all air.
     pub fn is_empty(&self) -> bool {
         matches!(self.blocks, SectionBlocks::Uniform(0))
     }
@@ -105,14 +123,20 @@ fn nibble(arr: &[u8], lx: usize, ly: usize, lz: usize) -> u8 {
 
 /// A rectangular, chunk-aligned region of loaded blocks.
 pub struct BlockVolume {
+    /// The minimum chunk (x, z).
     pub min_chunk: [i32; 2],
+    /// Width and depth in chunks (x, z).
     pub chunks: [i32; 2],
+    /// The lowest section Y index.
     pub min_section: i32,
+    /// Height in sections.
     pub sections_y: i32,
+    /// Sections in YZX order; `None` where a chunk or section is absent.
     pub sections: Vec<Option<Section>>,
 }
 
 impl BlockVolume {
+    /// The minimum corner in block coordinates.
     pub fn min_block(&self) -> [i32; 3] {
         [
             self.min_chunk[0] * 16,
@@ -121,6 +145,7 @@ impl BlockVolume {
         ]
     }
 
+    /// The size in blocks (x, y, z).
     pub fn size_blocks(&self) -> [i32; 3] {
         [
             self.chunks[0] * 16,
@@ -130,6 +155,8 @@ impl BlockVolume {
     }
 
     #[inline]
+    /// Index into [`BlockVolume::sections`] for section coordinates, or `None`
+    /// outside the volume.
     pub fn section_index(&self, sx: i32, sy: i32, sz: i32) -> Option<usize> {
         let x = sx - self.min_chunk[0];
         let y = sy - self.min_section;
@@ -147,6 +174,7 @@ impl BlockVolume {
     }
 
     #[inline]
+    /// The section at section coordinates, if loaded.
     pub fn section(&self, sx: i32, sy: i32, sz: i32) -> Option<&Section> {
         self.section_index(sx, sy, sz)
             .and_then(|i| self.sections[i].as_ref())
@@ -207,13 +235,19 @@ impl BlockVolume {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A world dimension.
 pub enum Dimension {
+    /// `minecraft:overworld`.
     Overworld,
+    /// `minecraft:the_nether`.
     Nether,
+    /// `minecraft:the_end`.
     End,
 }
 
 impl Dimension {
+    /// Parses `overworld`, `nether` / `the_nether` or `end` / `the_end`, with or
+    /// without the `minecraft:` namespace.
     pub fn parse(s: &str) -> Result<Dimension> {
         Ok(match s.trim_start_matches("minecraft:") {
             "overworld" => Dimension::Overworld,
@@ -223,6 +257,7 @@ impl Dimension {
         })
     }
 
+    /// The namespaced dimension id.
     pub fn id(self) -> &'static str {
         match self {
             Dimension::Overworld => "minecraft:overworld",
@@ -232,22 +267,33 @@ impl Dimension {
     }
 }
 
+/// A world save opened for one dimension. Reading never writes to the save.
 pub struct World {
+    /// The save directory (contains `level.dat`).
     pub root: PathBuf,
+    /// What `level.dat` says.
     pub level: LevelInfo,
+    /// The dimension that is read.
     pub dimension: Dimension,
     dim_dir: PathBuf,
 }
 
+/// Blocks, entities and block entities loaded from a chunk rectangle.
 pub struct LoadedArea {
+    /// Block states and biomes interned while loading.
     pub registry: Registry,
+    /// The loaded blocks and light.
     pub volume: BlockVolume,
+    /// Entities, with passengers flattened.
     pub entities: Vec<Entity>,
+    /// Block entity compounds as stored in the chunks.
     pub block_entities: Vec<fastnbt::Value>,
+    /// How many chunks of the rectangle the save holds.
     pub chunks_loaded: usize,
 }
 
 impl World {
+    /// Opens the save at `root` for `dimension`. Fails when `root` has no `level.dat`.
     pub fn open(root: &Path, dimension: Dimension) -> Result<World> {
         let level_path = root.join("level.dat");
         if !level_path.exists() {
@@ -274,10 +320,12 @@ impl World {
         })
     }
 
+    /// The dimension's `region` directory.
     pub fn region_dir(&self) -> PathBuf {
         self.dim_dir.join("region")
     }
 
+    /// The dimension's `entities` directory (1.17+).
     pub fn entities_dir(&self) -> PathBuf {
         self.dim_dir.join("entities")
     }

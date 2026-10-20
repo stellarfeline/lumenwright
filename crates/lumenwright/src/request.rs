@@ -28,7 +28,9 @@ use crate::world::{Dimension, Entity, World};
 pub enum WorldSource<'a> {
     /// A save directory (the folder holding `level.dat`) and the dimension to read.
     Dir {
+        /// The save directory.
         path: &'a Path,
+        /// The dimension whose regions are read.
         dimension: Dimension,
     },
     /// A world the caller has already opened.
@@ -38,7 +40,9 @@ pub enum WorldSource<'a> {
 /// An inclusive rectangle of chunk coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ChunkRect {
+    /// The lowest chunk `[x, z]`, included.
     pub min: [i32; 2],
+    /// The highest chunk `[x, z]`, included.
     pub max: [i32; 2],
 }
 
@@ -68,6 +72,7 @@ pub enum UnknownEntities {
 pub struct EntityPolicy {
     /// Draw the entities stored in the loaded chunks.
     pub entities: bool,
+    /// How an entity with no model is drawn.
     pub unknown: UnknownEntities,
     /// Draw block entities whose look is Java code (signs, chests, banners...).
     pub block_entities: bool,
@@ -97,6 +102,9 @@ pub struct QuickOptions {
     pub brightness: f32,
     /// Smooth lighting and ambient occlusion.
     pub smooth: bool,
+    /// Mip levels for block textures, 0 (off) to 4: the client's *Mipmap Levels*
+    /// option, default 4.
+    pub mipmap_levels: u32,
 }
 
 impl Default for QuickOptions {
@@ -106,6 +114,7 @@ impl Default for QuickOptions {
             draw_distance: 128.0,
             brightness: 0.5,
             smooth: true,
+            mipmap_levels: crate::assets::atlas::MIPMAP_LEVELS,
         }
     }
 }
@@ -115,11 +124,23 @@ impl Default for QuickOptions {
 pub struct HqOptions {
     /// Samples per pixel.
     pub spp: u32,
+    /// Diffuse bounces per path after the first hit.
     pub max_bounces: u32,
+    /// Random seed; the same seed gives the same image.
     pub seed: u32,
-    /// Emissive block strength.
+    /// Scale of the light emissive blocks cast; 1 is calibrated to the game's block
+    /// light (see `docs/research/emitters.md`).
     pub emitter_intensity: f32,
+    /// Brightness of an emissive surface as the camera sees it: its texel colour
+    /// times its light level / 15 times this.
+    pub emitter_glow: f32,
+    /// Next-event estimation towards emissive blocks. Off, emitters light the scene
+    /// only when a bounced path happens to meet them: the same image in expectation,
+    /// with far more noise (a reference for checking light sampling).
+    pub light_sampling: bool,
+    /// Linear multiplier applied to the radiance before tonemapping.
     pub exposure: f32,
+    /// The tonemapping operator from linear radiance to sRGB.
     pub tonemap: Tonemap,
 }
 
@@ -129,7 +150,9 @@ impl Default for HqOptions {
             spp: 64,
             max_bounces: 4,
             seed: 0,
-            emitter_intensity: 6.0,
+            emitter_intensity: 1.0,
+            emitter_glow: 1.5,
+            light_sampling: true,
             exposure: 1.0,
             tonemap: Tonemap::Aces,
         }
@@ -168,7 +191,9 @@ impl Default for Sky {
 /// A caller-stated sky for both modes.
 #[derive(Clone, Copy, Debug)]
 pub struct StatedSky {
+    /// The sky quick mode draws.
     pub quick: QuickSkyColours,
+    /// The sun and sky HQ mode traces.
     pub hq: HqSky,
 }
 
@@ -188,27 +213,44 @@ pub struct QuickSkyColours {
 /// One frame to draw. Every input is explicit.
 #[derive(Clone, Copy)]
 pub struct Request<'a> {
+    /// The world to draw.
     pub world: WorldSource<'a>,
     /// The chunks loaded; nothing outside them is drawn.
     pub chunks: ChunkRect,
     /// The Minecraft client jar the textures and models are read from.
     pub jar: &'a Path,
+    /// The directory holding the Unifont the client reads from the launcher's asset
+    /// index (`minecraft/font/include/unifont.json` and the hex zips it names; see
+    /// [`assets::unifont`]). Without it, a character no bitmap font covers (CJK among
+    /// them) draws nothing. Layered over the jar and under the resource packs.
+    pub unifont: Option<&'a Path>,
     /// Resource packs (zip or directory) layered over the jar, later ones winning.
     pub resource_packs: &'a [PathBuf],
+    /// The eye position, orientation and vertical field of view.
     pub camera: Camera,
+    /// Quick (rasterized, vanilla look) or HQ (path traced).
     pub mode: Mode,
+    /// The backend to draw with; [`BackendKind::Auto`] takes a GPU if one is available, else the CPU.
     pub backend: BackendKind,
+    /// Image width in pixels.
     pub width: u32,
+    /// Image height in pixels.
     pub height: u32,
+    /// Which entities and block entities are drawn.
     pub entities: EntityPolicy,
+    /// Options used in quick mode; ignored in HQ mode.
     pub quick: QuickOptions,
+    /// Options used in HQ mode; ignored in quick mode.
     pub hq: HqOptions,
+    /// The sky and daylight.
     pub sky: Sky,
 }
 
 /// A drawn frame.
 pub struct Rendered {
+    /// Image width in pixels.
     pub width: u32,
+    /// Image height in pixels.
     pub height: u32,
     /// RGBA8, sRGB, row major, top row first: `width * height * 4` bytes.
     pub rgba: Vec<u8>,
@@ -220,11 +262,15 @@ pub struct Rendered {
     pub backend_fallback: Option<String>,
     /// Seconds per stage, in order.
     pub timings: Vec<(&'static str, f64)>,
+    /// Chunks of the rectangle that exist in the save and were loaded.
     pub chunks_loaded: usize,
     /// Entities handed to the scene (stored ones plus players).
     pub entities_loaded: usize,
+    /// Block entities found in the loaded chunks.
     pub block_entities_loaded: usize,
+    /// Entity counts per kind: drawn with a model, drawn as a box, or skipped.
     pub entity_stats: EntityStats,
+    /// What happened to each block-entity kind.
     pub block_entity_stats: BlockEntityStats,
 }
 
@@ -233,16 +279,25 @@ pub struct Rendered {
 #[derive(Debug, Clone, PartialEq)]
 pub enum RequestError {
     /// Width or height is zero.
-    EmptyImage { width: u32, height: u32 },
+    EmptyImage {
+        /// The requested width.
+        width: u32,
+        /// The requested height.
+        height: u32,
+    },
     /// The client jar path is not a file.
     JarNotFound(PathBuf),
     /// A resource pack path does not exist.
     ResourcePackNotFound(PathBuf),
+    /// The unifont directory lacks a file, or a file is not what the client reads.
+    Unifont(assets::unifont::UnifontError),
     /// `chunks.min` exceeds `chunks.max` on an axis.
     InvertedChunkRect(ChunkRect),
     /// None of the requested chunks exists in the save.
     NoChunks {
+        /// The requested rectangle.
         chunks: ChunkRect,
+        /// The region directory that was searched.
         region_dir: PathBuf,
     },
 }
@@ -259,6 +314,7 @@ impl fmt::Display for RequestError {
             RequestError::ResourcePackNotFound(p) => {
                 write!(f, "resource pack {} does not exist", p.display())
             }
+            RequestError::Unifont(e) => e.fmt(f),
             RequestError::InvertedChunkRect(r) => {
                 write!(f, "chunk rectangle min {:?} exceeds max {:?}", r.min, r.max)
             }
@@ -289,6 +345,9 @@ fn validate(req: &Request) -> std::result::Result<(), RequestError> {
     }
     if let Some(p) = req.resource_packs.iter().find(|p| !p.exists()) {
         return Err(RequestError::ResourcePackNotFound(p.clone()));
+    }
+    if let Some(dir) = req.unifont {
+        assets::unifont::read_dir(dir).map_err(RequestError::Unifont)?;
     }
     let c = req.chunks;
     if c.min[0] > c.max[0] || c.min[1] > c.max[1] {
@@ -353,7 +412,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
     lap("load world", &mut t);
 
     // 2. Assets.
-    let store = assets::load_resources(req.jar, req.resource_packs)?;
+    let store = assets::load_resources(req.jar, req.unifont, req.resource_packs)?;
     lap("load assets", &mut t);
 
     // 3. Scene.
@@ -362,6 +421,12 @@ pub fn render(req: &Request) -> Result<Rendered> {
         unknown_entities_as_boxes: policy.unknown == UnknownEntities::Box,
         block_entities: policy.block_entities,
         eye: Some([cam.pos.x, cam.pos.y, cam.pos.z]),
+        view: Some([cam.yaw, cam.pitch]),
+        // The path tracer reads level 0 only: it gets the unpadded atlas.
+        mipmap_levels: match req.mode {
+            Mode::Quick => req.quick.mipmap_levels,
+            Mode::Hq => 0,
+        },
     };
     let block_entities = block_entities::parse_all(&area.block_entities);
     let scene = Scene::build(
@@ -393,11 +458,39 @@ pub fn render(req: &Request) -> Result<Rendered> {
         tan_half_fov: (cam.fov_y.to_radians() * 0.5).tan(),
         aspect,
     };
-    // The vanilla derivation, when the caller states no sky.
-    let vanilla = |time: Option<i64>, sun: Option<Vec3>| {
-        let angle = sky::celestial_angle(time.unwrap_or(world.level.day_time));
-        let sun_dir = sun.unwrap_or_else(|| sky::sun_direction_from_angle(angle));
-        (angle, sun_dir)
+    // The environment attributes at the camera: the sky's colours and the sun's,
+    // moon's and stars' angles for the day time.
+    let biome = scene.registry.biomes[scene.volume.biome(
+        cam.pos.x.floor() as i32,
+        cam.pos.y.floor() as i32,
+        cam.pos.z.floor() as i32,
+    ) as usize]
+        .clone();
+    let dimension = match world.dimension {
+        Dimension::Overworld => "minecraft:overworld",
+        Dimension::Nether => "minecraft:the_nether",
+        Dimension::End => "minecraft:the_end",
+    };
+    let day_time = match req.sky {
+        Sky::Vanilla { time, .. } => time.unwrap_or(world.level.day_time),
+        Sky::Stated(_) => world.level.day_time,
+    };
+    let env = assets::environment::sample(&store, dimension, &biome, day_time);
+    if env.is_none() {
+        log::warn!(
+            "the client jar carries no environment attributes (before 1.21.11): \
+             drawing the sky from the biome's temperature and the old day curve"
+        );
+    }
+    // The vanilla sun when the caller states none: `visual/sun_angle`, or the
+    // pre-1.21.11 day curve for a jar without environment attributes.
+    let vanilla_sun = |time: Option<i64>, sun: Option<Vec3>| {
+        sun.unwrap_or_else(|| match &env {
+            Some(e) => sky::celestial_direction(e.sun_angle),
+            None => sky::sun_direction_from_angle(sky::celestial_angle(
+                time.unwrap_or(world.level.day_time),
+            )),
+        })
     };
 
     let (pixels, hdr) = match req.mode {
@@ -408,26 +501,25 @@ pub fn render(req: &Request) -> Result<Rendered> {
             let max_dist = q.draw_distance;
             let view_proj =
                 cam.projection(aspect, 0.05, max_dist * 2.0 + 512.0) * cam.view(Vec3::ZERO);
-            let colours = match req.sky {
-                Sky::Stated(s) => s.quick,
-                Sky::Vanilla { time, sun_dir, .. } => {
-                    let (angle, sun_dir) = vanilla(time, sun_dir);
-                    let day = sky::daylight(angle);
-                    let biome = scene.registry.biomes[scene.volume.biome(
-                        cam.pos.x.floor() as i32,
-                        cam.pos.y.floor() as i32,
-                        cam.pos.z.floor() as i32,
-                    ) as usize]
-                        .clone();
-                    let temp = assets::biome::biome_info(&biome).temperature;
-                    QuickSkyColours {
-                        sky: Vec3::from(assets::biome::sky_color(temp)) * day,
-                        fog: Vec3::new(0.753, 0.847, 1.0) * (day * 0.94 + 0.06),
-                        sun_dir,
-                        sky_factor: day,
-                    }
-                }
+            let rect = |loc: &str| {
+                scene.atlas.id(loc).map(|id| {
+                    let s = scene.atlas.sprites[id as usize];
+                    [s.x as f32, s.y as f32, s.w as f32, s.h as f32]
+                })
             };
+            let sun_rect = crate::scene::SUN_TEXTURES.iter().find_map(|t| rect(t));
+            let render_fog = (max_dist - (max_dist / 10.0).clamp(4.0, 64.0), max_dist);
+            let (colours, desc) = quick_sky(
+                &req.sky,
+                env.as_ref(),
+                &biome,
+                world.level.day_time,
+                f,
+                max_dist,
+                render_fog,
+                sun_rect,
+                &rect,
+            );
             let lighting = Lighting {
                 sky_factor: colours.sky_factor,
                 gamma: q.brightness.clamp(0.0, 1.0),
@@ -443,30 +535,15 @@ pub fn render(req: &Request) -> Result<Rendered> {
                 },
             );
             lap("build mesh", &mut t);
-            let fog_range = (max_dist - (max_dist / 10.0).clamp(4.0, 64.0), max_dist);
-            let sun_rect = crate::scene::SUN_TEXTURES
-                .iter()
-                .find_map(|t| scene.atlas.id(t))
-                .map(|id| {
-                    let s = scene.atlas.sprites[id as usize];
-                    [s.x as f32, s.y as f32, s.w as f32, s.h as f32]
-                })
-                .filter(|_| colours.sun_dir.y > -0.2)
-                .unwrap_or([0.0; 4]);
-            let qs = QuickSky::new(
-                &rays,
-                w,
-                h,
-                colours.sky,
-                colours.fog,
-                colours.sun_dir,
-                fog_range,
-                sun_rect,
-            );
+            let qs = QuickSky::new(&rays, w, h, &desc);
             let frame = QuickFrame {
                 mesh: &mesh,
                 atlas_pixels: &scene.atlas.pixels,
                 atlas_size: [scene.atlas.width, scene.atlas.height],
+                atlas_mips: &scene.atlas.mips,
+                mip_levels: scene.atlas.mip_levels,
+                mip_rows: scene.atlas.mip_rows,
+                stars: sky::star_table(),
                 width: w,
                 height: h,
                 view_proj,
@@ -486,10 +563,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
                     sun_dir,
                     sun_intensity,
                     sky_intensity,
-                } => {
-                    let (_, sun_dir) = vanilla(time, sun_dir);
-                    sky::hq_sky(sun_dir, sun_intensity, sky_intensity)
-                }
+                } => sky::hq_sky(vanilla_sun(time, sun_dir), sun_intensity, sky_intensity),
             };
             let params = hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky);
             let frame = HqFrame {
@@ -523,6 +597,126 @@ pub fn render(req: &Request) -> Result<Rendered> {
     })
 }
 
+/// `ARGB` channel `i` (0 = red) of `0xAARRGGBB` as 0..1.
+fn channel(c: u32, shift: u32) -> f32 {
+    ((c >> shift) & 0xFF) as f32 / 255.0
+}
+
+fn rgb(c: u32) -> Vec3 {
+    Vec3::new(channel(c, 16), channel(c, 8), channel(c, 0))
+}
+
+/// The quick sky for a frame: the lightmap's colours and what the sky passes draw.
+///
+/// For [`Sky::Vanilla`] with the jar's environment attributes, the fog colour is
+/// `AtmosphericFogEnvironment.getBaseColor`: the fog attribute, blended towards
+/// the sunrise colour by how directly the camera faces the sun's side of the sky
+/// (render distance 4 chunks or more), then towards the sky colour by
+/// `1 - lerp(min(sky fog end / 16, render distance) / 32, 0.25, 1)^0.25`.
+#[allow(clippy::too_many_arguments)]
+fn quick_sky(
+    req_sky: &Sky,
+    env: Option<&assets::environment::EnvironmentState>,
+    biome: &str,
+    world_day_time: i64,
+    forward: Vec3,
+    draw_distance: f32,
+    render_fog: (f32, f32),
+    sun_rect: Option<[f32; 4]>,
+    rect: &dyn Fn(&str) -> Option<[f32; 4]>,
+) -> (QuickSkyColours, sky::SkyDescription) {
+    use assets::environment::{Skybox, srgb_lerp};
+    let env_fog = env.map_or((0.0, 1024.0), |e| (e.fog_start, e.fog_end));
+    let sky_fog_end = draw_distance.min(env.map_or(512.0, |e| e.sky_fog_end));
+    let mut desc = sky::SkyDescription {
+        sky: Vec3::ZERO,
+        fog: Vec3::ZERO,
+        sky_fog_end,
+        render_fog,
+        env_fog,
+        sky_disc: env.is_none_or(|e| e.skybox == Skybox::Overworld),
+        sunrise: [0.0; 4],
+        sun_angle: 0.0,
+        sun: None,
+        moon: None,
+        star_angle: 0.0,
+        star_brightness: 0.0,
+    };
+    match *req_sky {
+        Sky::Stated(s) => {
+            desc.sky = s.quick.sky;
+            desc.fog = s.quick.fog;
+            desc.sun = sun_rect.map(|r| (s.quick.sun_dir, r));
+            (s.quick, desc)
+        }
+        Sky::Vanilla { time, sun_dir, .. } => {
+            let ticks = time.unwrap_or(world_day_time);
+            // The lightmap keeps its daylight factor on the pre-1.21.11 day curve.
+            let angle = sky::celestial_angle(ticks);
+            let day = sky::daylight(angle);
+            let Some(e) = env else {
+                let temp = assets::biome::biome_info(biome).temperature;
+                let sun = sun_dir.unwrap_or_else(|| sky::sun_direction_from_angle(angle));
+                let colours = QuickSkyColours {
+                    sky: Vec3::from(assets::biome::sky_color(temp)) * day,
+                    fog: Vec3::new(0.753, 0.847, 1.0) * (day * 0.94 + 0.06),
+                    sun_dir: sun,
+                    sky_factor: day,
+                };
+                desc.sky = colours.sky;
+                desc.fog = colours.fog;
+                desc.sun = sun_rect.map(|r| (sun, r));
+                return (colours, desc);
+            };
+            let render_chunks = (draw_distance / 16.0).floor();
+            let mut fog = e.fog_color;
+            if render_chunks >= 4.0 {
+                let side = if e.sun_angle.to_radians().sin() > 0.0 {
+                    -1.0
+                } else {
+                    1.0
+                };
+                let facing = forward.x * side;
+                let glow = e.sunrise_sunset_color >> 24;
+                if facing > 0.0 && glow > 0 {
+                    let a = glow as f32 / 255.0;
+                    fog = srgb_lerp(facing * a, fog, e.sunrise_sunset_color | 0xFF00_0000);
+                }
+            }
+            let reach = (e.sky_fog_end / 16.0).min(render_chunks);
+            let lerp = (reach / 32.0).clamp(0.0, 1.0) * 0.75 + 0.25;
+            fog = srgb_lerp(1.0 - lerp.powf(0.25), fog, e.sky_color);
+            let sun = sun_dir.unwrap_or_else(|| sky::celestial_direction(e.sun_angle));
+            let moon = if sun_dir.is_some() {
+                -sun
+            } else {
+                sky::celestial_direction(e.moon_angle)
+            };
+            let sr = e.sunrise_sunset_color;
+            desc.sky = rgb(e.sky_color);
+            desc.fog = rgb(fog);
+            desc.sunrise = [
+                channel(sr, 16),
+                channel(sr, 8),
+                channel(sr, 0),
+                channel(sr, 24),
+            ];
+            desc.sun_angle = e.sun_angle;
+            desc.sun = sun_rect.map(|r| (sun, r));
+            desc.moon = rect(&crate::scene::moon_texture(&e.moon_phase)).map(|r| (moon, r));
+            desc.star_angle = e.star_angle;
+            desc.star_brightness = e.star_brightness;
+            let colours = QuickSkyColours {
+                sky: desc.sky,
+                fog: desc.fog,
+                sun_dir: sun,
+                sky_factor: day,
+            };
+            (colours, desc)
+        }
+    }
+}
+
 /// The path tracer's parameters for a camera and a sky.
 pub fn hq_params(
     o: &HqOptions,
@@ -546,7 +740,7 @@ pub fn hq_params(
         sky_zenith: f4(s.zenith, 1.0),
         sky_horizon: f4(s.horizon, 0.25),
         water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
-        misc_f: [o.emitter_intensity, 1e-3, 1.0 / solid_angle, 0.0],
+        misc_f: [o.emitter_glow, 1e-3, 1.0 / solid_angle, o.emitter_intensity],
         grid_dims: [
             hq.dims[0],
             hq.dims[1],
@@ -561,7 +755,12 @@ pub fn hq_params(
             hq.quads.len() as u32,
         ],
         frame: [width, height, 0, o.max_bounces],
-        misc_u: [o.seed, 1, hq.models.len() as u32, 0],
-        _reserved: [0; 4],
+        misc_u: [
+            o.seed,
+            1,
+            hq.models.len() as u32,
+            if o.light_sampling { hq.light_count } else { 0 },
+        ],
+        see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
     }
 }

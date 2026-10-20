@@ -12,7 +12,7 @@ use core::arch::nvptx::{
 };
 use core::slice;
 
-use lumenwright_kernel::{GpuModel, GpuQuad, Params, SceneView, render_sample};
+use lumenwright_kernel::{GpuLight, GpuModel, GpuQuad, Params, SceneView, render_sample};
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -20,6 +20,15 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 }
 
 /// Accumulates `samples` path samples per pixel into `accum` (rgb sum, sample count).
+///
+/// The path tracer is inlined whole into this kernel (`render_sample` and `trace` are
+/// `inline(always)` on nvptx, and `scripts/build-ptx.sh` refuses a kernel that calls anything
+/// but a panic). With `render_sample` and `trace` as PTX functions called from here, the
+/// optimizing PTX compiler mistranslated the kernel on an RTX 4070 Ti SUPER (sm_89, driver
+/// 616.92): the driver's JIT and ptxas 12.4 at -O2 and -O3 rendered about 2% of the pixels
+/// wrong and ptxas -O1 never finished a launch, while ptxas -O0 rendered the same PTX exactly
+/// as the CPU does. The PTX's float arithmetic is all IEEE (`.rn`, no approximations or
+/// contractions), so its meaning does not depend on the optimization level.
 ///
 /// # Safety
 /// All pointers must reference device buffers of the given lengths, laid out as
@@ -35,6 +44,10 @@ pub unsafe extern "ptx-kernel" fn pt_render(
     quads_len: u32,
     atlas: *const u32,
     atlas_len: u32,
+    lights: *const GpuLight,
+    lights_len: u32,
+    emitters: *const u32,
+    emitters_len: u32,
     accum: *mut [f32; 4],
     sample_start: u32,
     samples: u32,
@@ -52,6 +65,8 @@ pub unsafe extern "ptx-kernel" fn pt_render(
             models: slice::from_raw_parts(models, models_len as usize),
             quads: slice::from_raw_parts(quads, quads_len as usize),
             atlas: slice::from_raw_parts(atlas, atlas_len as usize),
+            lights: slice::from_raw_parts(lights, lights_len as usize),
+            emitters: slice::from_raw_parts(emitters, emitters_len as usize),
         };
         let idx = (y * p.frame[0] + x) as usize;
         let mut acc = *accum.add(idx);

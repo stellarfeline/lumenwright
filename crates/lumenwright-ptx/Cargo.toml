@@ -4,6 +4,9 @@ description = "CUDA entry point: lumenwright-kernel compiled to PTX (nvptx64-nvi
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
+# Not published: a nightly-only cdylib for nvptx64-nvidia-cuda whose only consumer is
+# scripts/build-ptx.sh in this repository, which writes the PTX the `cuda` feature embeds.
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
