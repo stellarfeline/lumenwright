@@ -499,7 +499,18 @@ fn add_instance(
     buf.clear();
     scene.block_quads(pos, id, &|d| cull & dir_bit(d) != 0, scratch, buf);
     let offset = quads.len() as u32;
-    quads.extend(buf.iter().map(|q| q.to_gpu()));
+    // A block model's faces are met from the front only, as Chunky's block models are
+    // (`Quad.intersect` is one-sided; `AABB.intersect` meets the face a ray enters by):
+    // a ray through a hole in a leaf face goes on into the next block instead of meeting
+    // the far face of the same block from behind. Water surfaces stay two-sided (the
+    // kernel refracts out of the water through them).
+    quads.extend(buf.iter().map(|q| {
+        let mut g = q.to_gpu();
+        if !q.water {
+            g.p0[3] = f32::from_bits(g.p0[3].to_bits() | FLAG_FRONT_ONLY);
+        }
+        g
+    }));
     model_emits.push(!buf.is_empty() && scene.blocks[id as usize].emittance > 0.0);
     models.push(GpuModel {
         quad_offset: offset,
