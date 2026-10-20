@@ -11,6 +11,9 @@ use std::time::Instant;
 use anyhow::Result;
 use glam::{DVec3, Vec3};
 use lumenwright_kernel::Params;
+use lumenwright_kernel::scene::{
+    EMITTER_SAMPLING_ALL, EMITTER_SAMPLING_NONE, EMITTER_SAMPLING_ONE, EMITTER_SAMPLING_ONE_BLOCK,
+};
 
 use crate::assets;
 use crate::render::post::{self, Tonemap};
@@ -119,6 +122,24 @@ impl Default for QuickOptions {
     }
 }
 
+/// Chunky's default emitter intensity (`Scene.DEFAULT_EMITTER_INTENSITY`,
+/// chunky-dev/chunky 156e2bb).
+pub const DEFAULT_EMITTER_INTENSITY: f32 = 13.0;
+
+/// Chunky's emitter sampling strategies (`EmitterSamplingStrategy`): which emitters a
+/// diffuse surface samples, among those its emitter-grid cell lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmitterSampling {
+    /// None: emitters light the scene only where a path meets them.
+    None,
+    /// One face of one emitter.
+    One,
+    /// Every face of one emitter.
+    OneBlock,
+    /// Every face of every emitter.
+    All,
+}
+
 /// HQ-mode options: the sampling budget and the post-processing.
 #[derive(Clone, Copy, Debug)]
 pub struct HqOptions {
@@ -128,16 +149,15 @@ pub struct HqOptions {
     pub max_bounces: u32,
     /// Random seed; the same seed gives the same image.
     pub seed: u32,
-    /// Scale of the light emissive blocks cast; 1 is calibrated to the game's block
-    /// light (see `docs/research/emitters.md`).
+    /// Chunky's emitter intensity: an emitting surface emits its texel colour squared
+    /// times its block's emittance times this. 0 turns emitters off.
     pub emitter_intensity: f32,
-    /// Brightness of an emissive surface as the camera sees it: its texel colour
-    /// times its light level / 15 times this.
-    pub emitter_glow: f32,
-    /// Next-event estimation towards emissive blocks. Off, emitters light the scene
-    /// only when a bounced path happens to meet them: the same image in expectation,
-    /// with far more noise (a reference for checking light sampling).
-    pub light_sampling: bool,
+    /// How emitters are sampled at a diffuse surface (Chunky's emitter sampling
+    /// strategy).
+    pub emitter_sampling: EmitterSampling,
+    /// While emitters are sampled, a surface met after the first bounce does not add its
+    /// emitted light (Chunky's "prevent normal emitter with sampling").
+    pub prevent_normal_emitter: bool,
     /// Linear multiplier applied to the radiance before tonemapping.
     pub exposure: f32,
     /// The tonemapping operator from linear radiance to display values.
@@ -150,9 +170,9 @@ impl Default for HqOptions {
             spp: 64,
             max_bounces: 4,
             seed: 0,
-            emitter_intensity: 1.0,
-            emitter_glow: 1.5,
-            light_sampling: true,
+            emitter_intensity: DEFAULT_EMITTER_INTENSITY,
+            emitter_sampling: EmitterSampling::One,
+            prevent_normal_emitter: false,
             exposure: 1.0,
             tonemap: Tonemap::Gamma,
         }
@@ -746,7 +766,7 @@ pub fn hq_params(
         perez_d: f4(Vec3::from(sky.perez[3]), 0.0),
         perez_e: f4(Vec3::from(sky.perez[4]), 0.0),
         water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
-        misc_f: [o.emitter_glow, 1e-3, 1.0 / solid_angle, o.emitter_intensity],
+        misc_f: [o.emitter_intensity, 1e-3, 1.0 / solid_angle, 0.0],
         grid_dims: [
             hq.dims[0],
             hq.dims[1],
@@ -761,12 +781,22 @@ pub fn hq_params(
             hq.quads.len() as u32,
         ],
         frame: [width, height, 0, o.max_bounces],
-        misc_u: [
-            o.seed,
-            1,
-            hq.models.len() as u32,
-            if o.light_sampling { hq.light_count } else { 0 },
-        ],
+        misc_u: [o.seed, 1, hq.models.len() as u32, hq.emitter_count],
         see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
+        emitter: [
+            if o.emitter_intensity > 0.0 {
+                match o.emitter_sampling {
+                    EmitterSampling::None => EMITTER_SAMPLING_NONE,
+                    EmitterSampling::One => EMITTER_SAMPLING_ONE,
+                    EmitterSampling::OneBlock => EMITTER_SAMPLING_ONE_BLOCK,
+                    EmitterSampling::All => EMITTER_SAMPLING_ALL,
+                }
+            } else {
+                EMITTER_SAMPLING_NONE
+            },
+            o.prevent_normal_emitter as u32,
+            0,
+            0,
+        ],
     }
 }

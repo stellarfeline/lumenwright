@@ -113,6 +113,87 @@ pub fn light_emission(s: &BlockState) -> u8 {
     }
 }
 
+/// Chunky's material emittance of a block state (0 for one that emits nothing): every
+/// face of the block emits its texel colour squared times this times the emitter
+/// intensity in HQ mode. Ported from Chunky (GPL-3.0, `BlockPalette.
+/// getDefaultMaterialProperties` at chunky-dev/chunky 156e2bb), entry for entry, with
+/// its keys as Chunky has them: `minecraft:magma` names no block since 1.13, so a
+/// magma block emits nothing, as in Chunky. Candles and the `light` block are not
+/// emitters here: Chunky draws a candle's flames as particles that Lumenwright does not
+/// draw, and a `light` block has no faces.
+pub fn emittance(s: &BlockState) -> f32 {
+    let n = name(s);
+    let lit = s.prop("lit") == Some("true");
+    let n = n.strip_prefix("waxed_").unwrap_or(n);
+    match n {
+        "lava"
+        | "torch"
+        | "wall_torch"
+        | "fire"
+        | "glowstone"
+        | "jack_o_lantern"
+        | "beacon"
+        | "sea_lantern"
+        | "end_rod"
+        | "lantern"
+        | "shroomlight"
+        | "copper_lantern"
+        | "exposed_copper_lantern"
+        | "weathered_copper_lantern"
+        | "oxidized_copper_lantern"
+        | "ochre_froglight"
+        | "verdant_froglight"
+        | "pearlescent_froglight"
+        | "copper_torch"
+        | "copper_wall_torch" => 1.0,
+        "redstone_torch"
+        | "redstone_wall_torch"
+        | "redstone_lamp"
+        | "campfire"
+        | "furnace"
+        | "smoker"
+        | "blast_furnace"
+        | "copper_bulb"
+            if lit =>
+        {
+            1.0
+        }
+        "exposed_copper_bulb" if lit => 12.0 / 15.0,
+        "weathered_copper_bulb" if lit => 8.0 / 15.0,
+        "oxidized_copper_bulb" if lit => 4.0 / 15.0,
+        "nether_portal" => 0.4,
+        "soul_lantern" | "soul_torch" | "soul_wall_torch" | "soul_fire" | "crying_obsidian" => 0.6,
+        "enchanting_table" => 0.5,
+        "sea_pickle" if s.prop("waterlogged") == Some("true") => {
+            let p: f32 = s
+                .prop("pickles")
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(1.0);
+            (3.0 * p + 1.0) / 15.0
+        }
+        "respawn_anchor" => {
+            let c: f32 = s
+                .prop("charges")
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(0.0);
+            if c > 0.0 { (c * 4.0 - 2.0) / 15.0 } else { 0.0 }
+        }
+        "small_amethyst_bud" => 1.0 / 15.0,
+        "medium_amethyst_bud" => 2.0 / 15.0,
+        "large_amethyst_bud" => 4.0 / 15.0,
+        "amethyst_cluster" => 5.0 / 15.0,
+        "sculk_sensor" | "calibrated_sculk_sensor"
+            if s.prop("sculk_sensor_phase") == Some("active") =>
+        {
+            1.0 / 15.0
+        }
+        "glow_lichen" => 7.0 / 15.0,
+        "cave_vines" | "cave_vines_plant" if s.prop("berries") == Some("true") => 14.0 / 15.0,
+        "sculk_catalyst" => 6.0 / 15.0,
+        _ => 0.0,
+    }
+}
+
 /// Whether a texture of an emissive block actually glows. Blocks like the
 /// jack o'lantern or a lit furnace only emit from their lit face.
 pub fn emissive_texture(s: &BlockState, texture: &str) -> bool {

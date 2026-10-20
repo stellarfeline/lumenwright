@@ -56,8 +56,11 @@ pub struct Quad {
     pub water: bool,
     /// The quad takes vanilla's per-face directional shading.
     pub shade: bool,
-    /// Block light emission / 15.
+    /// Block light emission / 15 (quick mode's lightmap).
     pub emission: f32,
+    /// Chunky's material emittance of the quad's block (HQ mode; see
+    /// [`blockinfo::emittance`]).
+    pub emittance: f32,
     /// The neighbour direction whose occluding block hides this face, if any.
     pub cullface: Option<Dir>,
     /// The model allows smooth lighting / AO.
@@ -119,7 +122,7 @@ impl Quad {
                 self.eu.z,
                 f32::from_bits(u32::from_le_bytes(self.tint)),
             ],
-            ev: [self.ev.x, self.ev.y, self.ev.z, self.emission],
+            ev: [self.ev.x, self.ev.y, self.ev.z, self.emittance],
             uv: [self.uv0[0], self.uv0[1], self.uvs[0], self.uvs[1]],
             uvt: [self.uvt[0], self.uvt[1], 0.0, 0.0],
         }
@@ -147,6 +150,8 @@ pub struct BlockInfo {
     pub self_cull: bool,
     /// Block light the state emits, 0 to 15.
     pub emission: u8,
+    /// Chunky's material emittance of the state ([`blockinfo::emittance`]).
+    pub emittance: f32,
     /// Which biome or fixed colour tints the state's tinted faces.
     pub tint: Option<TintKind>,
     /// The fluid the block is, if it is one.
@@ -306,6 +311,7 @@ impl Scene {
                 occludes: false,
                 self_cull: blockinfo::culls_same_block(s) || fluid.is_some(),
                 emission: blockinfo::light_emission(s),
+                emittance: blockinfo::emittance(s),
                 tint: Some(blockinfo::tint_kind(s)),
                 fluid,
                 waterlogged: blockinfo::is_waterlogged(s),
@@ -503,6 +509,7 @@ impl Scene {
             water: false,
             shade: q.shade,
             emission: emission.max(q.light_emission) as f32 / 15.0,
+            emittance: 0.0,
             cullface: q.cullface,
             ao,
         }
@@ -523,6 +530,7 @@ impl Scene {
             return;
         }
         let [x, y, z] = pos;
+        let first = out.len();
         match info.fluid {
             Some(Fluid::Water(level)) => self.fluid_quads(pos, level, true, out),
             Some(Fluid::Lava(level)) => self.fluid_quads(pos, level, false, out),
@@ -554,6 +562,15 @@ impl Scene {
                 }
                 if info.waterlogged {
                     self.fluid_quads(pos, 0, true, out);
+                }
+            }
+        }
+        // Every face of an emitting block emits (Chunky's materials), but not the water
+        // a waterlogged block holds.
+        if info.emittance > 0.0 {
+            for q in &mut out[first..] {
+                if !q.water {
+                    q.emittance = info.emittance;
                 }
             }
         }

@@ -804,8 +804,8 @@ mod tests {
                 models: &[],
                 quads: &[],
                 atlas: &[],
-                lights: &[],
                 emitters: &[],
+                emitter_grid: &[],
             };
             for i in 0..64 {
                 for j in 0..=16 {
