@@ -585,6 +585,16 @@ pub fn render(req: &Request) -> Result<Rendered> {
                     sky_intensity,
                 } => sky::hq_sky(vanilla_sun(time, sun_dir), sun_intensity, sky_intensity),
             };
+            let d = hq_sky.sun_dir;
+            log::info!(
+                "hq sun: direction {:.6} {:.6} {:.6}, altitude {:.6} rad, azimuth from +x \
+                 towards +z {:.6} rad (Chunky's sun angles)",
+                d.x,
+                d.y,
+                d.z,
+                d.y.clamp(-1.0, 1.0).asin(),
+                d.z.atan2(d.x)
+            );
             let params = hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky);
             let frame = HqFrame {
                 scene: &hq,
