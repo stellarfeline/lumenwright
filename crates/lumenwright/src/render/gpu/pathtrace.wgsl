@@ -80,8 +80,11 @@ fn rnd() -> f32 {
     return f32(rng_state >> 8u) * (1.0 / 16777216.0);
 }
 
-fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
-    return c * (c * (c * 0.30530602 + 0.6821711) + 0.012522878);
+// math::GAMMA and math::gamma_to_linear (Chunky's texture decoding: c^2.2).
+const GAMMA: f32 = 2.2;
+
+fn gamma_to_linear(c: vec3<f32>) -> vec3<f32> {
+    return select(exp(GAMMA * log(max(c, vec3<f32>(1e-30)))), vec3<f32>(0.0), c <= vec3<f32>(0.0));
 }
 
 fn unpack_rgba(c: u32) -> vec4<f32> {
@@ -89,7 +92,7 @@ fn unpack_rgba(c: u32) -> vec4<f32> {
 }
 
 fn linear_rgb(c: u32) -> vec3<f32> {
-    return srgb_to_linear(unpack_rgba(c).xyz);
+    return gamma_to_linear(unpack_rgba(c).xyz);
 }
 
 fn q_p0(q: Quad) -> vec3<f32> { return bitcast<vec3<f32>>(q.p0.xyz); }

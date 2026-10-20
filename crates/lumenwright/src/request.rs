@@ -140,7 +140,7 @@ pub struct HqOptions {
     pub light_sampling: bool,
     /// Linear multiplier applied to the radiance before tonemapping.
     pub exposure: f32,
-    /// The tonemapping operator from linear radiance to sRGB.
+    /// The tonemapping operator from linear radiance to display values.
     pub tonemap: Tonemap,
 }
 
@@ -154,7 +154,7 @@ impl Default for HqOptions {
             emitter_glow: 1.5,
             light_sampling: true,
             exposure: 1.0,
-            tonemap: Tonemap::Aces,
+            tonemap: Tonemap::Gamma,
         }
     }
 }

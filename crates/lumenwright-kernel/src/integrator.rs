@@ -10,7 +10,7 @@
 //! bright casts a quarter of the light, so a torch's flame lights the room and
 //! its stick barely does) times [`GpuQuad::light_scale`] times `misc_f.w`.
 
-use crate::math::{V3, abs, clamp, max, onb, sin_cos_turns, sqrt, srgb_to_linear, v3};
+use crate::math::{V3, abs, clamp, gamma_to_linear, max, onb, sin_cos_turns, sqrt, v3};
 use crate::rng::Rng;
 use crate::scene::{
     ALPHA_CUTOUT, ALPHA_TRANSLUCENT, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY, FLAG_WATER, GpuQuad,
@@ -26,9 +26,9 @@ const MAX_EVENTS: u32 = 48;
 fn linear_rgb(c: u32) -> V3 {
     let c = unpack_rgba(c);
     v3(
-        srgb_to_linear(c[0]),
-        srgb_to_linear(c[1]),
-        srgb_to_linear(c[2]),
+        gamma_to_linear(c[0]),
+        gamma_to_linear(c[1]),
+        gamma_to_linear(c[2]),
     )
 }
 

@@ -63,11 +63,11 @@ mirror! {
 mirror! {
     /// `--tonemap`.
     TonemapArg => Tonemap {
-        /// Clamp + sRGB (Chunky's default "gamma correction").
+        /// Clamp and the display gamma 2.2 (Chunky's default, "gamma correction").
         Gamma,
-        /// ACES filmic fit (Narkowicz).
+        /// ACES filmic fit (Narkowicz), then the display gamma.
         Aces,
-        /// Hable / Uncharted 2 filmic.
+        /// Hable / Uncharted 2 filmic, then the display gamma.
         Filmic,
     }
 }

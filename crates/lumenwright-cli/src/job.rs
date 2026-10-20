@@ -93,7 +93,7 @@ pub struct RenderArgs {
     pub no_light_sampling: bool,
     #[arg(long, default_value_t = 1.0)]
     pub exposure: f32,
-    #[arg(long, value_enum, default_value_t = TonemapArg::Aces)]
+    #[arg(long, value_enum, default_value_t = TonemapArg::Gamma)]
     pub tonemap: TonemapArg,
     /// Quick: vanilla brightness option (0 = moody, 0.5 = default, 1 = bright).
     #[arg(long, default_value_t = 0.5)]

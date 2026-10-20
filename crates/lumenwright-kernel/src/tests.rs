@@ -442,3 +442,31 @@ fn sin_cos_turns_is_within_its_bound_of_f64() {
     assert_eq!(sin_cos_turns(0.5), (-0.0, -1.0));
     assert_eq!(sin_cos_turns(0.75), (-1.0, 0.0));
 }
+
+#[test]
+fn ln_and_gamma_decoding_are_within_their_bounds_of_f64() {
+    use crate::math::{GAMMA, MAX_GAMMA_ERROR, MAX_LN_ERROR, gamma_to_linear, ln};
+    let mut worst_ln = 0.0f64;
+    let mut n = 0;
+    for i in 0..1u32 << 20 {
+        let x = (1.0 / 255.0) + (1.0 - 1.0 / 255.0) * i as f32 / ((1u32 << 20) - 1) as f32;
+        worst_ln = worst_ln.max((ln(x) as f64 - (x as f64).ln()).abs());
+        n += 1;
+    }
+    // Every byte value a texel channel can hold, as relative error of the decoded value.
+    let mut worst_gamma = 0.0f64;
+    for k in 1..=255u32 {
+        let c = k as f32 / 255.0;
+        let exact = (c as f64).powf(GAMMA as f64);
+        worst_gamma = worst_gamma.max(((gamma_to_linear(c) as f64 - exact) / exact).abs());
+    }
+    eprintln!(
+        "ln: worst absolute error {worst_ln:.3e} over {n} values; gamma decoding: worst relative \
+         error {worst_gamma:.3e} over 255 byte values"
+    );
+    assert_eq!(n, 1 << 20);
+    assert!(worst_ln <= MAX_LN_ERROR as f64, "{worst_ln:.3e}");
+    assert!(worst_gamma <= MAX_GAMMA_ERROR as f64, "{worst_gamma:.3e}");
+    assert_eq!(gamma_to_linear(0.0), 0.0);
+    assert_eq!(gamma_to_linear(1.0), 1.0);
+}

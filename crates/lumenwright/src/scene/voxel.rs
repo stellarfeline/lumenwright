@@ -599,10 +599,10 @@ fn unit_power(q: &GpuQuad, atlas: &[u32], atlas_w: u32) -> f32 {
     std::f32::consts::PI * q.normal().length() * mean as f32
 }
 
-/// The kernel's sRGB -> linear polynomial, per channel.
+/// The kernel's texel decoding, per channel.
 fn linear(c: u32) -> [f32; 3] {
     let c = unpack_rgba(c);
-    let f = lumenwright_kernel::math::srgb_to_linear;
+    let f = lumenwright_kernel::math::gamma_to_linear;
     [f(c[0]), f(c[1]), f(c[2])]
 }
 
