@@ -147,14 +147,17 @@ fn main() -> Result<()> {
             torch_room,
             candle_room,
         } => {
-            let world = if torch_room {
-                lumenwright_cli::fixture::torch_room()
+            let (what, world) = if torch_room {
+                ("torch room", lumenwright_cli::fixture::torch_room())
             } else if candle_room {
-                lumenwright_cli::fixture::candle_room()
+                ("candle room", lumenwright_cli::fixture::candle_room())
             } else if items {
-                lumenwright_cli::fixture::item_gallery(true)
+                ("item gallery", lumenwright_cli::fixture::item_gallery(true))
             } else if block_entities {
-                lumenwright_cli::fixture::block_entity_gallery()
+                (
+                    "block-entity gallery",
+                    lumenwright_cli::fixture::block_entity_gallery(),
+                )
             } else if lineup {
                 let mut ids: Vec<String> =
                     lumenwright::scene::entities::EntityModels::load_builtin()
@@ -162,12 +165,12 @@ fn main() -> Result<()> {
                         .into_keys()
                         .collect();
                 ids.sort();
-                lumenwright_cli::fixture::lineup(&ids, 10)
+                ("entity lineup", lumenwright_cli::fixture::lineup(&ids, 10))
             } else {
-                lumenwright_cli::fixture::showcase()
+                ("showcase", lumenwright_cli::fixture::showcase())
             };
             world.write(&dir)?;
-            println!("wrote showcase world to {}", dir.display());
+            println!("wrote {what} world to {}", dir.display());
         }
     }
     Ok(())

@@ -13,14 +13,83 @@ pixels to your program (see [Library](#library)). It has two looks:
 Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vulkan** and
 **DX12** (through wgpu), and **CUDA** (the Rust path-tracing kernel compiled to PTX).
 
-| quick (vanilla look) | hq (path traced) |
-|---|---|
-| ![quick](docs/renders/showcase-quick.png) | ![hq](docs/renders/showcase-hq.png) |
-| ![quick](docs/renders/island-quick.png) | ![hq](docs/renders/island-hq.png) |
+## The Treehouse Camp, by day and at dusk
 
-The island's HQ render was drawn before HQ mode took Chunky's sky, sun and emitters; the
-showcase pair is current. The images in `docs/renders/` are renders of original scenes drawn
-with Minecraft's textures, and are shared under
+![The Treehouse Camp by day, path traced](docs/renders/treehouse-camp-day-hq.png)
+
+*hq · `--time 4000` · 4096 spp · 8 bounces · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 92 s end to end*
+
+| | quick (vanilla look) | hq (path traced) |
+|---|---|---|
+| **The whole camp, day** | ![camp, day, quick](docs/renders/treehouse-camp-day-quick.png) quick · `--time 4000` · Metal · Apple M2 Pro | ![camp, day, hq](docs/renders/treehouse-camp-day-hq.png) hq · `--time 4000` · 4096 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+| **The whole camp, dusk** | ![camp, dusk, quick](docs/renders/treehouse-camp-dusk-quick.png) quick · `--time 12800` · Metal · Apple M2 Pro | ![camp, dusk, hq](docs/renders/treehouse-camp-dusk-hq.png) hq · `--time 12800` · 16384 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+| **The Long Bridge, day** | ![bridge, day, quick](docs/renders/treehouse-bridge-day-quick.png) quick · `--time 4000` · Metal · Apple M2 Pro | ![bridge, day, hq](docs/renders/treehouse-bridge-day-hq.png) hq · `--time 4000` · 4096 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+| **The Long Bridge, dusk** | ![bridge, dusk, quick](docs/renders/treehouse-bridge-dusk-quick.png) quick · `--time 12800` · Metal · Apple M2 Pro | ![bridge, dusk, hq](docs/renders/treehouse-bridge-dusk-hq.png) hq · `--time 12800` · 16384 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+
+*The Treehouse Camp* is a small adventure map: a forest clan's houses on four giant trees,
+joined by rope bridges and ladders and lit by lanterns. The top rows look at the whole camp
+from the east-north-east; the bottom rows stand above the Long Bridge, looking south. All
+eight are 1280×720, rendered from a save written by the map's own server.
+
+HQ mode runs with its defaults, which are Chunky's: the Preetham sky, a sun of intensity 1.25,
+lanterns and campfires as emitters at intensity 13 with one emitter sampled per diffuse bounce,
+and the display gamma 2.2. By day the sun and the sky light the camp, and each lantern lights
+the post it stands on.
+
+At `--time 12800` the sun stands just below the horizon. Quick mode draws the client's sunset:
+the sun disc, the orange glow and the light the game stored in the save. HQ mode draws
+Chunky's sunset: the Preetham sky at its full sunset light, with the client's sun texture drawn
+at the sun's place. A sun below the horizon casts no light, so the camp is lit by that sky and
+by its lanterns, which glow and light little more than the block they stand on (see
+[docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
+
+Each image's command, run from the repository root with the save from
+[Get the camp](#get-the-camp) in `the-treehouse-camp`. The HQ commands need the CUDA build
+(see [Backends](#backends)); on another backend the same flags give the same image within the
+parity stated under [Measured](#measured-on-an-m2-pro-10-cpu-cores-16-gpu-cores).
+
+```sh
+# The whole camp
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 4000 --backend metal -o treehouse-camp-day-quick.png
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 4000 --backend cuda --mode hq --spp 4096 --max-bounces 8 -o treehouse-camp-day-hq.png
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 12800 --backend metal -o treehouse-camp-dusk-quick.png
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 12800 --backend cuda --mode hq --spp 16384 --max-bounces 8 -o treehouse-camp-dusk-hq.png
+
+# The Long Bridge
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 4000 --backend metal -o treehouse-bridge-day-quick.png
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 4000 --backend cuda --mode hq --spp 4096 --max-bounces 8 -o treehouse-bridge-day-hq.png
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 12800 --backend metal -o treehouse-bridge-dusk-quick.png
+target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
+    --time 12800 --backend cuda --mode hq --spp 16384 --max-bounces 8 -o treehouse-bridge-dusk-hq.png
+```
+
+| image | Apple M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end / in the kernel) |
+|---|---|---|
+| camp, quick, day / dusk | 0.27 s / 0.27 s | |
+| camp, hq, day (4096 spp) / dusk (16384 spp) | | 92 s / 333 s (90 s / 331 s) |
+| bridge, quick, day / dusk | 0.23 s / 0.23 s | |
+| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 123 s / 447 s (121 s / 444 s) |
+
+The quick times are the second of two runs. The 4070 Ti SUPER runs under WSL2 on a 16-thread PC.
+Each HQ image rendered twice with the same command on the CUDA backend gave byte-identical
+PNGs, as each quick image did on Metal.
+
+### Image licence
+
+The Treehouse Camp images are renders of *The Treehouse Camp*, from
+[stellarfeline/delvewright-campaigns](https://github.com/stellarfeline/delvewright-campaigns),
+`campaigns/the-treehouse-camp/`, release `release/the-treehouse-camp/v1.0.1`, licensed
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The renders do not change the
+map, and they are shared under the same licence. The other images in `docs/renders/` are
+renders of worlds Lumenwright generates (`demo-world`). Every image is drawn with Minecraft's
+textures and shared under
 [Mojang's usage guidelines](https://www.minecraft.net/en-us/usage-guidelines) for screenshots.
 
 The requirements, design decisions and what is in or out of scope are in
@@ -62,28 +131,56 @@ textures and models from. The command finds it or downloads it from Mojang (see
 
 ```sh
 cargo build --release
+```
 
+### Get the camp
+
+The camp ships as a container image that runs the map's own server. The server builds the
+camp over its first ticks. These commands wait for it to finish, then save the world and copy
+it out. They need Docker. `EULA=TRUE` accepts [Mojang's EULA](https://aka.ms/MinecraftEULA)
+for the server inside the container.
+
+```sh
+docker run -d --name treehouse-camp -e EULA=TRUE ghcr.io/stellarfeline/delve-the-treehouse-camp:v1.0.1
+# The camp is stamped by its datapack over the first ticks; wait until it says so.
+until docker exec treehouse-camp rcon-cli scoreboard players get '#placed' dw.sys 2>/dev/null | grep -q 'has 1'; do sleep 5; done
+docker exec treehouse-camp rcon-cli save-all flush
+docker stop treehouse-camp
+docker cp treehouse-camp:/data/world the-treehouse-camp
+docker rm treehouse-camp
+```
+
+The image is release v1.0.1 of the camp, built by `delvec` 1.12.0 from
+`campaigns/the-treehouse-camp/` in
+[stellarfeline/delvewright-campaigns](https://github.com/stellarfeline/delvewright-campaigns)
+at the release's tag. The campaign's `GENERATION.md` there records how it was built and
+checked. The save is written by a running server, so it is not byte-identical from one run
+to the next: the same frame of two saves from two server runs differed in 257 of its 921,600 pixels.
+
+### Render
+
+```sh
 # Inspect a save
-target/release/lumenwright info ~/path/to/saves/MyWorld --entities
+target/release/lumenwright info the-treehouse-camp --entities
 
 # List the block entities (and sign text) in a box of x,z block coordinates
-target/release/lumenwright info ~/path/to/saves/MyWorld --block-entities=-40,-40,40,40
+target/release/lumenwright info the-treehouse-camp --block-entities=0,0,112,112
 
-# Vanilla-look render from the player's own viewpoint (level.dat)
-target/release/lumenwright render -w ~/path/to/saves/MyWorld -o quick.png
+# Vanilla-look render from the save's spawn, at the save's own time of day
+target/release/lumenwright render -w the-treehouse-camp -o quick.png
 
 # Chunky-look render from an explicit camera
-target/release/lumenwright render -w ~/path/to/saves/MyWorld --mode hq --spp 256 \
-    --camera 120,90,-40 --look-at 100,70,-10 --sun-altitude 35 --sun-azimuth 120 -o hq.png
+target/release/lumenwright render -w the-treehouse-camp --mode hq --spp 256 \
+    --camera 140,118,14 --look-at 56,82,58 --sun-altitude 35 --sun-azimuth 120 -o hq.png
 
-# No world handy? Generate one:
-target/release/lumenwright demo-world /tmp/showcase
-target/release/lumenwright render -w /tmp/showcase --mode hq
+# Generated worlds, no download: a small showcase (terrain, cottage, lake, mobs)
+target/release/lumenwright demo-world showcase
+target/release/lumenwright render -w showcase --mode hq -o showcase.png
 
-# One of every block entity Lumenwright draws (the render below):
-target/release/lumenwright demo-world --block-entities /tmp/gallery
-target/release/lumenwright render -w /tmp/gallery \
-    --camera 9.5,70.5,11.5 --look-at 9.5,65.4,-2 --fov 60
+# One of every block entity Lumenwright draws (the render below)
+target/release/lumenwright demo-world --block-entities gallery
+target/release/lumenwright render -w gallery \
+    --camera 9.5,70.5,11.5 --look-at 9.5,65.4,-2 --fov 60 -o gallery.png
 ```
 
 `lumenwright backends` lists the backends available on the current machine.
@@ -377,18 +474,18 @@ cargo test --workspace --release
 
 | scene | mode / backend | time |
 |---|---|---|
-| island save, 33×33 chunks, 1920×1080 | quick / metal | 0.33 s end to end (24 ms raster, 497k triangles) |
-| same | quick / cpu | 0.29 s end to end (65 ms raster) |
-| same, 1280×720, 256 spp | hq / metal | 21 s (before HQ mode was ported from Chunky) |
-| same, 1280×720, 16 spp | hq / cpu | 7.7 s (about 6× slower than Metal; before the port) |
+| The Treehouse Camp, whole-camp view at `--time 4000`, 625 chunks loaded, 1920×1080 | quick / metal | 0.28 s end to end (48 ms raster, 982k triangles) |
+| same | quick / cpu | 0.36 s end to end (139 ms raster) |
+| same, 1280×720, 32 spp, 4 bounces | hq / metal | 4.1 s end to end (3.9 s path tracing) |
+| same, 1280×720, 16 spp, 4 bounces | hq / cpu | 6.1 s end to end (5.9 s path tracing) |
 | showcase (`demo-world`, its default camera), 1280×720, 256 spp | hq / metal | 14.7 s |
 
-Parity on the same view: quick mode, CPU vs Metal, differs in 0.075% of pixels; HQ mode at
-32 spp differs in 0.03%.
+Parity on the whole-camp view at `--time 4000`, CPU vs Metal: in quick mode at 1920×1080, 0.22%
+of pixels differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.001% do (12 pixels).
 
 ## HQ mode and Chunky on one frame
 
-A treehouse camp at 1280×720, 250 samples per pixel, four bounces, with Chunky's default sky,
+The whole-camp view of The Treehouse Camp at 1280×720, 250 samples per pixel, four bounces, with Chunky's default sky,
 sun, emitters and tone map (the full method: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
 Against Chunky's frame converged at 4000 samples, Lumenwright's 250-sample frame differs by a
 mean of 1.66/255 (SSIM 0.959), Chunky's own 250-sample frame by 1.99/255 (SSIM 0.958). At
@@ -400,6 +497,22 @@ dusk (`--time 12800`, the sun just below the horizon) the same view differs by 1
 | Chunky 2.5.0-SNAPSHOT.474 (CPU) | M2 Pro | 116.71 s | 122.29 s | 1× |
 | Lumenwright, Metal | M2 Pro | 31.98 s | 32.32 s | 3.6× / 3.8× |
 | Lumenwright, CUDA | RTX 4070 Ti SUPER | 6.14 s | 6.70 s | different machine |
+
+```sh
+# Lumenwright (--backend metal on the M2 Pro, cuda on the 4070)
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 4000 --sun-altitude 45 --sun-azimuth 135 --mode hq --spp 250 --max-bounces 4 --backend metal -o lw.png
+# Chunky: the pinned core on its own classpath, as Delvewright's validation/chunky.sh runs it, without its denoise step
+mkdir -p scenes && cp docs/bench/treehouse-camp-bench.json scenes/
+java -Djava.awt.headless=true -Dchunky.home=$HOME/.chunky -cp "<the pinned core and its libraries>" se.llbit.chunky.main.Chunky \
+    -scene-dir scenes -render treehouse-camp-bench -f
+```
+
+The Chunky scene ([`docs/bench/treehouse-camp-bench.json`](docs/bench/treehouse-camp-bench.json); its world path is read from the working directory) states the same 625 chunks, the camera
+at 140, 118, 14 with Chunky's yaw 0.483 rad and pitch −1.208 rad (looking at 56, 82, 58), a 60°
+vertical field of view, `sppTarget` 250, `rayDepth` 5 (four bounces after the first hit,
+read off the pinned core's `PathTracer`), `emittersEnabled`, `emitterSamplingStrategy` `ONE`,
+and the sun at altitude π/4 and Chunky azimuth π/4 (towards +X +Z).
 
 ## Measured on an RTX 4070 Ti SUPER (driver 616.92, WSL2)
 

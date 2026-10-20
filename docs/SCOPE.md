@@ -157,11 +157,11 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 | Tests | `cargo test --workspace`: 42 library unit, 2 CLI unit, 8 kernel and 13 integration tests (9 render, 4 library) and 1 doc test pass. The integration tests ran for real (jar and Metal adapter present). |
 | One render path | The CLI's PNG equals the library's pixels in both modes on the block-entity gallery (integration test) and on the showcase at 1280×720 quick and 640×360 HQ, CPU and Metal. |
 | Embedding build | The library's default features (`gpu`): 96 packages in the normal tree on macOS, 98 on Linux gnu, 109 on Windows MSVC; `cargo check` passes for the five targets above. |
-| Real save, both modes, CPU + Metal | `datapack_test` (1.21.11) renders in all four combinations. Blocks, water, mannequins, an enderman, 68 rotated and scaled block displays, and glow squids (drawn as fallback boxes) all appear. |
-| Quick mode performance | 33×33 chunks at 1920×1080: 0.33 s end to end on Metal (24 ms raster) and 0.29 s on CPU (65 ms raster). |
-| HQ mode performance | 1280×720 at 256 spp: 21 s on Metal for 33×33 chunks, 11.8 s for the showcase. The CPU is about 6× slower. |
-| Backend parity | Quick mode, CPU vs Metal: 0.075% of pixels differ by more than 8/255. HQ at 32 spp: 0.03% of pixels differ, because both backends use the same RNG streams. |
-| Determinism | Identical inputs give bit-identical images on CPU and Metal, in both modes. |
+| Real save, both modes, CPU + Metal | *The Treehouse Camp* (1.21.11, CC BY-SA 4.0, from `stellarfeline/delvewright-campaigns`, saved by its own server as the README describes) renders in all four combinations: hilly terrain, giant trees, houses, rope bridges, lanterns, ladders and mannequins. The README shows it at day and at dusk in both modes. `datapack_test` (1.21.11) also renders in all four: blocks, water, mannequins, an enderman, 68 rotated and scaled block displays, and glow squids (drawn as fallback boxes). |
+| Quick mode performance | The Treehouse Camp, 625 chunks at 1920×1080: 0.37 s end to end on Metal (80 ms raster, 982k triangles) and 0.35 s on CPU (130 ms raster). |
+| HQ mode performance | The Treehouse Camp's benchmark frame at 1280×720, 250 spp, four bounces: 32.96 s on Metal and 6.15 s on CUDA (RTX 4070 Ti SUPER) in the path tracer, against Chunky's 124.73 s on the M2 Pro's CPU. The whole-camp view at 16 spp takes 5.9 s on the CPU, about 2.8× slower per sample than Metal. |
+| Backend parity | The Treehouse Camp, CPU vs Metal: in quick mode at 1920×1080, 0.22% of pixels differ by more than 8/255; in HQ at 32 spp, 0.001% do, because both backends use the same RNG streams. |
+| Determinism | Identical inputs give bit-identical images on CPU and Metal, in both modes. On the CPU, the same Treehouse Camp render twice gives byte-identical PNGs in quick mode and byte-identical PNG and PFM in HQ mode. On CUDA, each of the four Treehouse Camp HQ showcase frames rendered twice gives byte-identical PNGs, as each quick frame does on Metal. |
 | CUDA | `scripts/build-ptx.sh` compiles the shared kernel to PTX: ISA 7.0, sm_70, no unresolved externs, no f64 instruction, no call but panics. `-p lumenwright-cli --features cuda` builds, and without a driver the backend reports `libcuda not found` cleanly. On an RTX 4070 Ti SUPER (WSL2, driver 616.92) `cuda_matches_cpu_in_hq_mode` passes with 0.000% of pixels off on all three scenes, and the showcase at 1280×720 and 64 spp takes 0.85 s in the kernel. |
 | Vulkan / DX12 | Same wgpu and WGSL code as Metal. Not exercised on macOS: wgpu builds neither backend there by default. |
 
@@ -171,4 +171,4 @@ Follow-ups, in priority order:
 3. Remaining block-entity models: beds, shulker boxes, the conduit.
 4. The Chunky components not yet ported (docs/research/chunky-parity.md), each against a frame that shows it.
 5. Item rendering for item frames and item displays.
-6. A stress test on a dense, full-height natural world. Only a flat test world and generated fixtures were available locally.
+6. A stress test on a dense, full-height natural world. The real saves tested are a flat test world and The Treehouse Camp, whose terrain is placed by the map's datapack over a void world, not grown by world generation.
