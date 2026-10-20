@@ -14,80 +14,72 @@ Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vul
 
 ## The Treehouse Camp, by day and at dusk
 
-![The Treehouse Camp by day, path traced](docs/renders/treehouse-camp-day-hq-4070.png)
+![The Treehouse Camp by day, path traced](docs/renders/treehouse-camp-day-hq.png)
 
-*hq · `--time 4000` · 4096 spp · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 74 s end to end*
+*hq · `--time 4000` · 4096 spp · 8 bounces · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 130 s end to end*
 
 | | quick (vanilla look) | hq (path traced) |
 |---|---|---|
-| **The whole camp, day** | ![camp, day, quick](docs/renders/treehouse-camp-day-quick.png) quick · `--time 4000` · Metal | ![camp, day, hq](docs/renders/treehouse-camp-day-hq.png) hq · `--time 4000` · 256 spp · Metal |
-| **The whole camp, dusk** | ![camp, dusk, quick](docs/renders/treehouse-camp-dusk-quick.png) quick · `--time 12800` · Metal | ![camp, dusk, hq](docs/renders/treehouse-camp-dusk-hq.png) hq · `--time 12800` · 1024 spp · Metal |
-| **The Long Bridge, day** | ![bridge, day, quick](docs/renders/treehouse-bridge-day-quick.png) quick · `--time 4000` · Metal | ![bridge, day, hq](docs/renders/treehouse-bridge-day-hq.png) hq · `--time 4000` · 256 spp · Metal |
-| **The Long Bridge, dusk** | ![bridge, dusk, quick](docs/renders/treehouse-bridge-dusk-quick.png) quick · `--time 12800` · Metal | ![bridge, dusk, hq](docs/renders/treehouse-bridge-dusk-hq.png) hq · `--time 12800` · 1024 spp · Metal |
+| **The whole camp, day** | ![camp, day, quick](docs/renders/treehouse-camp-day-quick.png) quick · `--time 4000` · Metal · Apple M2 Pro | ![camp, day, hq](docs/renders/treehouse-camp-day-hq.png) hq · `--time 4000` · 4096 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+| **The whole camp, dusk** | ![camp, dusk, quick](docs/renders/treehouse-camp-dusk-quick.png) quick · `--time 12800` · Metal · Apple M2 Pro | ![camp, dusk, hq](docs/renders/treehouse-camp-dusk-hq.png) hq · `--time 12800` · 16384 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+| **The Long Bridge, day** | ![bridge, day, quick](docs/renders/treehouse-bridge-day-quick.png) quick · `--time 4000` · Metal · Apple M2 Pro | ![bridge, day, hq](docs/renders/treehouse-bridge-day-hq.png) hq · `--time 4000` · 4096 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+| **The Long Bridge, dusk** | ![bridge, dusk, quick](docs/renders/treehouse-bridge-dusk-quick.png) quick · `--time 12800` · Metal · Apple M2 Pro | ![bridge, dusk, hq](docs/renders/treehouse-bridge-dusk-hq.png) hq · `--time 12800` · 16384 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
 
 *The Treehouse Camp* is a small adventure map: a forest clan's houses on four giant trees,
 joined by rope bridges and ladders and lit by lanterns. The top rows look at the whole camp
 from the east-north-east; the bottom rows stand above the Long Bridge, looking south. All
-eight are 1280×720, rendered from a save written by the map's own server, on an Apple M2 Pro.
+eight are 1280×720, rendered from a save written by the map's own server.
 
-At dusk, quick mode draws the light the game stored in the save, so the lantern-lit valley
-reads warmer than the hills around it. HQ mode finds a lantern's light only when a bounced
-path happens to hit the lantern, because it does not sample emitters yet. At 1024 spp the
-lanterns glow and light the posts they stand on, and the evening sky lights the rest. After
-about `--time 13000` the sun is down, and an HQ frame at these sample counts shows lanterns
-on black.
+At `--time 12800` the sun stands on the horizon. Quick mode draws the client's sunset: the sun
+disc, the orange glow and the light the game stored in the save. HQ mode draws its own sky,
+which has no sunset glow, and lights the camp with its lanterns: each diffuse bounce samples
+one emitter, so the valley floor, the bridges and the trunks are lit by the lanterns around
+them.
 
-The lantern light at dusk is not short of samples. On the RTX 4070 Ti SUPER the dusk frames at
-16384 spp ([camp](docs/renders/treehouse-camp-dusk-hq-4070.png),
-[bridge](docs/renders/treehouse-bridge-dusk-hq-4070.png)) have the same mean brightness as
-the 1024 spp frames above, with less grain: the lanterns light their own posts and little
-else. Sampling emitters would bring that picture at fewer samples; it would not make the
-lanterns light the valley.
+By day the lantern light adds to the sunlight; in the game, block light next to full sky light
+adds nothing visible. HQ follows each emitter's light by the inverse square of distance, and
+the camp's lanterns make 2169 light-casting quads, so the sunlit floor around each tree glows yellow, and in the Long Bridge
+frame, where lanterns stand on every post, the scene is about 70% brighter than the same
+frame with `--emitter-intensity 0` (mean 8-bit luma 97 against 56).
 
 Each image's command, run from the repository root with the save from
-[Get the camp](#get-the-camp) in `the-treehouse-camp`:
+[Get the camp](#get-the-camp) in `the-treehouse-camp`. The HQ commands need the CUDA build
+(see [Backends](#backends)); on another backend the same flags give the same image within the
+parity stated under [Measured](#measured-on-an-m2-pro-10-cpu-cores-16-gpu-cores).
 
 ```sh
 # The whole camp
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
     --time 4000 --backend metal -o treehouse-camp-day-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
-    --time 4000 --backend metal --mode hq --spp 256 -o treehouse-camp-day-hq.png
+    --time 4000 --backend cuda --mode hq --spp 4096 --max-bounces 8 -o treehouse-camp-day-hq.png
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
     --time 12800 --backend metal -o treehouse-camp-dusk-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
-    --time 12800 --backend metal --mode hq --spp 1024 -o treehouse-camp-dusk-hq.png
+    --time 12800 --backend cuda --mode hq --spp 16384 --max-bounces 8 -o treehouse-camp-dusk-hq.png
 
 # The Long Bridge
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
     --time 4000 --backend metal -o treehouse-bridge-day-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
-    --time 4000 --backend metal --mode hq --spp 256 -o treehouse-bridge-day-hq.png
+    --time 4000 --backend cuda --mode hq --spp 4096 --max-bounces 8 -o treehouse-bridge-day-hq.png
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
     --time 12800 --backend metal -o treehouse-bridge-dusk-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
-    --time 12800 --backend metal --mode hq --spp 1024 -o treehouse-bridge-dusk-hq.png
-
-# On the RTX 4070 Ti SUPER (build the PTX first, see Backends)
-target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
-    --time 4000 --backend cuda --mode hq --spp 4096 -o treehouse-camp-day-hq-4070.png
-target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
-    --time 12800 --backend cuda --mode hq --spp 16384 -o treehouse-camp-dusk-hq-4070.png
-target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
-    --time 12800 --backend cuda --mode hq --spp 16384 -o treehouse-bridge-dusk-hq-4070.png
+    --time 12800 --backend cuda --mode hq --spp 16384 --max-bounces 8 -o treehouse-bridge-dusk-hq.png
 ```
 
-| image | M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end) |
+| image | Apple M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end / in the kernel) |
 |---|---|---|
-| camp, quick, day / dusk | 0.4 s / 1.0 s | |
-| camp, hq, day (256 spp) / dusk (1024 spp) | 21 s / 70 s | 5.1 s / 16.5 s |
-| bridge, quick, day / dusk | 0.3 s / 0.3 s | |
-| bridge, hq, day (256 spp) / dusk (1024 spp) | 25 s / 87 s | 6.3 s / 21.6 s |
-| camp, hq, day (4096 spp) / dusk (16384 spp) | | 74 s / 260 s |
-| bridge, hq, dusk (16384 spp) | | 340 s |
+| camp, quick, day / dusk | 0.27 s / 0.27 s | |
+| camp, hq, day (4096 spp) / dusk (16384 spp) | | 130 s / 497 s (125 s / 483 s) |
+| bridge, quick, day / dusk | 0.23 s / 0.22 s | |
+| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 163 s / 636 s (158 s / 619 s) |
 
-The 4070 Ti SUPER runs under WSL2 on a 16-thread PC. Its 256 and 1024 spp frames differ from
-the M2 Pro's Metal frames in at most 38 of 921,600 pixels by more than 8/255.
+The quick times are the second of two runs; the first run after a build took 1.6 s, reading the
+save and the jar from a cold disk cache. The 4070 Ti SUPER runs under WSL2 on a 16-thread PC.
+Each HQ image rendered twice with the same command on the CUDA backend gave byte-identical
+PNGs, as each quick image did on Metal.
 
 ### Image licence
 
@@ -479,13 +471,13 @@ cargo test --workspace --release
 
 | scene | mode / backend | time |
 |---|---|---|
-| The Treehouse Camp, whole-camp view, 625 chunks loaded, 1920×1080 | quick / metal | 0.53 s end to end (77 ms raster, 982k triangles) |
-| same | quick / cpu | 0.51 s end to end (144 ms raster) |
-| same, 1280×720, 256 spp | hq / metal | 21 s |
-| same, 1280×720, 16 spp | hq / cpu | 8.3 s |
+| The Treehouse Camp, whole-camp view, 625 chunks loaded, 1920×1080 | quick / metal | 0.37 s end to end (80 ms raster, 982k triangles) |
+| same | quick / cpu | 0.35 s end to end (130 ms raster) |
+| same, 1280×720, 32 spp | hq / metal | 6.0 s end to end (5.8 s path tracing) |
+| same, 1280×720, 16 spp | hq / cpu | 6.7 s end to end (6.5 s path tracing) |
 
-Parity on the whole-camp view, CPU vs Metal: in quick mode at 1920×1080, 0.36% of pixels
-differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.16% do.
+Parity on the whole-camp view at `--time 4000`, CPU vs Metal: in quick mode at 1920×1080, 0.22%
+of pixels differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.38% do.
 
 ## Measured on an RTX 4070 Ti SUPER (driver 616.92, WSL2)
 
@@ -494,6 +486,58 @@ differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.16% do.
 | showcase, 1280×720, 64 spp, 4 bounces | hq / cuda | 0.85 s in the kernel (CUDA events), 1.43 s end to end |
 
 The same frame on CUDA and on the CPU: no pixel differs by more than 0.05 in linear radiance.
+
+## Lumenwright and Chunky on one frame
+
+The whole-camp view at 1280×720, 250 samples per pixel and four bounces after the first hit,
+the sun stated at altitude 45° from the south-east, drawn by Chunky on the M2 Pro's CPU, by
+Lumenwright on the M2 Pro's GPU (Metal) and by Lumenwright on the RTX 4070 Ti SUPER (CUDA).
+Each ran three times, Chunky and Metal alternating, with no other build or render on either
+machine. Two clocks time each run: the renderer's own timer, and the wall clock around the
+whole command.
+
+| renderer | machine | runs, own timer (s) | median | runs, whole command (s) | median | vs Chunky (own / whole) |
+|---|---|---|---|---|---|---|
+| Chunky 2.5.0-SNAPSHOT.474 (CPU, 10 threads, JDK 17) | M2 Pro | 124.6, 115.4, 115.0 | 115.4 | 129.1, 119.4, 118.7 | 119.4 | 1× |
+| Lumenwright, Metal | M2 Pro | 48.37, 48.36, 48.36 | 48.36 | 48.71, 48.65, 48.66 | 48.66 | 2.4× / 2.5× |
+| Lumenwright, CUDA | RTX 4070 Ti SUPER | 8.464, 8.462, 8.458 | 8.462 | 9.08, 9.07, 9.07 | 9.07 | 13.6× / 13.2× |
+
+* Own timer: Chunky's `renderTime` in the saved scene; Lumenwright's `render` stage. Neither
+  counts start-up or loading the world. Whole command: Chunky's includes starting the JVM and
+  building its octree from the save (about 4 s); Lumenwright's includes reading the save and
+  the jar and building the scene (about 0.3 s on Metal, 0.6 s on CUDA). On CUDA the 250 samples
+  take 8.23 s in the kernel by CUDA events. The CUDA command's wall time is read from the
+  remote machine's monotonic clock (`/proc/uptime`): WSL2's wall clock was measured advancing
+  9.2 s in 10.0 s of uptime.
+* Chunky's first run is 8% slower than its other two (JIT warm-up and a cold disk cache).
+  Lumenwright's runs agree within 0.1%.
+* The frames differ in what they draw, so the ratio compares two renderers' cost per frame at
+  equal sample counts, not equal images. Chunky uses its Preetham sky, a sun of intensity 1.25
+  and a gamma tone curve; Lumenwright uses its analytic sky, a sun of intensity 1.5 and ACES.
+  Chunky's lanterns are emitters at its default intensity 13 and barely light the grass;
+  Lumenwright's carry the calibrated power and light the floor around each tree. Both sample
+  one emitter per diffuse vertex (`emitterSamplingStrategy` `ONE` in Chunky; Lumenwright picks
+  by power over all 2169 light quads) and the sun. Chunky renders in passes of `branchCount`
+  10 samples. Lumenwright ends paths by Russian roulette after the third bounce; Chunky's
+  path termination was not compared. Neither frame is denoised. Lumenwright's frame is the same
+  bytes on every run; Chunky's differs from run to run.
+* Lumenwright's CUDA and Metal frames differ in 767 of 921,600 pixels by more than 8/255.
+
+```sh
+# Lumenwright (--backend metal on the M2 Pro, cuda on the 4070)
+target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
+    --time 4000 --sun-altitude 45 --sun-azimuth 135 --mode hq --spp 250 --max-bounces 4 --backend metal -o lw.png
+# Chunky: the pinned core on its own classpath, as Delvewright's validation/chunky.sh runs it, without its denoise step
+mkdir -p scenes && cp docs/bench/treehouse-camp-bench.json scenes/
+java -Djava.awt.headless=true -Dchunky.home=$HOME/.chunky -cp "<the pinned core and its libraries>" se.llbit.chunky.main.Chunky \
+    -scene-dir scenes -render treehouse-camp-bench -f
+```
+
+The Chunky scene ([`docs/bench/treehouse-camp-bench.json`](docs/bench/treehouse-camp-bench.json); its world path is read from the working directory) states the same 625 chunks, the camera
+at 140, 118, 14 with Chunky's yaw 0.483 rad and pitch −1.208 rad (looking at 56, 82, 58), a 60°
+vertical field of view, `sppTarget` 250, `rayDepth` 5 (four bounces after the first hit,
+read off the pinned core's `PathTracer`), `emittersEnabled`, `emitterSamplingStrategy` `ONE`,
+and the sun at altitude π/4 and Chunky azimuth π/4 (towards +X +Z).
 
 ## Known limitations (v0.1)
 
