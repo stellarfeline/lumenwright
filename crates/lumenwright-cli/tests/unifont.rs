@@ -64,8 +64,15 @@ fn real_unifont() -> PathBuf {
     )
 }
 
+/// A fresh directory for one call: the tests run in parallel in one process, and several
+/// of them write the same fixture worlds, so each call gets its own number.
 fn tmp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("lumenwright-unifont-{}-{name}", std::process::id()));
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!(
+        "lumenwright-unifont-{}-{n}-{name}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
