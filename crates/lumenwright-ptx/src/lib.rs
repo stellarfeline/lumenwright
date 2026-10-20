@@ -71,7 +71,7 @@ pub unsafe extern "ptx-kernel" fn pt_render(
         let idx = (y * p.frame[0] + x) as usize;
         let mut acc = *accum.add(idx);
         for s in 0..samples {
-            let c = one_sample(&view, x, y, sample_start + s);
+            let c = render_sample(&view, x, y, sample_start + s);
             if c.x.is_finite() && c.y.is_finite() && c.z.is_finite() {
                 acc[0] += c.x;
                 acc[1] += c.y;
@@ -81,13 +81,4 @@ pub unsafe extern "ptx-kernel" fn pt_render(
         }
         *accum.add(idx) = acc;
     }
-}
-
-/// One path sample, kept out of line. With `render_sample` inlined into the
-/// sample loop of `pt_render`, a launch of two or more samples per pixel never
-/// finished on an RTX 4070 Ti SUPER (driver 616.92, sm_89), while one sample per
-/// launch took 22 ms at 1280x720; out of line, every batch size completes.
-#[inline(never)]
-fn one_sample(view: &SceneView, x: u32, y: u32, sample: u32) -> lumenwright_kernel::math::V3 {
-    render_sample(view, x, y, sample)
 }
