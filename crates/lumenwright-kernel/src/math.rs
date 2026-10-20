@@ -28,31 +28,40 @@ pub fn floor(x: f32) -> f32 {
     }
 }
 
-/// Sine of `x` radians: std's on the host, `libm`'s without `std`.
+/// `(sin 2πu, cos 2πu)`: the sine and cosine of `u` turns, in `f32` arithmetic alone.
+///
+/// The CPU and CUDA backends share this one implementation, so a sampled direction is the
+/// same on both. It is exact in its reduction (a quarter turn is `u * 4`, a power of two,
+/// so the remainder `f` in `[-1/2, 1/2]` is exact for `|u| < 2^21`) and evaluates the Taylor
+/// series of `sin` and `cos` on `[-π/4, π/4]` to the terms in `x^9` and `x^10`, whose
+/// truncation error (below `2e-9` and `1.2e-10`) is far under one `f32` ulp; the error left
+/// is rounding, held under `MAX_TURN_ERROR` by a test against `f64`. `libm::sinf`/`cosf`
+/// reduce in `f64`, which put every `f64` instruction in the CUDA kernel's PTX.
 #[inline(always)]
-pub fn sin(x: f32) -> f32 {
-    #[cfg(feature = "std")]
-    {
-        x.sin()
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        libm::sinf(x)
+pub fn sin_cos_turns(u: f32) -> (f32, f32) {
+    let t = u * 4.0;
+    let q = floor(t + 0.5);
+    let x = (t - q) * core::f32::consts::FRAC_PI_2;
+    let x2 = x * x;
+    let s = x
+        * (1.0
+            + x2 * (-1.0 / 6.0
+                + x2 * (1.0 / 120.0 + x2 * (-1.0 / 5040.0 + x2 * (1.0 / 362_880.0)))));
+    let c = 1.0
+        + x2 * (-0.5
+            + x2 * (1.0 / 24.0
+                + x2 * (-1.0 / 720.0 + x2 * (1.0 / 40_320.0 + x2 * (-1.0 / 3_628_800.0)))));
+    // sin and cos of (q + f) quarter turns; `& 3` is q mod 4 for negative q too.
+    match (q as i32) & 3 {
+        0 => (s, c),
+        1 => (c, -s),
+        2 => (-s, -c),
+        _ => (-c, s),
     }
 }
 
-/// Cosine of `x` radians: std's on the host, `libm`'s without `std`.
-#[inline(always)]
-pub fn cos(x: f32) -> f32 {
-    #[cfg(feature = "std")]
-    {
-        x.cos()
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        libm::cosf(x)
-    }
-}
+/// The bound `sin_cos_turns` is tested to, in absolute error against `f64`.
+pub const MAX_TURN_ERROR: f32 = 1.5e-7;
 
 /// `e^x`: std's on the host, `libm`'s without `std`.
 #[inline(always)]

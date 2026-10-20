@@ -10,5 +10,13 @@ rustup target add --toolchain nightly nvptx64-nvidia-cuda >/dev/null
 rustup component add --toolchain nightly llvm-bitcode-linker llvm-tools >/dev/null
 cargo +nightly build --release
 mkdir -p "$root/target/ptx"
-cp "$root/crates/lumenwright-ptx/target/nvptx64-nvidia-cuda/release/lumenwright_ptx.ptx" "$root/target/ptx/lumenwright.ptx"
-echo "wrote $root/target/ptx/lumenwright.ptx ($(grep -c '' "$root/target/ptx/lumenwright.ptx") lines)"
+ptx="$root/crates/lumenwright-ptx/target/nvptx64-nvidia-cuda/release/lumenwright_ptx.ptx"
+# Consumer NVIDIA GPUs run f64 at a small fraction of f32 speed: refuse a kernel that carries
+# any f64 instruction (an opcode with a .f64 type; `.reg .f64` declarations are not counted).
+f64=$(awk '$1 !~ /^[.\/$({})]/ { op = ($1 ~ /^@/) ? $2 : $1; if (op ~ /\.f64/) n++ } END { print n + 0 }' "$ptx")
+if [ "$f64" -ne 0 ]; then
+    echo "refused: $ptx carries $f64 f64 instructions; find their source (an f64 libm routine is the usual one) and use an f32 form" >&2
+    exit 1
+fi
+cp "$ptx" "$root/target/ptx/lumenwright.ptx"
+echo "wrote $root/target/ptx/lumenwright.ptx ($(grep -c '' "$root/target/ptx/lumenwright.ptx") lines, 0 f64 instructions)"
