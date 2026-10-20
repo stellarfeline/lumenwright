@@ -558,26 +558,87 @@ pub struct HqSky {
 /// Chunky's default sun intensity (`Sun.DEFAULT_INTENSITY`, chunky-dev/chunky 156e2bb).
 pub const DEFAULT_SUN_INTENSITY: f32 = 1.25;
 
+/// The sun's angular radius in radians (Chunky's `Sun.DEFAULT_RADIUS`, the `radius` of
+/// the benchmark scene, chunky-dev/chunky 156e2bb).
+pub const SUN_RADIUS: f32 = 0.03;
+
+/// The brightness of the sun texture drawn in the sky: Chunky's `apparentTextureBrightness`
+/// times 10 (`Sun.intersect`), where `apparentTextureBrightness` is the apparent brightness
+/// to the power 2.2 and the apparent brightness defaults to `Sun.DEFAULT_INTENSITY`
+/// (chunky-dev/chunky 156e2bb). Chunky sets it apart from the sun's intensity.
+pub const SUN_TEXTURE_BRIGHTNESS: f32 = 16.338_118;
+
+/// The axes along which the sun texture lies in the sky for a unit vector `sw` towards
+/// the sun: Chunky's `Sun.initSun` (chunky-dev/chunky 156e2bb). `su` starts as up, or as
+/// +x when `sw` is within 0.1 of the yz plane; `sv = normalize(sw × su)`; `su = sv × sw`.
+pub fn sun_texture_axes(sw: Vec3) -> (Vec3, Vec3) {
+    let sw = sw.as_dvec3();
+    let su = if sw.x.abs() > 0.1 {
+        glam::DVec3::Y
+    } else {
+        glam::DVec3::X
+    };
+    let sv = sw.cross(su).normalize();
+    let su = sv.cross(sw);
+    (su.as_vec3(), sv.as_vec3())
+}
+
+/// The resolution of the sky cache: Chunky's default `skyCacheResolution` (128, the
+/// benchmark scene's; `SkyCache`, chunky-dev/chunky 156e2bb).
+pub const SKY_CACHE_RESOLUTION: u32 = 128;
+
+/// Chunky's sky cache for the sky in `params` (`Params::sky_sun`, `sky_zenith`,
+/// `perez_a` to `perez_e`) at `params.misc_f[2]` as its resolution, as
+/// `lumenwright_kernel::integrator::sky_radiance` reads it.
+pub fn sky_cache(params: &lumenwright_kernel::Params) -> Vec<f32> {
+    let n = params.misc_f[2] as u32;
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut out = vec![0.0; ((n + 1) * (n + 1) * 3) as usize];
+    let view = lumenwright_kernel::SceneView {
+        params,
+        grid: &[],
+        models: &[],
+        quads: &[],
+        atlas: &[],
+        emitters: &[],
+        emitter_grid: &[],
+        sky: &[],
+    };
+    lumenwright_kernel::integrator::build_sky_cache(&view, n, &mut out);
+    out
+}
+
+/// The sun's altitude at which civil twilight ends: its centre 6 degrees below the
+/// horizon (the definition the US Naval Observatory uses).
+pub const CIVIL_TWILIGHT_END: f32 = -6.0 * std::f32::consts::PI / 180.0;
+
+/// The sky light of a night, as a fraction of the sky's: Lumenwright's.
+pub const NIGHT_SKY_LIGHT: f32 = 0.03;
+
+/// The fraction of the Preetham sky's light a sun at `altitude` (radians) leaves: 1
+/// while any part of the sun's disc is above the horizon (Chunky's sky, which has no
+/// other behaviour), falling linearly to [`NIGHT_SKY_LIGHT`] at [`CIVIL_TWILIGHT_END`]
+/// and holding it below. The fall is Lumenwright's own: Chunky has no time of day, and
+/// its Preetham sky keeps the sunset sky at any altitude below the horizon.
+pub fn twilight(altitude: f32) -> f32 {
+    ((altitude - CIVIL_TWILIGHT_END) / (-SUN_RADIUS - CIVIL_TWILIGHT_END))
+        .clamp(0.0, 1.0)
+        .max(NIGHT_SKY_LIGHT)
+}
+
 /// Derives the HQ sun and sky for a sun direction. The sun is Chunky's (GPL-3.0,
 /// `Sun.initSun` at chunky-dev/chunky 156e2bb): white, with irradiance
-/// `sun_intensity^2.2` (`Scene.DEFAULT_GAMMA`). The sky is Chunky's default, the
-/// Preetham sky ([`Preetham`]), scaled by `sky_intensity` (Chunky's sky light).
-///
-/// Below about 9 degrees of altitude (a sine of 1/6) the sun fades to nothing at the
-/// horizon, and below about 8.6 degrees (a sine of 0.15) the sky dims to 3% at a sine
-/// of −0.1, so a world open below its terrain is not lit from under the ground and a
-/// night is dark. Both fades are Lumenwright's: Chunky's sun does not fade, and its
-/// Preetham sky holds the sunset sky whenever the sun is below the horizon.
+/// `sun_intensity^2.2` (`Scene.DEFAULT_GAMMA`) at every altitude; the kernel hides the
+/// part of its disc below the horizon. The sky is Chunky's default, the Preetham sky
+/// ([`Preetham`]), scaled by `sky_intensity` (Chunky's sky light) and by [`twilight`].
 pub fn hq_sky(sun_dir: Vec3, sun_intensity: f32, sky_intensity: f32) -> HqSky {
-    let alt = sun_dir.y;
-    let day = (alt * 4.0 + 0.4).clamp(0.0, 1.0);
-    let sun_color = Vec3::ONE
-        * sun_intensity.powf(lumenwright_kernel::math::GAMMA)
-        * (alt * 6.0).clamp(0.0, 1.0);
+    let altitude = sun_dir.y.clamp(-1.0, 1.0).asin();
     HqSky {
         sun_dir,
-        sun_color,
-        sky_light: sky_intensity * day.max(0.03),
+        sun_color: Vec3::ONE * sun_intensity.powf(lumenwright_kernel::math::GAMMA),
+        sky_light: sky_intensity * twilight(altitude),
     }
 }
 
@@ -704,79 +765,82 @@ mod tests {
         assert!(daylight(celestial_angle(18000)) < 0.25);
     }
 
+    /// Chunky's `PreethamSky.calcIncidentLight`, transcribed in `f64` from the Java with its
+    /// own `updateSkylightValues`.
+    fn chunky_preetham(sun_alt: f64, sun_az: f64, d: [f64; 3]) -> [f64; 3] {
+        let turb = 2.5f64;
+        let mdx = [
+            [-0.0193, -0.2592],
+            [-0.0665, 0.0008],
+            [-0.0004, 0.2125],
+            [-0.0641, -0.8989],
+            [-0.0033, 0.0452],
+        ];
+        let mdy = [
+            [-0.0167, -0.2608],
+            [-0.0950, 0.0092],
+            [-0.0079, 0.2102],
+            [-0.0441, -1.6537],
+            [-0.0109, 0.0529],
+        ];
+        let mdl = [
+            [0.1787, -1.4630],
+            [-0.3554, 0.4275],
+            [-0.0227, 5.3251],
+            [0.1206, -2.5771],
+            [-0.0670, 0.3703],
+        ];
+        let xz = [
+            [0.00166, -0.00375, 0.00209, 0.0],
+            [-0.02903, 0.06377, -0.03203, 0.00394],
+            [0.11693, -0.21196, 0.06052, 0.25886],
+        ];
+        let yz = [
+            [0.00275, -0.00610, 0.00317, 0.0],
+            [-0.04214, 0.08970, -0.04153, 0.00516],
+            [0.15346, -0.26756, 0.06670, 0.26688],
+        ];
+        let c = |m: [[f64; 2]; 5]| m.map(|r| r[0] * turb + r[1]);
+        let (a, b, cl) = (c(mdx), c(mdy), c(mdl));
+        let perez = |ct: f64, g: f64, c2g: f64, k: [f64; 5]| {
+            (1.0 + k[0] * (k[1] / ct).exp()) * (1.0 + k[2] * (k[3] * g).exp() + k[4] * c2g)
+        };
+        let chroma = |st: f64, m: [[f64; 4]; 3]| {
+            let r = |r: [f64; 4]| r[0] * st * st * st + r[1] * st * st + r[2] * st + r[3];
+            turb * turb * r(m[0]) + turb * r(m[1]) + r(m[2])
+        };
+        let st = std::f64::consts::FRAC_PI_2 - sun_alt;
+        let c2t = st.cos() * st.cos();
+        let chi = (4.0 / 9.0 - turb / 120.0) * (std::f64::consts::PI - 2.0 * st);
+        let zy = ((4.0453 * turb - 4.9710) * chi.tan() - 0.2155 * turb + 2.4192).abs();
+        let (zx, zyc) = (chroma(st, xz), chroma(st, yz));
+        let (f0x, f0y, f0l) = (
+            1.0 / perez(1.0, st, c2t, a),
+            1.0 / perez(1.0, st, c2t, b),
+            1.0 / perez(1.0, st, c2t, cl),
+        );
+        let r = sun_alt.cos().abs();
+        let sw = [sun_az.cos() * r, sun_alt.sin(), sun_az.sin() * r];
+        let ct = d[1].max(0.0);
+        let cg = d[0] * sw[0] + d[1] * sw[1] + d[2] * sw[2];
+        let g = cg.acos();
+        let x = zx * perez(ct, g, cg * cg, a) * f0x;
+        let y = zyc * perez(ct, g, cg * cg, b) * f0y;
+        let z = zy * perez(ct, g, cg * cg, cl) * f0l;
+        let f = z / y;
+        let (x2, y2, z2) = (x * f, z, (1.0 - x - y) * f);
+        [
+            (2.3706743 * x2 - 0.9000405 * y2 - 0.4706338 * z2) * 0.045,
+            (-0.513885 * x2 + 1.4253036 * y2 + 0.0885814 * z2) * 0.045,
+            (0.0052982 * x2 - 0.0146949 * y2 + 1.0093968 * z2) * 0.045,
+        ]
+    }
+
     /// Chunky's `PreethamSky.calcIncidentLight`, transcribed in `f64` from the Java with
-    /// its own `updateSkylightValues`, against the kernel's `sky_radiance` fed from
+    /// its own `updateSkylightValues`, against the kernel's `preetham_radiance` fed from
     /// [`Preetham::new`].
     #[test]
     fn the_kernel_sky_is_chunkys_preetham_sky() {
-        fn chunky(sun_alt: f64, sun_az: f64, d: [f64; 3]) -> [f64; 3] {
-            let turb = 2.5f64;
-            let mdx = [
-                [-0.0193, -0.2592],
-                [-0.0665, 0.0008],
-                [-0.0004, 0.2125],
-                [-0.0641, -0.8989],
-                [-0.0033, 0.0452],
-            ];
-            let mdy = [
-                [-0.0167, -0.2608],
-                [-0.0950, 0.0092],
-                [-0.0079, 0.2102],
-                [-0.0441, -1.6537],
-                [-0.0109, 0.0529],
-            ];
-            let mdl = [
-                [0.1787, -1.4630],
-                [-0.3554, 0.4275],
-                [-0.0227, 5.3251],
-                [0.1206, -2.5771],
-                [-0.0670, 0.3703],
-            ];
-            let xz = [
-                [0.00166, -0.00375, 0.00209, 0.0],
-                [-0.02903, 0.06377, -0.03203, 0.00394],
-                [0.11693, -0.21196, 0.06052, 0.25886],
-            ];
-            let yz = [
-                [0.00275, -0.00610, 0.00317, 0.0],
-                [-0.04214, 0.08970, -0.04153, 0.00516],
-                [0.15346, -0.26756, 0.06670, 0.26688],
-            ];
-            let c = |m: [[f64; 2]; 5]| m.map(|r| r[0] * turb + r[1]);
-            let (a, b, cl) = (c(mdx), c(mdy), c(mdl));
-            let perez = |ct: f64, g: f64, c2g: f64, k: [f64; 5]| {
-                (1.0 + k[0] * (k[1] / ct).exp()) * (1.0 + k[2] * (k[3] * g).exp() + k[4] * c2g)
-            };
-            let chroma = |st: f64, m: [[f64; 4]; 3]| {
-                let r = |r: [f64; 4]| r[0] * st * st * st + r[1] * st * st + r[2] * st + r[3];
-                turb * turb * r(m[0]) + turb * r(m[1]) + r(m[2])
-            };
-            let st = std::f64::consts::FRAC_PI_2 - sun_alt;
-            let c2t = st.cos() * st.cos();
-            let chi = (4.0 / 9.0 - turb / 120.0) * (std::f64::consts::PI - 2.0 * st);
-            let zy = ((4.0453 * turb - 4.9710) * chi.tan() - 0.2155 * turb + 2.4192).abs();
-            let (zx, zyc) = (chroma(st, xz), chroma(st, yz));
-            let (f0x, f0y, f0l) = (
-                1.0 / perez(1.0, st, c2t, a),
-                1.0 / perez(1.0, st, c2t, b),
-                1.0 / perez(1.0, st, c2t, cl),
-            );
-            let r = sun_alt.cos().abs();
-            let sw = [sun_az.cos() * r, sun_alt.sin(), sun_az.sin() * r];
-            let ct = d[1].max(0.0);
-            let cg = d[0] * sw[0] + d[1] * sw[1] + d[2] * sw[2];
-            let g = cg.acos();
-            let x = zx * perez(ct, g, cg * cg, a) * f0x;
-            let y = zyc * perez(ct, g, cg * cg, b) * f0y;
-            let z = zy * perez(ct, g, cg * cg, cl) * f0l;
-            let f = z / y;
-            let (x2, y2, z2) = (x * f, z, (1.0 - x - y) * f);
-            [
-                (2.3706743 * x2 - 0.9000405 * y2 - 0.4706338 * z2) * 0.045,
-                (-0.513885 * x2 + 1.4253036 * y2 + 0.0885814 * z2) * 0.045,
-                (0.0052982 * x2 - 0.0146949 * y2 + 1.0093968 * z2) * 0.045,
-            ]
-        }
         let mut worst = 0.0f64;
         let mut n = 0;
         for (alt, az) in [(45f64, 45f64), (10.0, 200.0), (80.0, 300.0), (2.0, 90.0)] {
@@ -806,6 +870,7 @@ mod tests {
                 atlas: &[],
                 emitters: &[],
                 emitter_grid: &[],
+                sky: &[],
             };
             for i in 0..64 {
                 for j in 0..=16 {
@@ -813,8 +878,8 @@ mod tests {
                     let h = j as f64 / 16.0 * 1.2 - 0.2; // a little below the horizon too
                     let r = (1.0 - h * h).sqrt();
                     let d = [phi.cos() * r, h, phi.sin() * r];
-                    let want = chunky(alt, az, d);
-                    let got = lumenwright_kernel::integrator::sky_radiance(
+                    let want = chunky_preetham(alt, az, d);
+                    let got = lumenwright_kernel::integrator::preetham_radiance(
                         &view,
                         lumenwright_kernel::math::v3(d[0] as f32, d[1] as f32, d[2] as f32),
                     );
@@ -827,6 +892,295 @@ mod tests {
         }
         eprintln!("Preetham sky: worst relative difference {worst:.2e} over {n} directions");
         assert_eq!(n, 4 * 64 * 17);
+        assert!(worst < 1e-4, "{worst:.2e}");
+    }
+
+    /// The sky keeps Chunky's full Preetham light while the sun's disc touches the
+    /// horizon and falls to the night's at the end of civil twilight; the sun is never
+    /// dimmed on the host.
+    #[test]
+    fn twilight_holds_chunkys_sky_until_the_disc_sets() {
+        assert_eq!(twilight(0.5), 1.0);
+        assert_eq!(twilight(0.0), 1.0);
+        assert_eq!(twilight(-SUN_RADIUS), 1.0);
+        assert!(twilight(-SUN_RADIUS - 1e-3) < 1.0);
+        assert_eq!(twilight(CIVIL_TWILIGHT_END), NIGHT_SKY_LIGHT);
+        assert_eq!(twilight(-std::f32::consts::FRAC_PI_2), NIGHT_SKY_LIGHT);
+        let mut last = 1.0;
+        for i in 0..=100 {
+            let t = twilight(-SUN_RADIUS + (CIVIL_TWILIGHT_END + SUN_RADIUS) * i as f32 / 100.0);
+            assert!(t <= last, "monotone");
+            last = t;
+        }
+        // The Treehouse Camp's --time 12800 sun: altitude -0.005091 rad.
+        let dusk = hq_sky(sun_direction(-0.005091f32.to_degrees(), 270.0), 1.25, 1.0);
+        assert_eq!(dusk.sky_light, 1.0);
+        assert_eq!(dusk.sun_color, Vec3::splat(1.25f32.powf(2.2)));
+        let night = hq_sky(-Vec3::Y, 1.25, 1.0);
+        assert_eq!(night.sky_light, NIGHT_SKY_LIGHT);
+    }
+
+    #[test]
+    fn the_sun_texture_is_as_bright_as_chunkys() {
+        assert!(
+            (SUN_TEXTURE_BRIGHTNESS as f64 - 10.0 * 1.25f64.powf(2.2)).abs() < 1e-4,
+            "{}",
+            10.0 * 1.25f64.powf(2.2)
+        );
+        let (su, sv) = sun_texture_axes(Vec3::new(-0.999987, -0.005091, 0.0));
+        assert!(
+            (su - Vec3::new(-0.005091, 0.999987, 0.0)).length() < 1e-5,
+            "{su}"
+        );
+        assert!((sv - Vec3::new(0.0, 0.0, -1.0)).length() < 1e-5, "{sv}");
+    }
+
+    /// Chunky's `Sun.intersect` and `Texture.getColor`, transcribed in `f64` from the
+    /// Java, against the kernel's `sun_texture` on a 32 × 32 sprite whose every texel
+    /// differs, placed at (3, 5) in a larger atlas.
+    #[test]
+    fn the_kernel_draws_chunkys_sun_texture() {
+        let (aw, ah) = (40u32, 40u32);
+        let texel = |x: u32, y: u32| -> u32 {
+            0xFF00_0000 | (x * 7 + 3) | ((y * 7 + 3) << 8) | (((x + y) * 3) << 16)
+        };
+        let mut atlas = vec![0u32; (aw * ah) as usize];
+        for y in 0..32 {
+            for x in 0..32 {
+                atlas[((y + 5) * aw + x + 3) as usize] = texel(x, y);
+            }
+        }
+        let lin = |c: u32, s: u32| ((c >> s) & 0xFF) as f64 / 255.0;
+        let chunky = |sw: glam::DVec3, d: glam::DVec3| -> Option<(u32, u32)> {
+            let r = SUN_RADIUS as f64;
+            if d.dot(sw) < 0.5 {
+                return None;
+            }
+            let su0 = if sw.x.abs() > 0.1 {
+                glam::DVec3::Y
+            } else {
+                glam::DVec3::X
+            };
+            let sv = sw.cross(su0).normalize();
+            let su = sv.cross(sw);
+            let (width, width2) = (r * 4.0, r * 8.0);
+            let a = std::f64::consts::FRAC_PI_2 - d.dot(su).acos() + width;
+            let b = std::f64::consts::FRAC_PI_2 - d.dot(sv).acos() + width;
+            if !(a >= 0.0 && a < width2 && b >= 0.0 && b < width2) {
+                return None;
+            }
+            let x = ((a / width2) * 32.0 - 5e-8) as i32;
+            let y = ((1.0 - b / width2) * 32.0 - 5e-8) as i32;
+            Some((x.clamp(0, 31) as u32, y.clamp(0, 31) as u32))
+        };
+        let (mut drawn, mut checked, mut edge) = (0, 0, 0);
+        for sun in [
+            Vec3::new(-0.999987, -0.005091, 0.0),
+            sun_direction(8.0, 330.0),
+            sun_direction(45.0, 135.0),
+            sun_direction(80.0, 3.0),
+        ] {
+            let (su, sv) = sun_texture_axes(sun);
+            let params = lumenwright_kernel::Params {
+                sun_dir: [sun.x, sun.y, sun.z, SUN_RADIUS.cos()],
+                sun_su: [su.x, su.y, su.z, SUN_TEXTURE_BRIGHTNESS],
+                sun_sv: [sv.x, sv.y, sv.z, 4.0 * SUN_RADIUS],
+                sun_sprite: [3.0, 5.0, 32.0, 32.0],
+                off2: [0, aw, ah, 0],
+                ..Default::default()
+            };
+            let view = lumenwright_kernel::SceneView {
+                params: &params,
+                grid: &[],
+                models: &[],
+                quads: &[],
+                atlas: &atlas,
+                emitters: &[],
+                emitter_grid: &[],
+                sky: &[],
+            };
+            let sw = sun.as_dvec3();
+            for i in -60..=60 {
+                for j in -60..=60 {
+                    // Directions over the square the texture covers and a little beyond.
+                    let (da, db) = (i as f64 * 0.0025, j as f64 * 0.0025);
+                    let d = (sw + su.as_dvec3() * da + sv.as_dvec3() * db).normalize();
+                    let want = chunky(sw, d);
+                    let got = lumenwright_kernel::integrator::sun_texture(
+                        &view,
+                        lumenwright_kernel::math::v3(d.x as f32, d.y as f32, d.z as f32),
+                    );
+                    checked += 1;
+                    let Some((x, y)) = want else {
+                        if got.x != 0.0 || got.y != 0.0 || got.z != 0.0 {
+                            edge += 1;
+                        }
+                        continue;
+                    };
+                    let c = texel(x, y);
+                    let w = [lin(c, 0), lin(c, 8), lin(c, 16)]
+                        .map(|v| v.powf(2.2) * SUN_TEXTURE_BRIGHTNESS as f64);
+                    let g = [got.x as f64, got.y as f64, got.z as f64];
+                    if (0..3).all(|k| (g[k] - w[k]).abs() <= 1e-4 * w[k].max(1.0)) {
+                        drawn += 1;
+                    } else {
+                        // An f32 direction on a texel border may fall in the next texel.
+                        edge += 1;
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "sun texture: {drawn} drawn texels agree, {edge} on texel or square borders differ, of {checked} directions"
+        );
+        assert_eq!(checked, 4 * 121 * 121);
+        assert!(drawn > 4 * 90 * 90, "{drawn}");
+        assert!(edge * 100 < checked, "{edge}");
+    }
+
+    /// Chunky's `SkyCache` (`precalculateSky`, `getSkyColorAt`, `calcIncidentLight`,
+    /// `getColorInterpolated`) and `ColorUtil.RGBtoHSL` / `RGBfromHSL`, transcribed in
+    /// `f64` from the Java over [`chunky_preetham`], against the kernel's `sky_radiance`
+    /// reading [`sky_cache`], for a dusk, a low and a high sun.
+    #[test]
+    fn the_kernel_reads_the_sky_through_chunkys_sky_cache() {
+        fn to_hsl(c: [f64; 3]) -> [f64; 3] {
+            let [r, g, b] = c.map(|v| v.clamp(0.0, 1.0));
+            let (cmax, cmin) = (r.max(g).max(b), r.min(g).min(b));
+            let delta = cmax - cmin;
+            let l = (cmax + cmin) / 2.0;
+            let h = if delta == 0.0 {
+                0.0
+            } else if cmax == r {
+                (((g - b) / delta) % 6.0) / 6.0
+            } else if cmax == g {
+                (((b - r) / delta) + 2.0) / 6.0
+            } else {
+                (((r - g) / delta) + 4.0) / 6.0
+            };
+            let s = if delta < 5e-8 {
+                0.0
+            } else {
+                delta / (1.0 - (2.0 * l - 1.0).abs())
+            };
+            [h, s, l]
+        }
+        fn from_hsl([h, s, l]: [f64; 3]) -> [f64; 3] {
+            let c = ((1.0 - (2.0 * l - 1.0).abs()) * s).min(1.0);
+            let h = h * 6.0;
+            let x = c * (1.0 - (h % 2.0 - 1.0).abs());
+            let rgb = if h < 1.0 {
+                [c, x, 0.0]
+            } else if h < 2.0 {
+                [x, c, 0.0]
+            } else if h < 3.0 {
+                [0.0, c, x]
+            } else if h < 4.0 {
+                [0.0, x, c]
+            } else if h < 5.0 {
+                [x, 0.0, c]
+            } else {
+                [c, 0.0, x]
+            };
+            let m = (l - 0.5 * c).max(0.0);
+            rgb.map(|v| v + m)
+        }
+        let n = SKY_CACHE_RESOLUTION as usize;
+        let (mut worst, mut count, mut saturated) = (0.0f64, 0, 0);
+        for (alt, az) in [(-0.005091f64, std::f64::consts::PI), (0.1, 2.0), (0.8, 0.7)] {
+            let table: Vec<Vec<[f64; 3]>> = (0..=n)
+                .map(|i| {
+                    (0..=n)
+                        .map(|j| {
+                            let theta = i as f64 / n as f64 * std::f64::consts::TAU;
+                            let phi = j as f64 / n as f64 * std::f64::consts::PI
+                                - std::f64::consts::FRAC_PI_2;
+                            let r = phi.cos();
+                            to_hsl(chunky_preetham(
+                                alt.max(0.0),
+                                az,
+                                [theta.cos() * r, phi.sin(), theta.sin() * r],
+                            ))
+                        })
+                        .collect()
+                })
+                .collect();
+            let sun = Vec3::new(
+                (az.cos() * alt.cos()) as f32,
+                alt.sin() as f32,
+                (az.sin() * alt.cos()) as f32,
+            );
+            let sky = Preetham::new(sun);
+            let f4 = |v: [f32; 3], w: f32| [v[0], v[1], v[2], w];
+            let params = lumenwright_kernel::Params {
+                sky_sun: f4(sky.sun.into(), 1.0),
+                sky_zenith: f4(sky.zenith, 0.0),
+                perez_a: f4(sky.perez[0], 0.0),
+                perez_b: f4(sky.perez[1], 0.0),
+                perez_c: f4(sky.perez[2], 0.0),
+                perez_d: f4(sky.perez[3], 0.0),
+                perez_e: f4(sky.perez[4], 0.0),
+                misc_f: [0.0, 0.0, SKY_CACHE_RESOLUTION as f32, 0.0],
+                ..Default::default()
+            };
+            let cache = sky_cache(&params);
+            assert_eq!(cache.len(), (n + 1) * (n + 1) * 3);
+            let view = lumenwright_kernel::SceneView {
+                params: &params,
+                grid: &[],
+                models: &[],
+                quads: &[],
+                atlas: &[],
+                emitters: &[],
+                emitter_grid: &[],
+                sky: &cache,
+            };
+            for i in 0..97 {
+                for j in 0..=40 {
+                    let a = i as f64 / 97.0 * std::f64::consts::TAU + 0.013;
+                    let h = j as f64 / 40.0 * 1.9 - 0.95;
+                    let r = (1.0 - h * h).sqrt();
+                    let d = [a.cos() * r, h, a.sin() * r];
+                    // `calcIncidentLight` and `getColorInterpolated`.
+                    let theta = d[2].atan2(d[0]) / std::f64::consts::TAU;
+                    let theta = ((theta % 1.0) + 1.0) % 1.0;
+                    let phi = (d[1].clamp(-1.0, 1.0).asin() + std::f64::consts::FRAC_PI_2)
+                        / std::f64::consts::PI;
+                    let (x, y) = (theta * n as f64, phi * n as f64);
+                    let fx = x.clamp(0.0, n as f64 - 1.0) as usize;
+                    let fy = y.clamp(0.0, n as f64 - 1.0) as usize;
+                    let hsl: [f64; 3] = std::array::from_fn(|k| {
+                        let lerp = |x: f64, x0: f64, y0: f64, y1: f64| y0 + (x - x0) * (y1 - y0);
+                        let y0 = lerp(x, fx as f64, table[fx][fy][k], table[fx + 1][fy][k]);
+                        let y1 = lerp(x, fx as f64, table[fx][fy + 1][k], table[fx + 1][fy + 1][k]);
+                        lerp(y, fy as f64, y0, y1)
+                    });
+                    let want = from_hsl(hsl);
+                    let got = lumenwright_kernel::integrator::sky_radiance(
+                        &view,
+                        lumenwright_kernel::math::v3(d[0] as f32, d[1] as f32, d[2] as f32),
+                    );
+                    for (g, w) in [got.x, got.y, got.z].into_iter().zip(want) {
+                        worst = worst.max((g as f64 - w).abs());
+                    }
+                    let direct = chunky_preetham(alt.max(0.0), az, d);
+                    if direct.iter().any(|&v| v > 1.0) {
+                        saturated += 1;
+                        assert!(got.x <= 1.0 + 1e-5 && got.y <= 1.0 + 1e-5 && got.z <= 1.0 + 1e-5);
+                    }
+                    count += 1;
+                }
+            }
+        }
+        eprintln!(
+            "sky cache: worst absolute difference {worst:.2e} over {count} directions, \
+             {saturated} where the direct sky exceeds 1"
+        );
+        assert_eq!(count, 3 * 97 * 41);
+        assert!(
+            saturated > 0,
+            "no direction near a sun brighter than the cache's limit"
+        );
         assert!(worst < 1e-4, "{worst:.2e}");
     }
 

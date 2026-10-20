@@ -84,6 +84,8 @@ pub struct HqFrame<'a> {
     pub params: lumenwright_kernel::Params,
     /// Samples per pixel.
     pub spp: u32,
+    /// The sky cache for `params` ([`crate::render::sky::sky_cache`]).
+    pub sky: Vec<f32>,
 }
 
 /// A rendering backend. Open one with [`open_backend`] or [`create_backend`].

@@ -14,9 +14,12 @@ Code, algorithms and constants Lumenwright takes from other works, with their li
 * Ported into HQ mode (each port names its Chunky file in a code comment; the full map is
   [docs/research/chunky-parity.md](docs/research/chunky-parity.md)):
   * the path tracer's diffuse event and ray depth (`PathTracer.java`);
-  * the sun's emittance, default intensity and cone sampling (`Sun.java`), the `FAST` sun
-    sampling strategy (`SunSamplingStrategy.java`);
-  * the Preetham sky (`PreethamSky.java`), its constants and its evaluation;
+  * the sun's emittance at every altitude, default intensity and cone sampling (`Sun.java`),
+    the per-direction `frontLight` test (`PathTracer.java`), the `FAST` sun sampling strategy
+    (`SunSamplingStrategy.java`), and the sun drawn in the sky with the client's texture
+    (`Sun.intersect`, `Sky.addSunColor`, `Texture.getColor`);
+  * the Preetham sky (`PreethamSky.java`), its constants and its evaluation, and the sky
+    cache it is read through (`SkyCache.java`, `ColorUtil.RGBtoHSL` and `RGBfromHSL`);
   * the emitter model: emittance per block material (`BlockPalette.java`), quadratic emitted
     light, the default emitter intensity (`Scene.java`), the emitter grid (`Grid.java`), the
     emitter sampling strategies (`EmitterSamplingStrategy.java`) and face sampling
@@ -35,5 +38,12 @@ Code, algorithms and constants Lumenwright takes from other works, with their li
 
 ## Numerical approximations
 
-* `acos` in the kernel: M. Abramowitz and I. A. Stegun, *Handbook of Mathematical Functions*,
-  formula 4.4.46 (a public-domain US government publication).
+* `acos` and `atan2` in the kernel: M. Abramowitz and I. A. Stegun, *Handbook of
+  Mathematical Functions*, formulas 4.4.46 and 4.4.49 (a public-domain US government
+  publication).
+
+## Twilight
+
+* The end of civil twilight, the sun's centre 6 degrees below the horizon, at which HQ
+  mode's sky reaches a night's light: the definition the US Naval Observatory publishes
+  (a fact, not a work; no licence applies).

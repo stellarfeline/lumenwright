@@ -391,13 +391,15 @@ Parity on the same view: quick mode, CPU vs Metal, differs in 0.075% of pixels; 
 A treehouse camp at 1280×720, 250 samples per pixel, four bounces, with Chunky's default sky,
 sun, emitters and tone map (the full method: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
 Against Chunky's frame converged at 4000 samples, Lumenwright's 250-sample frame differs by a
-mean of 1.70/255 (SSIM 0.959), Chunky's own 250-sample frame by 1.99/255 (SSIM 0.958).
+mean of 1.66/255 (SSIM 0.959), Chunky's own 250-sample frame by 1.99/255 (SSIM 0.958). At
+dusk (`--time 12800`, the sun just below the horizon) the same view differs by 1.21/255
+(SSIM 0.955), Chunky's own 250-sample frame by 1.28/255 (SSIM 0.954).
 
 | renderer | machine | path tracing, median of 3 | whole command, median of 3 | vs Chunky |
 |---|---|---|---|---|
-| Chunky 2.5.0-SNAPSHOT.474 (CPU) | M2 Pro | 124.73 s | 129.61 s | 1× |
-| Lumenwright, Metal | M2 Pro | 32.96 s | 33.26 s | 3.8× / 3.9× |
-| Lumenwright, CUDA | RTX 4070 Ti SUPER | 6.15 s | 6.72 s | different machine |
+| Chunky 2.5.0-SNAPSHOT.474 (CPU) | M2 Pro | 116.71 s | 122.29 s | 1× |
+| Lumenwright, Metal | M2 Pro | 31.98 s | 32.32 s | 3.6× / 3.8× |
+| Lumenwright, CUDA | RTX 4070 Ti SUPER | 6.14 s | 6.70 s | different machine |
 
 ## Measured on an RTX 4070 Ti SUPER (driver 616.92, WSL2)
 
@@ -426,9 +428,13 @@ See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
   probability, so a surface among many emitters gets the average of their light rather
   than the sum, and an emitter farther than 10 to 19 blocks along an axis (by where the grid
   cells fall) is never sampled; it lights a surface only through bounced paths that meet it.
-* Not yet ported from Chunky: biome blending, the sun drawn in the sky, candle and campfire
-  flame particles, its fancier translucency, water shading and metals
+* Not yet ported from Chunky: biome blending, candle and campfire flame particles, its
+  fancier translucency, water shading, metals and its Nishita sky
   ([docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
+* Chunky has no time of day. HQ mode keeps Chunky's sky while any part of the sun's disc is
+  above the horizon; below it, the sky falls to a night's 3% at the end of civil twilight
+  (the sun 6° below the horizon), and the sun gives no light from below the horizon. Those
+  two rules are Lumenwright's own.
 
 ## License
 

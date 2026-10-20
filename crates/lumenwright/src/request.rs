@@ -585,12 +585,24 @@ pub fn render(req: &Request) -> Result<Rendered> {
                     sky_intensity,
                 } => sky::hq_sky(vanilla_sun(time, sun_dir), sun_intensity, sky_intensity),
             };
+            let d = hq_sky.sun_dir;
+            log::info!(
+                "hq sun: direction {:.6} {:.6} {:.6}, altitude {:.6} rad, azimuth from +x \
+                 towards +z {:.6} rad (Chunky's sun angles)",
+                d.x,
+                d.y,
+                d.z,
+                d.y.clamp(-1.0, 1.0).asin(),
+                d.z.atan2(d.x)
+            );
             let params = hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky);
             let frame = HqFrame {
                 scene: &hq,
                 params,
                 spp: req.hq.spp,
+                sky: sky::sky_cache(&params),
             };
+            lap("sky cache", &mut t);
             let started = Instant::now();
             let progress = |done: u32, total: u32| {
                 log::debug!("{done}/{total} ({:.1?})", started.elapsed());
@@ -747,10 +759,10 @@ pub fn hq_params(
     rays: &CameraRays,
     s: &HqSky,
 ) -> Params {
-    let sun_radius: f32 = 0.03;
-    let solid_angle = std::f32::consts::TAU * (1.0 - sun_radius.cos());
+    let sun_radius = sky::SUN_RADIUS;
     let f4 = |v: Vec3, w: f32| [v.x, v.y, v.z, w];
     let sky = sky::Preetham::new(s.sun_dir);
+    let (su, sv) = sky::sun_texture_axes(s.sun_dir);
     Params {
         cam_pos: f4(eye, rays.tan_half_fov),
         cam_fwd: f4(rays.forward, rays.aspect),
@@ -766,7 +778,12 @@ pub fn hq_params(
         perez_d: f4(Vec3::from(sky.perez[3]), 0.0),
         perez_e: f4(Vec3::from(sky.perez[4]), 0.0),
         water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
-        misc_f: [o.emitter_intensity, 1e-3, 1.0 / solid_angle, 0.0],
+        misc_f: [
+            o.emitter_intensity,
+            1e-3,
+            sky::SKY_CACHE_RESOLUTION as f32,
+            0.0,
+        ],
         grid_dims: [
             hq.dims[0],
             hq.dims[1],
@@ -798,5 +815,8 @@ pub fn hq_params(
             0,
             0,
         ],
+        sun_su: f4(su, sky::SUN_TEXTURE_BRIGHTNESS),
+        sun_sv: f4(sv, 4.0 * sun_radius),
+        sun_sprite: hq.sun_sprite.map_or([0.0; 4], |r| r.map(|v| v as f32)),
     }
 }

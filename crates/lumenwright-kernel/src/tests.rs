@@ -42,6 +42,7 @@ struct TestScene {
     atlas: Vec<u32>,
     emitters: Vec<GpuEmitter>,
     emitter_grid: Vec<u32>,
+    sky: Vec<f32>,
 }
 
 impl TestScene {
@@ -106,6 +107,7 @@ impl TestScene {
             atlas: vec![0xFFFF_FFFF, 0x0000_0000],
             emitters: vec![GpuEmitter::default()],
             emitter_grid: vec![0; EMITTER_GRID_HEADER as usize],
+            sky: Vec::new(),
         }
     }
 
@@ -118,6 +120,7 @@ impl TestScene {
             atlas: &self.atlas,
             emitters: &self.emitters,
             emitter_grid: &self.emitter_grid,
+            sky: &self.sky,
         }
     }
 }
@@ -273,6 +276,11 @@ fn empty_scene_shows_sky() {
     s.params.perez_d = PREETHAM_PEREZ[3];
     s.params.perez_e = PREETHAM_PEREZ[4];
     s.params.sun_dir = [0.0, -1.0, 0.0, 1.0];
+    let n = 128;
+    s.params.misc_f[2] = n as f32;
+    let mut sky = vec![0.0; ((n + 1) * (n + 1) * 3) as usize];
+    crate::integrator::build_sky_cache(&s.view(), n, &mut sky);
+    s.sky = sky;
     let v = s.view();
     for y in 0..4 {
         for x in 0..4 {
@@ -382,6 +390,7 @@ fn lamp_scene(strategy: u32, decoy: bool) -> TestScene {
         atlas: vec![0xFFFF_FFFF, 0x0000_0000],
         emitters,
         emitter_grid,
+        sky: Vec::new(),
     }
 }
 
@@ -553,6 +562,31 @@ fn acos_is_within_its_bound_of_f64() {
     assert!(worst <= MAX_ACOS_ERROR as f64, "{worst:.3e}");
 }
 
+#[test]
+fn atan2_is_within_its_bound_of_f64() {
+    use crate::math::{MAX_ATAN2_ERROR, atan2};
+    let mut worst = 0.0f64;
+    let mut n = 0;
+    for i in 0..1u32 << 16 {
+        let a = i as f32 / (1u32 << 16) as f32 * std::f32::consts::TAU;
+        for r in [1e-3f32, 1.0, 250.0] {
+            let (y, x) = (a.sin() * r, a.cos() * r);
+            worst = worst.max((atan2(y, x) as f64 - (y as f64).atan2(x as f64)).abs());
+            n += 1;
+        }
+    }
+    for (y, x, want) in [
+        (0.0f32, 1.0f32, 0.0f64),
+        (1.0, 0.0, std::f64::consts::FRAC_PI_2),
+        (0.0, 0.0, 0.0),
+    ] {
+        assert!((atan2(y, x) as f64 - want).abs() < 1e-7, "atan2({y}, {x})");
+    }
+    eprintln!("atan2: worst absolute error {worst:.3e} over {n} values");
+    assert_eq!(n, 3 << 16);
+    assert!(worst <= MAX_ATAN2_ERROR as f64, "{worst:.3e}");
+}
+
 /// `lumenwright::render::sky::Preetham::new` for a sun at altitude 45 degrees: the zenith
 /// x, y and Y times their normalisation.
 const PREETHAM_45_ZENITH: [f32; 4] = [0.296_242_06, 0.307_511_93, 8.306_274, 0.0];
@@ -616,6 +650,7 @@ fn a_front_face_far_along_the_ray_is_met() {
         atlas: vec![0xFFFF_FFFF, 0x0000_0000],
         emitters: vec![GpuEmitter::default()],
         emitter_grid: vec![0; EMITTER_GRID_HEADER as usize],
+        sky: Vec::new(),
     };
     let v = s.view();
     let mut missed = 0;

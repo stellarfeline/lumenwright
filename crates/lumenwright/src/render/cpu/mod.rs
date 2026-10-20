@@ -56,6 +56,7 @@ impl Backend for CpuBackend {
             atlas: &s.atlas,
             emitters: &s.emitters,
             emitter_grid: &s.emitter_grid,
+            sky: &frame.sky,
         };
         out.par_chunks_mut(w as usize)
             .enumerate()
