@@ -27,7 +27,12 @@ The first release: `lumenwright`, `lumenwright-cli` and `lumenwright-kernel`.
   emitter grid and its sampling strategies (`--emitter-intensity`, `--emitter-sampling`,
   `--prevent-normal-emitter`); one-sided block faces; diffuse bounces; Fresnel water with
   refraction; stochastic translucency; textures decoded and frames encoded with the display
-  gamma 2.2, and Chunky's gamma (default), ACES and Hable filters. On the treehouse benchmark
+  gamma 2.2, and Chunky's gamma (default), ACES and Hable filters. The sky is read through
+  Chunky's sky cache (a 129 × 129 table in HSL, each channel at most 1), and the sun is drawn
+  with the client's sun texture as Chunky draws it. Chunky's sky and sun hold while any part
+  of the sun's disc is above the horizon; below it the sky falls to a night's 3% at the end
+  of civil twilight, and a sun direction below the horizon gives no light (Lumenwright's own,
+  as Chunky has no time of day). On the treehouse benchmark
   frame its 250-sample frame is as close to Chunky's converged frame as Chunky's own
   250-sample frame is.
 - Backends: CPU on every core, Metal, Vulkan and DX12 through wgpu (feature `gpu`, on by

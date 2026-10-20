@@ -37,6 +37,7 @@ pub fn render(
     let atlas = gpu.storage_buffer("atlas", bytemuck::cast_slice(&s.atlas))?;
     let emitters = gpu.storage_buffer("emitters", bytemuck::cast_slice(&s.emitters))?;
     let emitter_grid = gpu.storage_buffer("emitter grid", bytemuck::cast_slice(&s.emitter_grid))?;
+    let sky = gpu.storage_buffer("sky cache", bytemuck::cast_slice(&f.sky))?;
     let accum_size = (w as u64) * (h as u64) * 16;
     let accum = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("accum"),
@@ -74,6 +75,7 @@ pub fn render(
             storage(5, false),
             storage(6, true),
             storage(7, true),
+            storage(8, true),
         ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -111,6 +113,10 @@ pub fn render(
             wgpu::BindGroupEntry {
                 binding: 7,
                 resource: emitter_grid.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 8,
+                resource: sky.as_entire_binding(),
             },
         ],
     });

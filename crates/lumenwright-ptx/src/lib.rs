@@ -48,6 +48,8 @@ pub unsafe extern "ptx-kernel" fn pt_render(
     emitters_len: u32,
     emitter_grid: *const u32,
     emitter_grid_len: u32,
+    sky: *const f32,
+    sky_len: u32,
     accum: *mut [f32; 4],
     sample_start: u32,
     samples: u32,
@@ -67,6 +69,7 @@ pub unsafe extern "ptx-kernel" fn pt_render(
             atlas: slice::from_raw_parts(atlas, atlas_len as usize),
             emitters: slice::from_raw_parts(emitters, emitters_len as usize),
             emitter_grid: slice::from_raw_parts(emitter_grid, emitter_grid_len as usize),
+            sky: slice::from_raw_parts(sky, sky_len as usize),
         };
         let idx = (y * p.frame[0] + x) as usize;
         let mut acc = *accum.add(idx);

@@ -24,6 +24,9 @@ struct Params {
     misc_u: vec4<u32>,
     see_through: vec4<u32>,
     emitter: vec4<u32>,
+    sun_su: vec4<f32>,
+    sun_sv: vec4<f32>,
+    sun_sprite: vec4<f32>,
 }
 
 // Quads are read as raw words: the w lanes of p0/eu carry bit-cast integers
@@ -56,6 +59,7 @@ struct Model {
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4<f32>>;
 @group(0) @binding(6) var<storage, read> emitters: array<Emitter>;
 @group(0) @binding(7) var<storage, read> emitter_grid: array<u32>;
+@group(0) @binding(8) var<storage, read> sky: array<f32>;
 
 const EMPTY: u32 = 0xFFFFFFFFu;
 const UNIFORM: u32 = 0x80000000u;
@@ -340,36 +344,104 @@ fn acos_as(x: f32) -> f32 {
     return select(r, PI - r, x < 0.0);
 }
 
-// integrator::sky_radiance: Chunky's Preetham sky.
-fn sky_radiance(d: vec3<f32>) -> vec3<f32> {
-    let cos_theta = max(d.y + P.sky_zenith.w, 0.0);
-    let cos_gamma = clamp(dot(d, P.sky_sun.xyz), -1.0, 1.0);
-    let gamma = acos_as(cos_gamma);
-    let cos2_gamma = cos_gamma * cos_gamma;
-    var a = vec3<f32>(0.0);
-    if (cos_theta > 0.0) {
-        a = P.perez_a.xyz * exp(P.perez_b.xyz / cos_theta);
+// math::atan2: Abramowitz and Stegun 4.4.49.
+fn atan2_as(y: f32, x: f32) -> f32 {
+    let ax = abs(x);
+    let ay = abs(y);
+    let lo = min(ax, ay);
+    let hi = max(ax, ay);
+    if (hi == 0.0) {
+        return 0.0;
     }
-    let perez = (1.0 + a) * (1.0 + P.perez_c.xyz * exp(P.perez_d.xyz * gamma) + P.perez_e.xyz * cos2_gamma);
-    let xyl = P.sky_zenith.xyz * perez;
-    if (xyl.y <= 5e-8) {
-        return vec3<f32>(0.0);
-    }
-    let f = xyl.z / xyl.y;
-    let cx = xyl.x * f;
-    let cy = xyl.z;
-    let cz = (1.0 - xyl.x - xyl.y) * f;
-    return vec3<f32>(
-        2.3706743 * cx - 0.9000405 * cy - 0.4706338 * cz,
-        -0.513885 * cx + 1.4253036 * cy + 0.0885814 * cz,
-        0.0052982 * cx - 0.0146949 * cy + 1.0093968 * cz) * (0.045 * P.sky_sun.w);
+    let t = lo / hi;
+    let t2 = t * t;
+    let p = t
+        * (1.0
+            + t2 * (-0.33333145
+                + t2 * (0.19993551
+                    + t2 * (-0.14208899
+                        + t2 * (0.10656264
+                            + t2 * (-0.07528964
+                                + t2 * (0.042909614
+                                    + t2 * (-0.016165737 + t2 * 0.0028662257))))))));
+    var r = p;
+    if (ay > ax) { r = 1.5707964 - p; }
+    if (x < 0.0) { r = PI - r; }
+    if (y < 0.0) { r = -r; }
+    return r;
 }
 
-fn sun_disk(d: vec3<f32>) -> vec3<f32> {
-    if (dot(d, P.sun_dir.xyz) >= P.sun_dir.w) {
-        return P.sun_color.xyz * P.misc_f.z;
+// Java's `%` on floats: truncated, the sign of the dividend.
+fn jmod(a: f32, b: f32) -> f32 {
+    return a - b * trunc(a / b);
+}
+
+// integrator::rgb_from_hsl: Chunky's ColorUtil.RGBfromHSL.
+fn rgb_from_hsl(hue: f32, saturation: f32, lightness: f32) -> vec3<f32> {
+    let c = min(1.0, (1.0 - abs(2.0 * lightness - 1.0)) * saturation);
+    let h = hue * 6.0;
+    let x = c * (1.0 - abs(jmod(h, 2.0) - 1.0));
+    var rgb: vec3<f32>;
+    if (h < 1.0) {
+        rgb = vec3<f32>(c, x, 0.0);
+    } else if (h < 2.0) {
+        rgb = vec3<f32>(x, c, 0.0);
+    } else if (h < 3.0) {
+        rgb = vec3<f32>(0.0, c, x);
+    } else if (h < 4.0) {
+        rgb = vec3<f32>(0.0, x, c);
+    } else if (h < 5.0) {
+        rgb = vec3<f32>(x, 0.0, c);
+    } else {
+        rgb = vec3<f32>(c, 0.0, x);
     }
-    return vec3<f32>(0.0);
+    let m = max(0.0, lightness - 0.5 * c);
+    return rgb + vec3<f32>(m);
+}
+
+// integrator::sky_radiance: Chunky's simulated sky read through its sky cache.
+fn sky_radiance(d: vec3<f32>) -> vec3<f32> {
+    let n = P.misc_f.z;
+    if (n < 1.0) {
+        return vec3<f32>(0.0);
+    }
+    let theta0 = atan2_as(d.z, d.x) / (2.0 * PI);
+    let theta = jmod(jmod(theta0, 1.0) + 1.0, 1.0);
+    let phi = 1.0 - acos_as(clamp(d.y, -1.0, 1.0)) / PI;
+    let x = theta * n;
+    let y = phi * n;
+    let fx = floor(clamp(x, 0.0, n - 1.0));
+    let fy = floor(clamp(y, 0.0, n - 1.0));
+    let m = u32(n) + 1u;
+    let a00 = (u32(fx) * m + u32(fy)) * 3u;
+    let a10 = (u32(fx + 1.0) * m + u32(fy)) * 3u;
+    let a01 = (u32(fx) * m + u32(fy + 1.0)) * 3u;
+    let a11 = (u32(fx + 1.0) * m + u32(fy + 1.0)) * 3u;
+    var hsl: vec3<f32>;
+    for (var k = 0u; k < 3u; k++) {
+        let y0 = sky[a00 + k] + (x - fx) * (sky[a10 + k] - sky[a00 + k]);
+        let y1 = sky[a01 + k] + (x - fx) * (sky[a11 + k] - sky[a01 + k]);
+        hsl[k] = y0 + (y - fy) * (y1 - y0);
+    }
+    return rgb_from_hsl(hsl.x, hsl.y, hsl.z) * P.sky_sun.w;
+}
+
+// integrator::sun_texture: Chunky's Sun.intersect.
+fn sun_texture(d: vec3<f32>) -> vec3<f32> {
+    let sprite = P.sun_sprite;
+    if (sprite.z <= 0.0 || dot(d, P.sun_dir.xyz) < 0.5) {
+        return vec3<f32>(0.0);
+    }
+    let width = P.sun_sv.w;
+    let width2 = width * 2.0;
+    let a = 0.5 * PI - acos_as(dot(d, P.sun_su.xyz)) + width;
+    let b = 0.5 * PI - acos_as(dot(d, P.sun_sv.xyz)) + width;
+    if (a < 0.0 || a >= width2 || b < 0.0 || b >= width2) {
+        return vec3<f32>(0.0);
+    }
+    let x = clamp(floor(a / width2 * sprite.z - 5e-8), 0.0, sprite.z - 1.0);
+    let y = clamp(floor((1.0 - b / width2) * sprite.w - 5e-8), 0.0, sprite.w - 1.0);
+    return linear_rgb(texel_at(sprite.x + x + 0.5, sprite.y + y + 0.5)) * P.sun_su.w;
 }
 
 fn cosine_hemisphere(n: vec3<f32>) -> vec3<f32> {
@@ -550,7 +622,7 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
             if (!in_water) {
                 radiance += beta * sky_radiance(d);
                 if (specular && bounces == 0u) {
-                    radiance += beta * sun_disk(d);
+                    radiance += beta * sun_texture(d);
                 }
             }
             break;
@@ -608,10 +680,11 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
 
         let origin = pos + n * eps;
         let sun = P.sun_dir.xyz;
-        if (dot(n, sun) > 0.0 && P.sun_dir.y > -0.1) {
+        let sin_r = sqrt(max(1.0 - P.sun_dir.w * P.sun_dir.w, 0.0));
+        if (dot(n, sun) > -sin_r && P.sun_dir.y > -sin_r) {
             let l = sample_sun();
             let cos_l = dot(n, l);
-            if (cos_l > 0.0) {
+            if (cos_l > 0.0 && l.y >= 0.0) {
                 let tr = shadow(origin, l, INF);
                 radiance += beta * albedo * P.sun_color.xyz * tr * cos_l;
             }

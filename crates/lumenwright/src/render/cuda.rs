@@ -110,6 +110,8 @@ impl Backend for CudaBackend {
             .map_err(e)?;
         let d_emitter_grid = stream.clone_htod(&s.emitter_grid).map_err(e)?;
         let emitter_grid_len = s.emitter_grid.len() as u32;
+        let d_sky = stream.clone_htod(&f.sky).map_err(e)?;
+        let sky_len = f.sky.len() as u32;
         let mut d_accum = stream.alloc_zeros::<f32>((w * h * 4) as usize).map_err(e)?;
         let (grid_len, models_len, quads_len, atlas_len, emitters_len) = (
             s.grid.len() as u32,
@@ -146,6 +148,8 @@ impl Backend for CudaBackend {
             b.arg(&emitters_len);
             b.arg(&d_emitter_grid);
             b.arg(&emitter_grid_len);
+            b.arg(&d_sky);
+            b.arg(&sky_len);
             b.arg(&mut d_accum);
             b.arg(&done);
             b.arg(&n);

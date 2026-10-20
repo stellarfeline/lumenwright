@@ -154,7 +154,7 @@ pub const EMITTER_SAMPLING_ALL: u32 = 3;
 /// offset x, offset y, offset z, 0]` (offsets in cells, `i32` bit cast).
 pub const EMITTER_GRID_HEADER: u32 = 8;
 
-/// Per-frame parameters (uniform buffer), 22 × vec4.
+/// Per-frame parameters (uniform buffer), 25 × vec4.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 pub struct Params {
@@ -189,7 +189,7 @@ pub struct Params {
     /// Water absorption coefficients per block (Beer-Lambert); w = water IOR.
     pub water_color: [f32; 4],
     /// x = emitter intensity (Chunky's, see [`GpuQuad::emittance`]), y = ray epsilon,
-    /// z = sun disk radiance scale, w unused.
+    /// z = the sky cache's resolution (0: no sky), w unused.
     pub misc_f: [f32; 4],
     /// Grid size in bricks (xyz); w = brick count.
     pub grid_dims: [u32; 4],
@@ -208,6 +208,15 @@ pub struct Params {
     /// a surface after its first does not take the surface's emitted light while emitters
     /// are sampled (Chunky's `preventNormalEmitterWithSampling`); z, w unused.
     pub emitter: [u32; 4],
+    /// The sun texture drawn in the sky (see `integrator::sun_texture`): xyz = the
+    /// texture's first axis (Chunky's `Sun.su`); w = the texture's brightness.
+    pub sun_su: [f32; 4],
+    /// xyz = the texture's second axis (Chunky's `Sun.sv`); w = half the texture's
+    /// angular width in radians.
+    pub sun_sv: [f32; 4],
+    /// The sun texture's sprite in the atlas: x, y, width and height in texels; a width
+    /// of 0 when the client jar has none.
+    pub sun_sprite: [f32; 4],
 }
 
 /// Borrowed view of all scene buffers.
@@ -232,6 +241,10 @@ pub struct SceneView<'a> {
     /// neighbours. Cells are cubes of the header's size in grid space, from the grid
     /// origin.
     pub emitter_grid: &'a [u32],
+    /// The sky cache (Chunky's `SkyCache`, see [`crate::integrator::sky_radiance`]):
+    /// `(n + 1)²` HSL triples for the resolution `n` in `misc_f.z`, entry `(i, j)` at
+    /// `(i (n + 1) + j) × 3`, `i` along the azimuth and `j` along the height.
+    pub sky: &'a [f32],
 }
 
 impl SceneView<'_> {
