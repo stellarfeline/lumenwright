@@ -4,8 +4,9 @@
 # on their "no GPU adapter" branch; the test job prints that skip count in its log
 # instead of letting it pass unseen. GPU behaviour is verified on a developer machine.
 #
-# Toolchain: the repository carries no rust-toolchain.toml and no rust-version, so the
-# version the local gate runs used (1.97.1) is pinned here.
+# Toolchain: the repository carries no rust-toolchain.toml; each crate's rust-version is the
+# floor it builds on, not the version tested, so the version the local gate runs used
+# (1.97.1) is pinned here.
 name: ci
 
 on:

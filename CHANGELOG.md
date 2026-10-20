@@ -33,6 +33,8 @@ All notable changes to Lumenwright are recorded here. The format follows
 - `Tonemap::Filmic` is evaluated as Chunky's `processPixel` evaluates it (the parameter
   products in float, the rest in double) through the one `HableCurve`.
 - The HQ timing stage `sky cache` is `sky`.
+- `lumenwright-kernel` declares `rust-version` 1.88, the first release it builds on (its `if let`
+  chains); 0.1.0 declared 1.85, on which it does not compile.
 
 ## [0.1.0] - 2026-10-20
 
