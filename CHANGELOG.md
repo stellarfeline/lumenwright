@@ -4,6 +4,36 @@ All notable changes to Lumenwright are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- HQ mode draws the game's own sky (`HqSkyModel::Game`, `--sky game`), lit as the 1.21.11
+  client lights the tick, by the method Delvewright's engine lights its Chunky scenes with
+  (`docs/research/game-sky.md`): the sun casts no light; the sky casts the colour the
+  client's lightmap gives a cell open to it, from the jar's `visual/sky_light_factor` and
+  `visual/sky_light_color` (now in `EnvironmentState`), with the directions of the client's
+  sky; the lens sees the client's sky as quick mode draws it, its disc, fog, sunrise glow,
+  sun, moon and stars. The host draws the sky into two equirectangular maps that every
+  backend reads (`Params::sky_map`; `integrator::sky_lens`, `sky_light`). A jar without
+  environment attributes is refused under it.
+- `--tonemap filmic-mid-grey` (`Tonemap::FilmicMidGrey`, `post::game_tone_curve`): Chunky's
+  Hable curve read 1.463761 times brighter, so linear 0.18 shows at 0.18^(1/2.2) as the
+  game's transfer shows it.
+
+### Changed
+
+- HQ mode's default sky is the game's, with the `filmic-mid-grey` tone curve; Chunky's
+  Preetham sky and sun are `--sky chunky` (`HqSkyModel::Chunky`), which keeps the `gamma` tone
+  curve by default. `--sun-intensity` and `--sky-intensity` scale Chunky's sky only and are
+  refused under the game's. `Sky::Vanilla` carries `hq: HqSkyModel` in place of
+  `sun_intensity` and `sky_intensity`; `HqOptions::default().tonemap` is `FilmicMidGrey`.
+- `Params` is 26 vec4s (416 bytes): `sky_map` gives the sizes of the sky's maps. A sun of
+  colour 0 draws no next-event sample.
+- `Tonemap::Filmic` is evaluated as Chunky's `processPixel` evaluates it (the parameter
+  products in float, the rest in double) through the one `HableCurve`.
+- The HQ timing stage `sky cache` is `sky`.
+
 ## [0.1.0] - 2026-10-20
 
 The first release. The `lumenwright` library and its kernel `lumenwright-kernel` are published on

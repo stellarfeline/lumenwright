@@ -6,9 +6,12 @@ command (crate `lumenwright-cli`) writes a PNG, and the `lumenwright` library re
 pixels to your program (see [Library](#library)). It has two looks:
 
 * **quick**: rasterized to look like the vanilla Java client, with no ray tracing.
-* **hq**: a path tracer ported from Chunky's, with its Preetham sky, its sun and soft
-  shadows, its emitters, its display gamma, and refractive water (what was ported and how
-  the result compares with Chunky: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
+* **hq**: a path tracer ported from Chunky's, with its emitters, its display gamma and
+  refractive water. By default it lights the frame as the game lights the hour: the
+  client's own sky in view, the light of the client's lightmap, no sunlight
+  ([docs/research/game-sky.md](docs/research/game-sky.md)). Chunky's Preetham sky, with its
+  sun and soft shadows, is `--sky chunky` (what was ported and how the result compares with
+  Chunky: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
 
 Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vulkan** and
 **DX12** (through wgpu), and **CUDA** (the Rust path-tracing kernel compiled to PTX).
@@ -31,17 +34,17 @@ joined by rope bridges and ladders and lit by lanterns. The top rows look at the
 from the east-north-east; the bottom rows stand above the Long Bridge, looking south. All
 eight are 1280×720, rendered from a save written by the map's own server.
 
-HQ mode runs with its defaults, which are Chunky's: the Preetham sky, a sun of intensity 1.25,
-lanterns and campfires as emitters at intensity 13 with one emitter sampled per diffuse bounce,
-and the display gamma 2.2. By day the sun and the sky light the camp, and each lantern lights
-the post it stands on.
+HQ mode runs with its defaults: the game's sky at the hour, lit as the 1.21.11 client lights
+it (the colour its lightmap gives a cell open to the sky, from the sky's directions, and no
+sunlight, so nothing casts a sun shadow), the client's sky, sun, moon and stars in view,
+lanterns and campfires as Chunky's emitters at intensity 13 with one emitter sampled per
+diffuse bounce, and the tone curve that shows mid-grey as the game does.
 
 At `--time 12800` the sun stands just below the horizon. Quick mode draws the client's sunset:
-the sun disc, the orange glow and the light the game stored in the save. HQ mode draws
-Chunky's sunset: the Preetham sky at its full sunset light, with the client's sun texture drawn
-at the sun's place. A sun below the horizon casts no light, so the camp is lit by that sky and
-by its lanterns, which glow and light little more than the block they stand on (see
-[docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
+the sun, the orange glow and the light the game stored in the save. HQ mode draws the same sky
+and lights the camp with the evening's dim blue light; its lanterns are Chunky's emitters,
+which light little more than the block they stand on, where the game's block light reaches
+14 blocks (see [docs/research/game-sky.md](docs/research/game-sky.md)).
 
 Each image's command, run from the repository root with the save from
 [Get the camp](#get-the-camp) in `the-treehouse-camp`. The HQ commands need the CUDA build
@@ -179,9 +182,13 @@ target/release/lumenwright info the-treehouse-camp --block-entities=0,0,112,112
 # Vanilla-look render from the save's spawn, at the save's own time of day
 target/release/lumenwright render -w the-treehouse-camp -o quick.png
 
-# Chunky-look render from an explicit camera
+# Path-traced render from an explicit camera, under the game's sky at the hour
 target/release/lumenwright render -w the-treehouse-camp --mode hq --spp 256 \
-    --camera 140,118,14 --look-at 56,82,58 --sun-altitude 35 --sun-azimuth 120 -o hq.png
+    --camera 140,118,14 --look-at 56,82,58 --time 12800 -o hq.png
+
+# The same under Chunky's sky, with a sun that lights and shadows
+target/release/lumenwright render -w the-treehouse-camp --mode hq --spp 256 --sky chunky \
+    --camera 140,118,14 --look-at 56,82,58 --sun-altitude 35 --sun-azimuth 120 -o hq-chunky.png
 
 # Generated worlds, no download: a small showcase (terrain, cottage, lake, mobs)
 target/release/lumenwright demo-world showcase
@@ -242,8 +249,9 @@ checks on it without any network.
 | `--time` | world time | ticks: 0 = sunrise, 6000 = noon |
 | `--sun-altitude`, `--sun-azimuth` | from time, 135 | degrees (azimuth 0 = north, 90 = east); an altitude overrides `--time` for the sun |
 | `--spp`, `--max-bounces`, `--seed` | 64, 4, 0 | HQ sampling; the same seed gives the same image |
-| `--exposure`, `--tonemap gamma\|aces\|filmic` | 1.0, gamma | HQ post-processing, Chunky's filters (each ends in the display gamma 2.2) |
-| `--sun-intensity`, `--sky-intensity` | 1.25, 1 | HQ lighting: Chunky's sun intensity (irradiance intensity^2.2) and sky light |
+| `--sky game\|chunky` | game | HQ: the game's sky lit as the client lights the hour, or Chunky's Preetham sky and sun |
+| `--exposure`, `--tonemap gamma\|aces\|filmic\|filmic-mid-grey` | 1.0, by sky | HQ post-processing, Chunky's filters (each ends in the display gamma 2.2); `filmic-mid-grey` is Hable read brighter so linear 0.18 shows as the game shows it, the default under `--sky game`; `gamma` is the default under `--sky chunky` |
+| `--sun-intensity`, `--sky-intensity` | 1.25, 1 | HQ, `--sky chunky` only: Chunky's sun intensity (irradiance intensity^2.2) and sky light; refused under `--sky game` |
 | `--emitter-intensity` | 13 | HQ: Chunky's emitter intensity; an emitting surface emits its texel colour squared times its block's emittance times this (0 turns emitters off) |
 | `--emitter-sampling none\|one\|one-block\|all`, `--prevent-normal-emitter` | one | HQ: Chunky's emitter sampling strategies, and its "prevent normal emitter with sampling" |
 | `--ssaa N` | 1 | quick-mode supersampling |
@@ -348,8 +356,8 @@ reads its other atlases. The quick sky is the client's `SkyRenderer`: the fogged
 sunrise and sunset glow, the sun, this night's moon phase and the 1500 stars, with every
 colour and angle read from the jar's environment attributes and day timeline (dimension,
 biome at the camera, time of day). The world fog adds the client's environmental fog to the
-render-distance fog. HQ mode keeps its own sky model; both modes place the sun at the
-timeline's `sun_angle`.
+render-distance fog. HQ mode's default sky is this sky, drawn into a map its path tracer
+reads; both modes place the sun at the timeline's `sun_angle`.
 
 Mob geometry lives in Java code in vanilla, not in assets, so it ships as data in
 [`crates/lumenwright/assets/entity_models.json`](crates/lumenwright/assets/entity_models.json):
@@ -554,10 +562,12 @@ See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
 * Not yet ported from Chunky: biome blending, candle and campfire flame particles, its
   fancier translucency, water shading, metals and its Nishita sky
   ([docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
-* Chunky has no time of day. HQ mode keeps Chunky's sky while any part of the sun's disc is
-  above the horizon; below it, the sky falls to a night's 3% at the end of civil twilight
-  (the sun 6° below the horizon), and the sun gives no light from below the horizon. Those
-  two rules are Lumenwright's own.
+* Chunky has no time of day. Under `--sky chunky` HQ mode keeps Chunky's sky while any part
+  of the sun's disc is above the horizon; below it, the sky falls to a night's 3% at the end
+  of civil twilight (the sun 6° below the horizon), and the sun gives no light from below the
+  horizon. Those two rules are Lumenwright's own. The default game sky has none.
+* The game's sky draws no clouds and no weather, and HQ mode's lanterns are Chunky's emitters,
+  not the game's block light ([docs/research/game-sky.md](docs/research/game-sky.md)).
 
 ## Releasing
 
