@@ -475,14 +475,14 @@ cargo test --workspace --release
 
 | scene | mode / backend | time |
 |---|---|---|
-| The Treehouse Camp, whole-camp view, 625 chunks loaded, 1920×1080 | quick / metal | 0.37 s end to end (80 ms raster, 982k triangles) |
-| same | quick / cpu | 0.35 s end to end (130 ms raster) |
-| same, 1280×720, 32 spp | hq / metal | 6.0 s end to end (5.8 s path tracing) |
-| same, 1280×720, 16 spp | hq / cpu | 6.7 s end to end (6.5 s path tracing) |
+| The Treehouse Camp, whole-camp view at `--time 4000`, 625 chunks loaded, 1920×1080 | quick / metal | 0.28 s end to end (48 ms raster, 982k triangles) |
+| same | quick / cpu | 0.36 s end to end (139 ms raster) |
+| same, 1280×720, 32 spp, 4 bounces | hq / metal | 4.1 s end to end (3.9 s path tracing) |
+| same, 1280×720, 16 spp, 4 bounces | hq / cpu | 6.1 s end to end (5.9 s path tracing) |
 | showcase (`demo-world`, its default camera), 1280×720, 256 spp | hq / metal | 14.7 s |
 
 Parity on the whole-camp view at `--time 4000`, CPU vs Metal: in quick mode at 1920×1080, 0.22%
-of pixels differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.38% do.
+of pixels differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.001% do (12 pixels).
 
 ## HQ mode and Chunky on one frame
 
