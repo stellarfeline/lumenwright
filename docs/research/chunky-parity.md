@@ -74,6 +74,37 @@ al. 2004 on display luma, Gaussian window σ 1.5. The script is a single file (n
 The images: the side-by-side and the crops are kept beside the benchmark, not in the
 repository.
 
+## Speed
+
+The same frame, 250 spp, four bounces, after the port (`a3d7a74`; the code is unchanged
+since). Chunky and Lumenwright on Metal ran alternately on the M2 Pro (10 CPU cores, 16 GPU
+cores, JDK 17 for Chunky); Lumenwright on CUDA ran on the RTX 4070 Ti SUPER (WSL2). Two timers
+each: the renderer's own (Chunky's `renderTime`; Lumenwright's `render` stage) and the whole
+command (Chunky's includes starting the JVM and building its octree; Lumenwright's includes
+reading the world and the jar). The CUDA command's wall time is read from the remote
+machine's monotonic clock.
+
+| renderer | runs, own timer (s) | median | runs, whole command (s) | median |
+|---|---|---|---|---|
+| Chunky 2.5.0-SNAPSHOT.474, CPU | 126.70, 124.73, 121.77 | 124.73 | 131.79, 129.61, 125.89 | 129.61 |
+| Lumenwright, Metal | 32.96, 33.01, 32.62 | 32.96 | 33.26, 33.33, 33.00 | 33.26 |
+| Lumenwright, CUDA | 6.03, 6.15, 6.18 | 6.15 | 6.62, 6.72, 6.75 | 6.72 |
+
+* [measured] Lumenwright on Metal is 3.8 times as fast as Chunky on the same machine by the
+  renderers' own timers (124.73 / 32.96) and 3.9 times by the whole command (129.61 /
+  33.26). An earlier measurement of the same frame before the port, by the same method, had
+  Metal at 48.36 s and Chunky at 115.4 s.
+* [measured] A third Chunky run (136.02 s own, 140.95 s whole; the Metal run after it 32.55
+  s, 32.87 s) overlapped a short build of this branch and is left out of the medians; a
+  fourth pair replaced it. With it the Chunky median is 125.7 s and the ratio 3.8.
+* [measured] One-minute load average on the M2 Pro before each counted Chunky run: 1.92,
+  23.18 (the first Chunky run's threads, decaying), 4.04; no build or render of this work ran on
+  it during the counted pairs. The remote machine was idle (load 0.37, GPU 0%) around the
+  CUDA runs.
+* The frames are the measured ones: each Chunky run against the converged reference is
+  display mean 1.99/255, and each Metal run is the same bytes as the measured `a3d7a74`
+  frame.
+
 ## Not yet at parity
 
 * Biome blending: Chunky averages biome colours over a 5 × 5 area; Lumenwright takes each

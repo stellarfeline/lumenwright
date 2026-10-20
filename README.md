@@ -18,9 +18,10 @@ Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vul
 | ![quick](docs/renders/showcase-quick.png) | ![hq](docs/renders/showcase-hq.png) |
 | ![quick](docs/renders/island-quick.png) | ![hq](docs/renders/island-hq.png) |
 
-The images in `docs/renders/` are renders of original scenes drawn with Minecraft's textures,
-and are shared under [Mojang's usage guidelines](https://www.minecraft.net/en-us/usage-guidelines)
-for screenshots.
+The island's HQ render was drawn before HQ mode took Chunky's sky, sun and emitters; the
+showcase pair is current. The images in `docs/renders/` are renders of original scenes drawn
+with Minecraft's textures, and are shared under
+[Mojang's usage guidelines](https://www.minecraft.net/en-us/usage-guidelines) for screenshots.
 
 The requirements, design decisions and what is in or out of scope are in
 [docs/SCOPE.md](docs/SCOPE.md).
@@ -378,12 +379,25 @@ cargo test --workspace --release
 |---|---|---|
 | island save, 33×33 chunks, 1920×1080 | quick / metal | 0.33 s end to end (24 ms raster, 497k triangles) |
 | same | quick / cpu | 0.29 s end to end (65 ms raster) |
-| same, 1280×720, 256 spp | hq / metal | 21 s |
-| same, 1280×720, 16 spp | hq / cpu | 7.7 s (about 6× slower than Metal) |
-| showcase, 1280×720, 256 spp | hq / metal | 11.8 s |
+| same, 1280×720, 256 spp | hq / metal | 21 s (before HQ mode was ported from Chunky) |
+| same, 1280×720, 16 spp | hq / cpu | 7.7 s (about 6× slower than Metal; before the port) |
+| showcase (`demo-world`, its default camera), 1280×720, 256 spp | hq / metal | 14.7 s |
 
 Parity on the same view: quick mode, CPU vs Metal, differs in 0.075% of pixels; HQ mode at
 32 spp differs in 0.03%.
+
+## HQ mode and Chunky on one frame
+
+A treehouse camp at 1280×720, 250 samples per pixel, four bounces, with Chunky's default sky,
+sun, emitters and tone map (the full method: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
+Against Chunky's frame converged at 4000 samples, Lumenwright's 250-sample frame differs by a
+mean of 1.70/255 (SSIM 0.959), Chunky's own 250-sample frame by 1.99/255 (SSIM 0.958).
+
+| renderer | machine | path tracing, median of 3 | whole command, median of 3 | vs Chunky |
+|---|---|---|---|---|
+| Chunky 2.5.0-SNAPSHOT.474 (CPU) | M2 Pro | 124.73 s | 129.61 s | 1× |
+| Lumenwright, Metal | M2 Pro | 32.96 s | 33.26 s | 3.8× / 3.9× |
+| Lumenwright, CUDA | RTX 4070 Ti SUPER | 6.15 s | 6.72 s | different machine |
 
 ## Measured on an RTX 4070 Ti SUPER (driver 616.92, WSL2)
 
