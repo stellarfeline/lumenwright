@@ -17,7 +17,7 @@ Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vul
 
 ![The Treehouse Camp by day, path traced](docs/renders/treehouse-camp-day-hq.png)
 
-*hq · `--time 4000` · 4096 spp · 8 bounces · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 130 s end to end*
+*hq · `--time 4000` · 4096 spp · 8 bounces · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 90 s end to end*
 
 | | quick (vanilla look) | hq (path traced) |
 |---|---|---|
@@ -31,17 +31,18 @@ joined by rope bridges and ladders and lit by lanterns. The top rows look at the
 from the east-north-east; the bottom rows stand above the Long Bridge, looking south. All
 eight are 1280×720, rendered from a save written by the map's own server.
 
-At `--time 12800` the sun stands on the horizon. Quick mode draws the client's sunset: the sun
-disc, the orange glow and the light the game stored in the save. HQ mode draws its own sky,
-which has no sunset glow, and lights the camp with its lanterns: each diffuse bounce samples
-one emitter, so the valley floor, the bridges and the trunks are lit by the lanterns around
-them.
+HQ mode runs with its defaults, which are Chunky's: the Preetham sky, a sun of intensity 1.25,
+lanterns and campfires as emitters at intensity 13 with one emitter sampled per diffuse bounce,
+and the display gamma 2.2. By day the sun and the sky light the camp, and each lantern lights
+the post it stands on.
 
-By day the lantern light adds to the sunlight; in the game, block light next to full sky light
-adds nothing visible. HQ follows each emitter's light by the inverse square of distance, and
-the camp's lanterns make 2169 light-casting quads, so the sunlit floor around each tree glows yellow, and in the Long Bridge
-frame, where lanterns stand on every post, the scene is about 70% brighter than the same
-frame with `--emitter-intensity 0` (mean 8-bit luma 97 against 56).
+At `--time 12800` the sun stands on the horizon. Quick mode draws the client's sunset: the sun
+disc, the orange glow and the light the game stored in the save. HQ mode draws the Preetham
+sky's sunset, a yellow glow around the sun's place on the horizon, dimmed by Lumenwright's own
+fade as the sun goes down (Chunky's sky keeps its full sunset brightness; see
+[docs/research/chunky-parity.md](docs/research/chunky-parity.md)). The sun at the horizon
+casts no light, so the camp is lit by that dim sky and by its lanterns, which glow and light
+little more than the block they stand on.
 
 Each image's command, run from the repository root with the save from
 [Get the camp](#get-the-camp) in `the-treehouse-camp`. The HQ commands need the CUDA build
@@ -73,12 +74,11 @@ target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look
 | image | Apple M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end / in the kernel) |
 |---|---|---|
 | camp, quick, day / dusk | 0.27 s / 0.27 s | |
-| camp, hq, day (4096 spp) / dusk (16384 spp) | | 130 s / 497 s (125 s / 483 s) |
-| bridge, quick, day / dusk | 0.23 s / 0.22 s | |
-| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 163 s / 636 s (158 s / 619 s) |
+| camp, hq, day (4096 spp) / dusk (16384 spp) | | 90 s / 341 s (89 s / 340 s) |
+| bridge, quick, day / dusk | 0.23 s / 0.23 s | |
+| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 120 s / 464 s (119 s / 462 s) |
 
-The quick times are the second of two runs; the first run after a build took 1.6 s, reading the
-save and the jar from a cold disk cache. The 4070 Ti SUPER runs under WSL2 on a 16-thread PC.
+The quick times are the second of two runs. The 4070 Ti SUPER runs under WSL2 on a 16-thread PC.
 Each HQ image rendered twice with the same command on the CUDA backend gave byte-identical
 PNGs, as each quick image did on Metal.
 
