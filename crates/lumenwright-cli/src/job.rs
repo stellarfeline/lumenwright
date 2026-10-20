@@ -82,9 +82,15 @@ pub struct RenderArgs {
     /// HQ: sky radiance scale.
     #[arg(long, default_value_t = 1.0)]
     pub sky_intensity: f32,
-    /// HQ: emissive block strength.
-    #[arg(long, default_value_t = 6.0)]
+    /// HQ: scale of the light emissive blocks cast (1 = calibrated to the game's block light).
+    #[arg(long, default_value_t = 1.0)]
     pub emitter_intensity: f32,
+    /// HQ: brightness of emissive surfaces as the camera sees them.
+    #[arg(long, default_value_t = 1.5)]
+    pub emitter_glow: f32,
+    /// HQ: no next-event estimation towards emissive blocks (a noisier reference).
+    #[arg(long)]
+    pub no_light_sampling: bool,
     #[arg(long, default_value_t = 1.0)]
     pub exposure: f32,
     #[arg(long, value_enum, default_value_t = TonemapArg::Aces)]
@@ -249,6 +255,8 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             max_bounces: a.max_bounces,
             seed: a.seed,
             emitter_intensity: a.emitter_intensity,
+            emitter_glow: a.emitter_glow,
+            light_sampling: !a.no_light_sampling,
             exposure: a.exposure,
             tonemap: a.tonemap.into(),
         },

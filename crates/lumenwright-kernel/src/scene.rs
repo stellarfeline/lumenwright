@@ -52,7 +52,8 @@ pub struct GpuQuad {
     pub ev: [f32; 4],
     /// uv0.xy, uvs.xy
     pub uv: [f32; 4],
-    /// uvt.xy, unused, unused
+    /// uvt.xy, z = emitter table offset + 1 (bit cast; 0 = not sampled as a light),
+    /// w = light radiance scale
     pub uvt: [f32; 4],
 }
 
@@ -67,10 +68,23 @@ impl GpuQuad {
     pub fn tint(&self) -> u32 {
         self.eu[3].to_bits()
     }
-    /// Emission strength: the block's light level divided by 15.
+    /// Visible emission: the radiance a camera or specular ray sees on the quad is
+    /// its texel colour times this times [`Params::misc_f`]`.x`.
     #[inline(always)]
     pub fn emission(&self) -> f32 {
         self.ev[3]
+    }
+    /// The quad's entry in [`SceneView::emitters`], when light sampling can pick it.
+    #[inline(always)]
+    pub fn emitter(&self) -> Option<u32> {
+        let e = self.uvt[2].to_bits();
+        if e == 0 { None } else { Some(e - 1) }
+    }
+    /// Emitted radiance scale: the radiance a diffuse surface receives from the quad
+    /// is its texel colour times this times [`Params::misc_f`]`.w`; 0 casts no light.
+    #[inline(always)]
+    pub fn light_scale(&self) -> f32 {
+        self.uvt[3]
     }
     /// The corner `p0`.
     #[inline(always)]
@@ -109,6 +123,31 @@ pub struct GpuModel {
     pub _pad: u32,
 }
 
+/// One instance of a light-casting quad, 32 bytes: the quad at `quad`, moved by
+/// `offset` into grid space (a block model's voxel corner; zero for a quad
+/// already in grid space). Lights are drawn by binary search on `cdf`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
+pub struct GpuLight {
+    /// xyz = offset into grid space, w = quad index (bit cast)
+    pub pos: [f32; 4],
+    /// x = cumulative pick probability up to and including this light; y, z, w unused
+    pub cdf: [f32; 4],
+}
+
+impl GpuLight {
+    /// The index of the light's quad in [`SceneView::quads`].
+    #[inline(always)]
+    pub fn quad(&self) -> u32 {
+        self.pos[3].to_bits()
+    }
+    /// The offset that moves the quad into grid space.
+    #[inline(always)]
+    pub fn offset(&self) -> V3 {
+        V3::from4(self.pos)
+    }
+}
+
 /// Per-frame parameters (uniform buffer), 16 × vec4.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
@@ -131,7 +170,8 @@ pub struct Params {
     pub sky_horizon: [f32; 4],
     /// Water absorption coefficients per block (Beer-Lambert); w = water IOR.
     pub water_color: [f32; 4],
-    /// x = emitter intensity, y = ray epsilon, z = sun disk radiance scale, w = unused.
+    /// x = visible emitter radiance scale, y = ray epsilon, z = sun disk radiance scale,
+    /// w = emitted light scale (see [`GpuQuad::emission`] and [`GpuQuad::light_scale`]).
     pub misc_f: [f32; 4],
     /// Grid size in bricks (xyz); w = brick count.
     pub grid_dims: [u32; 4],
@@ -141,7 +181,7 @@ pub struct Params {
     pub off2: [u32; 4],
     /// x = width, y = height, z = sample index, w = max diffuse bounces.
     pub frame: [u32; 4],
-    /// x = seed, y = samples per dispatch, z = model count, w = unused.
+    /// x = seed, y = samples per dispatch, z = model count, w = light count.
     pub misc_u: [u32; 4],
     /// x = index of the first see-through quad (text displays drawn over everything),
     /// y = their count; they are also in the overlay cells. z, w = unused.
@@ -161,6 +201,15 @@ pub struct SceneView<'a> {
     pub quads: &'a [GpuQuad],
     /// The texture atlas, RGBA8 sRGB, row-major, `off2.y` wide and `off2.z` high.
     pub atlas: &'a [u32],
+    /// The light list, `misc_u.w` entries (a buffer is never empty: it holds one
+    /// unused entry when there are no lights).
+    pub lights: &'a [GpuLight],
+    /// The emitter table: per light-casting quad, at the offset its
+    /// [`GpuQuad::emitter`] gives, the words `[pick, ns, nt, 0]` and then `ns × nt`
+    /// cumulative texel probabilities (f32 bits, row by row along `s`). `pick` (f32
+    /// bits) is the probability that light sampling picks one given instance of the
+    /// quad; a texel is picked by its share of the quad's emitted power.
+    pub emitters: &'a [u32],
 }
 
 impl SceneView<'_> {
