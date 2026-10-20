@@ -48,12 +48,11 @@ pub struct GpuQuad {
     pub p0: [f32; 4],
     /// xyz = edge along s, w = tint rgba8 (bit cast, sRGB)
     pub eu: [f32; 4],
-    /// xyz = edge along t, w = emission strength (block light / 15)
+    /// xyz = edge along t, w = emittance (see [`GpuQuad::emittance`])
     pub ev: [f32; 4],
     /// uv0.xy, uvs.xy
     pub uv: [f32; 4],
-    /// uvt.xy, z = emitter table offset + 1 (bit cast; 0 = not sampled as a light),
-    /// w = light radiance scale
+    /// uvt.xy; z, w unused (written as 0)
     pub uvt: [f32; 4],
 }
 
@@ -68,23 +67,12 @@ impl GpuQuad {
     pub fn tint(&self) -> u32 {
         self.eu[3].to_bits()
     }
-    /// Visible emission: the radiance a camera or specular ray sees on the quad is
-    /// its texel colour times this times [`Params::misc_f`]`.x`.
+    /// Chunky's material emittance of the quad's block (0 for a surface that emits
+    /// nothing): the quad emits its texel colour squared times this times the emitter
+    /// intensity [`Params::misc_f`]`.x` (see [`crate::integrator`]).
     #[inline(always)]
-    pub fn emission(&self) -> f32 {
+    pub fn emittance(&self) -> f32 {
         self.ev[3]
-    }
-    /// The quad's entry in [`SceneView::emitters`], when light sampling can pick it.
-    #[inline(always)]
-    pub fn emitter(&self) -> Option<u32> {
-        let e = self.uvt[2].to_bits();
-        if e == 0 { None } else { Some(e - 1) }
-    }
-    /// Emitted radiance scale: the radiance a diffuse surface receives from the quad
-    /// is its texel colour times this times [`Params::misc_f`]`.w`; 0 casts no light.
-    #[inline(always)]
-    pub fn light_scale(&self) -> f32 {
-        self.uvt[3]
     }
     /// The corner `p0`.
     #[inline(always)]
@@ -123,32 +111,50 @@ pub struct GpuModel {
     pub _pad: u32,
 }
 
-/// One instance of a light-casting quad, 32 bytes: the quad at `quad`, moved by
-/// `offset` into grid space (a block model's voxel corner; zero for a quad
-/// already in grid space). Lights are drawn by binary search on `cdf`.
+/// One emitter, 32 bytes: a block whose material emits (Chunky's
+/// `Grid.EmitterPosition`). Its faces are the quads `first_quad .. first_quad + faces`
+/// of its block model, moved by `offset` (the block's voxel corner) into grid space.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
-pub struct GpuLight {
-    /// xyz = offset into grid space, w = quad index (bit cast)
+pub struct GpuEmitter {
+    /// xyz = offset into grid space, w = index of the first quad (bit cast)
     pub pos: [f32; 4],
-    /// x = cumulative pick probability up to and including this light; y, z, w unused
-    pub cdf: [f32; 4],
+    /// x = number of faces (quads); y, z, w unused
+    pub faces: [u32; 4],
 }
 
-impl GpuLight {
-    /// The index of the light's quad in [`SceneView::quads`].
+impl GpuEmitter {
+    /// The index of the emitter's first face in [`SceneView::quads`].
     #[inline(always)]
-    pub fn quad(&self) -> u32 {
+    pub fn first_quad(&self) -> u32 {
         self.pos[3].to_bits()
     }
-    /// The offset that moves the quad into grid space.
+    /// The number of faces.
+    #[inline(always)]
+    pub fn face_count(&self) -> u32 {
+        self.faces[0]
+    }
+    /// The offset that moves the faces into grid space.
     #[inline(always)]
     pub fn offset(&self) -> V3 {
         V3::from4(self.pos)
     }
 }
 
-/// Per-frame parameters (uniform buffer), 16 × vec4.
+/// [`Params::emitter`]`.x`: no emitter is sampled; emitters light the scene only where
+/// a path meets them (Chunky's `EmitterSamplingStrategy.NONE`).
+pub const EMITTER_SAMPLING_NONE: u32 = 0;
+/// One face of one emitter near the shading point (`ONE`).
+pub const EMITTER_SAMPLING_ONE: u32 = 1;
+/// Every face of one emitter near the shading point (`ONE_BLOCK`).
+pub const EMITTER_SAMPLING_ONE_BLOCK: u32 = 2;
+/// Every face of every emitter near the shading point (`ALL`).
+pub const EMITTER_SAMPLING_ALL: u32 = 3;
+/// Words before the cells in the emitter grid: `[cell size, size x, size y, size z,
+/// offset x, offset y, offset z, 0]` (offsets in cells, `i32` bit cast).
+pub const EMITTER_GRID_HEADER: u32 = 8;
+
+/// Per-frame parameters (uniform buffer), 22 × vec4.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 pub struct Params {
@@ -164,14 +170,26 @@ pub struct Params {
     pub sun_dir: [f32; 4],
     /// Linear sun irradiance colour; w = angular radius (rad).
     pub sun_color: [f32; 4],
-    /// Linear sky colour at the zenith; w = sky intensity.
+    /// The Preetham sky (see [`crate::integrator::sky_radiance`]): xyz = the unit
+    /// vector towards the sun it is lit by; w = the radiance scale.
+    pub sky_sun: [f32; 4],
+    /// xyz = the zenith values of the chromaticities x, y and the luminance Y, each times
+    /// its normalisation; w = the horizon offset added to a direction's height.
     pub sky_zenith: [f32; 4],
-    /// Linear sky colour at the horizon; w = sun-glow strength.
-    pub sky_horizon: [f32; 4],
+    /// The Perez coefficient A for x, y and Y; w unused.
+    pub perez_a: [f32; 4],
+    /// The Perez coefficient B for x, y and Y; w unused.
+    pub perez_b: [f32; 4],
+    /// The Perez coefficient C for x, y and Y; w unused.
+    pub perez_c: [f32; 4],
+    /// The Perez coefficient D for x, y and Y; w unused.
+    pub perez_d: [f32; 4],
+    /// The Perez coefficient E for x, y and Y; w unused.
+    pub perez_e: [f32; 4],
     /// Water absorption coefficients per block (Beer-Lambert); w = water IOR.
     pub water_color: [f32; 4],
-    /// x = visible emitter radiance scale, y = ray epsilon, z = sun disk radiance scale,
-    /// w = emitted light scale (see [`GpuQuad::emission`] and [`GpuQuad::light_scale`]).
+    /// x = emitter intensity (Chunky's, see [`GpuQuad::emittance`]), y = ray epsilon,
+    /// z = sun disk radiance scale, w unused.
     pub misc_f: [f32; 4],
     /// Grid size in bricks (xyz); w = brick count.
     pub grid_dims: [u32; 4],
@@ -181,11 +199,15 @@ pub struct Params {
     pub off2: [u32; 4],
     /// x = width, y = height, z = sample index, w = max diffuse bounces.
     pub frame: [u32; 4],
-    /// x = seed, y = samples per dispatch, z = model count, w = light count.
+    /// x = seed, y = samples per dispatch, z = model count, w = emitter count.
     pub misc_u: [u32; 4],
     /// x = index of the first see-through quad (text displays drawn over everything),
     /// y = their count; they are also in the overlay cells. z, w = unused.
     pub see_through: [u32; 4],
+    /// x = emitter sampling strategy (`EMITTER_SAMPLING_*`), y = 1 when a path met by
+    /// a surface after its first does not take the surface's emitted light while emitters
+    /// are sampled (Chunky's `preventNormalEmitterWithSampling`); z, w unused.
+    pub emitter: [u32; 4],
 }
 
 /// Borrowed view of all scene buffers.
@@ -201,15 +223,15 @@ pub struct SceneView<'a> {
     pub quads: &'a [GpuQuad],
     /// The texture atlas, RGBA8 sRGB, row-major, `off2.y` wide and `off2.z` high.
     pub atlas: &'a [u32],
-    /// The light list, `misc_u.w` entries (a buffer is never empty: it holds one
-    /// unused entry when there are no lights).
-    pub lights: &'a [GpuLight],
-    /// The emitter table: per light-casting quad, at the offset its
-    /// [`GpuQuad::emitter`] gives, the words `[pick, ns, nt, 0]` and then `ns × nt`
-    /// cumulative texel probabilities (f32 bits, row by row along `s`). `pick` (f32
-    /// bits) is the probability that light sampling picks one given instance of the
-    /// quad; a texel is picked by its share of the quad's emitted power.
-    pub emitters: &'a [u32],
+    /// The emitters, `misc_u.w` entries (a buffer is never empty: it holds one unused
+    /// entry when there are none).
+    pub emitters: &'a [GpuEmitter],
+    /// The emitter grid (Chunky's `Grid`): [`EMITTER_GRID_HEADER`] words, then per cell
+    /// (x fastest, then z, then y) the pair `(start, count)` into the list after the
+    /// cells, which holds emitter indices. A cell lists every emitter in it and in its 26
+    /// neighbours. Cells are cubes of the header's size in grid space, from the grid
+    /// origin.
+    pub emitter_grid: &'a [u32],
 }
 
 impl SceneView<'_> {

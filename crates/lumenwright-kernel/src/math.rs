@@ -79,6 +79,32 @@ pub fn exp(x: f32) -> f32 {
     }
 }
 
+/// `acos x` for `x` in `[-1, 1]` in `f32` arithmetic alone (no `f64`, no call), so the
+/// CPU and CUDA backends compute it alike: Abramowitz and Stegun 4.4.46,
+/// `acos x = √(1−x) · (a₀ + a₁x + … + a₇x⁷)` on `[0, 1]` (approximation error at most
+/// `2e-8`), and `π − acos(−x)` below 0. A test holds it to [`MAX_ACOS_ERROR`] against `f64`.
+#[inline(always)]
+pub fn acos(x: f32) -> f32 {
+    let a = clamp(abs(x), 0.0, 1.0);
+    // The published a₀ = 1.5707963050, kept as the formula gives it (one f32 ulp below π/2).
+    #[allow(clippy::approx_constant)]
+    let p = 1.570_796_3
+        + a * (-0.214_598_8
+            + a * (0.088_978_99
+                + a * (-0.050_174_3
+                    + a * (0.030_891_88
+                        + a * (-0.017_088_126 + a * (0.006_670_09 + a * -0.001_262_491_1))))));
+    let r = sqrt(1.0 - a) * p;
+    if x < 0.0 {
+        core::f32::consts::PI - r
+    } else {
+        r
+    }
+}
+
+/// The bound [`acos`] is tested to, in absolute error against `f64` on `[-1, 1]`.
+pub const MAX_ACOS_ERROR: f32 = 1e-6;
+
 /// Absolute value.
 #[inline(always)]
 pub fn abs(x: f32) -> f32 {
@@ -103,11 +129,51 @@ pub fn clamp(x: f32, lo: f32, hi: f32) -> f32 {
     min(max(x, lo), hi)
 }
 
-/// Cheap polynomial sRGB -> linear conversion. The WGSL kernel uses the same
-/// polynomial so all backends agree.
+/// The display gamma: a texel value `c` stands for linear `c^GAMMA`, and a frame's
+/// linear value `v` is shown as `v^(1/GAMMA)`. Ported from Chunky (GPL-3.0),
+/// `Scene.DEFAULT_GAMMA` = 2.2, used by `ColorUtil.toLinearLut` to decode textures and
+/// by `GammaCorrectionFilter` to encode frames (chunky-dev/chunky at 156e2bb).
+pub const GAMMA: f32 = 2.2;
+
+/// The natural logarithm of `x > 0` in `f32` arithmetic alone (no `f64`, no call), so
+/// the CPU and CUDA backends compute it alike. `x = m·2^e` with `m` in `[√½, √2]`;
+/// `ln m = 2 atanh(s)`, `s = (m−1)/(m+1)`, `|s| ≤ 0.1716`, by its series to `s⁹`
+/// (truncation below `4e-9`). A test holds it to [`MAX_LN_ERROR`] against `f64`.
+/// Returns `-∞` for 0 and NaN for negative input; subnormals are not handled.
 #[inline(always)]
-pub fn srgb_to_linear(c: f32) -> f32 {
-    c * (c * (c * 0.305_306_02 + 0.682_171_1) + 0.012_522_878)
+pub fn ln(x: f32) -> f32 {
+    if x <= 0.0 {
+        return if x == 0.0 {
+            f32::NEG_INFINITY
+        } else {
+            f32::NAN
+        };
+    }
+    let bits = x.to_bits();
+    let mut e = ((bits >> 23) & 0xFF) as i32 - 127;
+    let mut m = f32::from_bits((bits & 0x007F_FFFF) | 0x3F80_0000);
+    if m > core::f32::consts::SQRT_2 {
+        m *= 0.5;
+        e += 1;
+    }
+    let s = (m - 1.0) / (m + 1.0);
+    let s2 = s * s;
+    let series =
+        2.0 * s * (1.0 + s2 * (1.0 / 3.0 + s2 * (1.0 / 5.0 + s2 * (1.0 / 7.0 + s2 * (1.0 / 9.0)))));
+    e as f32 * core::f32::consts::LN_2 + series
+}
+
+/// The bound [`ln`] is tested to, in absolute error against `f64` on `[1/255, 1]`.
+pub const MAX_LN_ERROR: f32 = 5e-7;
+
+/// The bound [`gamma_to_linear`] is tested to, in relative error against `f64`, at
+/// every byte value of a texel channel.
+pub const MAX_GAMMA_ERROR: f32 = 1e-6;
+
+/// A display-encoded channel value in `[0, 1]` as linear light: `c^`[`GAMMA`].
+#[inline(always)]
+pub fn gamma_to_linear(c: f32) -> f32 {
+    if c <= 0.0 { 0.0 } else { exp(GAMMA * ln(c)) }
 }
 
 /// A three-component `f32` vector with C layout, usable in `no_std` builds.

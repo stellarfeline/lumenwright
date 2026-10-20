@@ -68,12 +68,24 @@ pub fn quad_texel(scene: &SceneView, q: &GpuQuad, s: f32, t: f32) -> u32 {
     scene.texel(u, v)
 }
 
+/// How much farther than the nearest hit so far a later quad may be and still be met
+/// instead: a quad coplanar with an earlier one, in blocks.
+pub const COPLANAR: f32 = 1e-5;
+
 /// Tests a quad, applying alpha testing and front-only culling. Updates `best`
-/// when closer.
+/// when closer, or when coplanar with it (within [`COPLANAR`]) and later in the quad
+/// list: a model's later element is drawn over an earlier one in the same plane, as
+/// the client draws it and as Chunky's grass block draws its tinted side overlay
+/// over the side (`GrassBlockModel`, chunky-dev/chunky 156e2bb).
 #[inline(always)]
 fn test_quad(scene: &SceneView, qi: u32, o: V3, d: V3, tmin: f32, best: &mut Hit) {
     let q = &scene.quads[qi as usize];
-    if let Some((t, s, tt)) = intersect_quad(q, o, d, tmin, best.t) {
+    let reach = if best.quad != u32::MAX && qi > best.quad {
+        best.t + COPLANAR
+    } else {
+        best.t
+    };
+    if let Some((t, s, tt)) = intersect_quad(q, o, d, tmin, reach) {
         // Tested after the intersection: with the test ahead of it, the PTX build's
         // multi-sample launches disagreed with the CPU on text pixels (cause not
         // established), and an intersection is rarer than a test.
@@ -151,7 +163,6 @@ pub fn trace(scene: &SceneView, o: V3, d: V3, tmin: f32, tmax: f32) -> Option<Hi
         (floor(start.z) as i32).clamp(0, gs[2] - 1),
     ];
     let step = [sign(d.x), sign(d.y), sign(d.z)];
-    let delta = [abs(inv.x), abs(inv.y), abs(inv.z)];
     let mut next = [0.0f32; 3];
     for a in 0..3 {
         next[a] = next_boundary(o.get(a), inv.get(a), cell[a], step[a]);
@@ -268,7 +279,12 @@ pub fn trace(scene: &SceneView, o: V3, d: V3, tmin: f32, tmax: f32) -> Option<Hi
         if cell[axis] < 0 || cell[axis] >= gs[axis] {
             break;
         }
-        next[axis] += delta[axis];
+        // The next boundary's distance is computed afresh from the cell, as Chunky's
+        // `Octree.enterBlock` computes each node's bounds: summing the step instead
+        // drifts, over a couple of hundred cells, past the 1e-4 margin of the range a
+        // cell tests its quads in, and a front face at the cell's entry was then missed
+        // (`a_front_face_far_along_the_ray_is_met`).
+        next[axis] = next_boundary(o.get(axis), inv.get(axis), cell[axis], step[axis]);
     }
     None
 }
@@ -311,7 +327,7 @@ pub fn hit_point(o: V3, d: V3, h: &Hit) -> V3 {
 fn _assert_layout() {
     // Compile-time size checks used by the GPU mirrors.
     const _: () = assert!(core::mem::size_of::<GpuQuad>() == 80);
-    const _: () = assert!(core::mem::size_of::<crate::scene::Params>() == 256);
+    const _: () = assert!(core::mem::size_of::<crate::scene::Params>() == 352);
     const _: () = assert!(core::mem::size_of::<crate::scene::GpuModel>() == 16);
-    const _: () = assert!(core::mem::size_of::<crate::scene::GpuLight>() == 32);
+    const _: () = assert!(core::mem::size_of::<crate::scene::GpuEmitter>() == 32);
 }

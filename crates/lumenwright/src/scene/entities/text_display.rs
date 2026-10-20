@@ -308,6 +308,7 @@ pub fn build_quads(scene: &mut Scene, plan: &TextDisplayPlan) {
                     water: false,
                     shade: false,
                     emission: 0.0,
+                    emittance: 0.0,
                     cullface: None,
                     ao: false,
                 },

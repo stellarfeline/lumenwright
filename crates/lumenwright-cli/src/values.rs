@@ -7,7 +7,7 @@
 use clap::ValueEnum;
 use lumenwright::render::post::Tonemap;
 use lumenwright::render::{BackendKind, Mode};
-use lumenwright::request::UnknownEntities;
+use lumenwright::request::{EmitterSampling, UnknownEntities};
 
 macro_rules! mirror {
     ($(#[$m:meta])* $cli:ident => $lib:ident { $($(#[$vm:meta])* $v:ident),+ $(,)? }) => {
@@ -63,12 +63,26 @@ mirror! {
 mirror! {
     /// `--tonemap`.
     TonemapArg => Tonemap {
-        /// Clamp + sRGB (Chunky's default "gamma correction").
+        /// Clamp and the display gamma 2.2 (Chunky's default, "gamma correction").
         Gamma,
-        /// ACES filmic fit (Narkowicz).
+        /// ACES filmic fit (Narkowicz), then the display gamma.
         Aces,
-        /// Hable / Uncharted 2 filmic.
+        /// Hable / Uncharted 2 filmic, then the display gamma.
         Filmic,
+    }
+}
+
+mirror! {
+    /// `--emitter-sampling`.
+    EmitterSamplingArg => EmitterSampling {
+        /// None: emitters light the scene only where a path meets them.
+        None,
+        /// One face of one nearby emitter.
+        One,
+        /// Every face of one nearby emitter.
+        OneBlock,
+        /// Every face of every nearby emitter.
+        All,
     }
 }
 
@@ -93,6 +107,9 @@ mod tests {
         }
         for v in BackendArg::value_variants() {
             assert_eq!(BackendArg::from(BackendKind::from(*v)), *v);
+        }
+        for v in EmitterSamplingArg::value_variants() {
+            assert_eq!(EmitterSamplingArg::from(EmitterSampling::from(*v)), *v);
         }
         for v in TonemapArg::value_variants() {
             assert_eq!(TonemapArg::from(Tonemap::from(*v)), *v);

@@ -1,13 +1,16 @@
 //! HDR -> display post-processing shared by every backend.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// The tone-mapping operator that maps linear HDR radiance to display values.
+/// The tone-mapping operator that maps linear HDR radiance to display values. Each is
+/// Chunky's post-processing filter of the same name (GPL-3.0, `renderer/postprocessing`
+/// at chunky-dev/chunky 156e2bb), ending, as Chunky's do, in the display gamma
+/// `v^(1/2.2)` ([`lumenwright_kernel::math::GAMMA`]).
 pub enum Tonemap {
-    /// Clamp + sRGB (Chunky's default "gamma correction").
+    /// Clamp and the display gamma: Chunky's default, `GammaCorrectionFilter`.
     Gamma,
-    /// ACES filmic fit (Narkowicz).
+    /// ACES filmic fit (Narkowicz), Chunky's `ACESFilmicFilter`.
     Aces,
-    /// Hable / Uncharted 2 filmic.
+    /// Hable / Uncharted 2 filmic with Chunky's default curve, `HableToneMappingFilter`.
     Filmic,
 }
 
@@ -21,18 +24,14 @@ fn hable(x: f32) -> f32 {
     ((x * (a * x + c * b) + d * e) / (x * (a * x + b) + d * f)) - e / f
 }
 
-/// Converts one linear channel value, clamped to `[0, 1]`, to the sRGB
-/// transfer curve.
-pub fn linear_to_srgb(c: f32) -> f32 {
-    let c = c.clamp(0.0, 1.0);
-    if c <= 0.003_130_8 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    }
+/// Encodes one linear channel value, clamped to `[0, 1]`, for display: `v^(1/GAMMA)`.
+pub fn encode(v: f32) -> f32 {
+    v.clamp(0.0, 1.0)
+        .powf(1.0 / lumenwright_kernel::math::GAMMA)
 }
 
-/// Converts linear radiance to packed sRGB RGBA8.
+/// Converts linear radiance to packed display RGBA8, rounding as Chunky's
+/// `ColorUtil.getRGB` does.
 pub fn tonemap(hdr: &[[f32; 3]], exposure: f32, op: Tonemap) -> Vec<u32> {
     let white = 1.0 / hable(11.2);
     hdr.iter()
@@ -44,7 +43,7 @@ pub fn tonemap(hdr: &[[f32; 3]], exposure: f32, op: Tonemap) -> Vec<u32> {
                     Tonemap::Aces => aces(v),
                     Tonemap::Filmic => hable(v * 2.0) * white,
                 };
-                (linear_to_srgb(v) * 255.0 + 0.5) as u32
+                (encode(v) * 255.0 + 0.5) as u32
             };
             m(p[0]) | (m(p[1]) << 8) | (m(p[2]) << 16) | 0xFF00_0000
         })
@@ -93,6 +92,8 @@ mod tests {
         assert_eq!(px[2], 0xFFFF_FFFF);
         let a = tonemap(&[[0.18; 3]], 1.0, Tonemap::Aces)[0] & 0xFF;
         assert!(a > 100 && a < 200, "{a}");
+        // Chunky's gamma filter: 0.18 linear shows as 0.18^(1/2.2) = 0.4586 -> 117.
+        assert_eq!(tonemap(&[[0.18; 3]], 1.0, Tonemap::Gamma)[0] & 0xFF, 117);
     }
 
     #[test]

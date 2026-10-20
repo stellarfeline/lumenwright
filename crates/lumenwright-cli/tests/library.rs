@@ -115,7 +115,7 @@ fn request<'a>(world: &'a Path, jar: &'a Path, mode: Mode) -> Request<'a> {
         sky: Sky::Vanilla {
             time: None,
             sun_dir: Some(sky::sun_direction(40.0, 135.0)),
-            sun_intensity: 1.5,
+            sun_intensity: sky::DEFAULT_SUN_INTENSITY,
             sky_intensity: 1.0,
         },
     }
