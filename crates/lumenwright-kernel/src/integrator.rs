@@ -103,6 +103,7 @@ fn shading_normal(q: &GpuQuad, d: V3) -> (V3, bool) {
 }
 
 /// Transmittance from `o` along `d` up to distance `tmax` (0 when blocked).
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
 fn shadow(scene: &SceneView, mut o: V3, d: V3, mut tmax: f32) -> V3 {
     let eps = scene.params.misc_f[1];
     let mut tr = V3::ONE;
@@ -266,6 +267,8 @@ fn sample_emitter(scene: &SceneView, origin: V3, n: V3, rng: &mut Rng) -> V3 {
 }
 
 /// Radiance estimate for one camera sample at pixel (px, py).
+// On CUDA the whole path tracer is one function: see `pt_render` in crates/lumenwright-ptx.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
 pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
     let p = scene.params;
     let width = p.frame[0];

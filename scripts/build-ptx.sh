@@ -18,5 +18,13 @@ if [ "$f64" -ne 0 ]; then
     echo "refused: $ptx carries $f64 f64 instructions; find their source (an f64 libm routine is the usual one) and use an f32 form" >&2
     exit 1
 fi
+# The path tracer is one function: with render_sample and trace called as PTX functions, the
+# driver's optimizing JIT mistranslated the kernel (see `pt_render` in crates/lumenwright-ptx).
+# Refuse a call to anything but a panic, which only traps.
+calls=$(grep -E '^\s*(@!?%p[0-9]+\s+)?call(\.uni)?\s' "$ptx" | grep -vc 'panicking' || true)
+if [ "$calls" -ne 0 ]; then
+    echo "refused: $ptx makes $calls calls to functions other than panics; keep the kernel inlined whole" >&2
+    exit 1
+fi
 cp "$ptx" "$root/target/ptx/lumenwright.ptx"
-echo "wrote $root/target/ptx/lumenwright.ptx ($(grep -c '' "$root/target/ptx/lumenwright.ptx") lines, 0 f64 instructions)"
+echo "wrote $root/target/ptx/lumenwright.ptx ($(grep -c '' "$root/target/ptx/lumenwright.ptx") lines, 0 f64 instructions, no calls but panics)"
