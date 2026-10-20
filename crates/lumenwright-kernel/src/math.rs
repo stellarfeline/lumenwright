@@ -86,6 +86,8 @@ pub fn exp(x: f32) -> f32 {
 #[inline(always)]
 pub fn acos(x: f32) -> f32 {
     let a = clamp(abs(x), 0.0, 1.0);
+    // The published a₀ = 1.5707963050, kept as the formula gives it (one f32 ulp below π/2).
+    #[allow(clippy::approx_constant)]
     let p = 1.570_796_3
         + a * (-0.214_598_8
             + a * (0.088_978_99
