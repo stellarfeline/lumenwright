@@ -86,12 +86,14 @@ impl Backend for CudaBackend {
         let (w, h) = (f.params.frame[0], f.params.frame[1]);
         let spp = f.spp.max(1);
         let stream = self.ctx.default_stream();
+        let jit = Instant::now();
         let module = self
             .ctx
             .load_module(Ptx::from_src(PTX))
             .map_err(e)
             .context("loading PTX")?;
         let func = module.load_function("pt_render").map_err(e)?;
+        let jit = jit.elapsed();
 
         let params_words: &[u32] = bytemuck::cast_slice(std::slice::from_ref(&f.params));
         let d_params = stream.clone_htod(params_words).map_err(e)?;
@@ -123,6 +125,9 @@ impl Backend for CudaBackend {
             shared_mem_bytes: 0,
         };
         let (mut done, mut batch) = (0u32, 1u32);
+        // The kernel's own clock: a timing event on the stream either side of every launch.
+        let (mut kernel_ms, mut launches) = (0f64, 0u32);
+        let timed = Some(sys::CUevent_flags::CU_EVENT_DEFAULT);
         let t0 = Instant::now();
         while done < spp {
             let n = batch.min(spp - done);
@@ -144,9 +149,13 @@ impl Backend for CudaBackend {
             b.arg(&mut d_accum);
             b.arg(&done);
             b.arg(&n);
+            let before = stream.record_event(timed).map_err(e)?;
             // SAFETY: argument order and types match `pt_render` in crates/lumenwright-ptx.
             unsafe { b.launch(cfg) }.map_err(e)?;
+            let after = stream.record_event(timed).map_err(e)?;
             stream.synchronize().map_err(e)?;
+            kernel_ms += before.elapsed_ms(&after).map_err(e)? as f64;
+            launches += 1;
             let took = start.elapsed();
             done += n;
             progress(done, spp);
@@ -157,7 +166,7 @@ impl Backend for CudaBackend {
             }
         }
         log::info!(
-            "cuda path tracing: {spp} spp at {w}x{h} in {:.2?}",
+            "cuda path tracing: {spp} spp at {w}x{h} in {:.2?} ({kernel_ms:.1} ms in {launches} launches by CUDA events; PTX load {jit:.2?})",
             t0.elapsed()
         );
         let acc: Vec<f32> = stream.clone_dtoh(&d_accum).map_err(e)?;
