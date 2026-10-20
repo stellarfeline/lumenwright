@@ -6,8 +6,9 @@ command (crate `lumenwright-cli`) writes a PNG, and the `lumenwright` library re
 pixels to your program (see [Library](#library)). It has two looks:
 
 * **quick**: rasterized to look like the vanilla Java client, with no ray tracing.
-* **hq**: a Chunky-style path tracer with sun and sky light, soft shadows, emissive blocks
-  and refractive water.
+* **hq**: a path tracer ported from Chunky's, with its Preetham sky, its sun and soft
+  shadows, its emitters, its display gamma, and refractive water (what was ported and how
+  the result compares with Chunky: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
 
 Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vulkan** and
 **DX12** (through wgpu), and **CUDA** (the Rust path-tracing kernel compiled to PTX).
@@ -232,10 +233,10 @@ checks on it without any network.
 | `--time` | world time | ticks: 0 = sunrise, 6000 = noon |
 | `--sun-altitude`, `--sun-azimuth` | from time, 135 | degrees (azimuth 0 = north, 90 = east); an altitude overrides `--time` for the sun |
 | `--spp`, `--max-bounces`, `--seed` | 64, 4, 0 | HQ sampling; the same seed gives the same image |
-| `--exposure`, `--tonemap aces\|gamma\|filmic` | 1.0, aces | HQ post-processing |
-| `--sun-intensity`, `--sky-intensity` | 1.5, 1 | HQ lighting |
-| `--emitter-intensity`, `--emitter-glow` | 1, 1.5 | HQ: the light emissive blocks cast (1 is calibrated to the game's block light), and how bright their faces look |
-| `--no-light-sampling` | | HQ: no next-event estimation towards emissive blocks (a noisier reference) |
+| `--exposure`, `--tonemap gamma\|aces\|filmic` | 1.0, gamma | HQ post-processing, Chunky's filters (each ends in the display gamma 2.2) |
+| `--sun-intensity`, `--sky-intensity` | 1.25, 1 | HQ lighting: Chunky's sun intensity (irradiance intensity^2.2) and sky light |
+| `--emitter-intensity` | 13 | HQ: Chunky's emitter intensity; an emitting surface emits its texel colour squared times its block's emittance times this (0 turns emitters off) |
+| `--emitter-sampling none\|one\|one-block\|all`, `--prevent-normal-emitter` | one | HQ: Chunky's emitter sampling strategies, and its "prevent normal emitter with sampling" |
 | `--ssaa N` | 1 | quick-mode supersampling |
 | `--mipmap-levels N` | 4 | quick-mode mip levels for block textures, 0 (off) to 4, as the client's option |
 | `--brightness`, `--flat-lighting` | 0.5 | vanilla brightness slider, and smooth lighting off |
@@ -451,7 +452,10 @@ cargo test --workspace --release
   coverage), quick-mode texture sampling, the lightmap, the tonemapper, and entity box-UV
   and orientation.
 * **Kernel tests** use hand-built buffers to check brick skipping, uniform bricks, entity
-  overlay cells, cutout alpha, the sky, and pinned RNG values.
+  overlay cells, cutout alpha, one-sided faces met far along a ray, coplanar faces, the
+  sky, Chunky's emitter sampling against its expectation, and pinned RNG values; the kernel's
+  `f32` `ln`, `acos` and gamma decoding are held to bounds against `f64`. A unit test holds
+  the kernel's sky to Chunky's Preetham sky transcribed in `f64`.
 * **Integration tests** (in `lumenwright-cli`, which owns the fixture worlds) write fixture
   worlds and render them end to end. They check terrain
   colours seen from above, entity coverage, block entities in both modes, sign text, items
@@ -475,53 +479,23 @@ cargo test --workspace --release
 | same | quick / cpu | 0.35 s end to end (130 ms raster) |
 | same, 1280×720, 32 spp | hq / metal | 6.0 s end to end (5.8 s path tracing) |
 | same, 1280×720, 16 spp | hq / cpu | 6.7 s end to end (6.5 s path tracing) |
+| showcase (`demo-world`, its default camera), 1280×720, 256 spp | hq / metal | 14.7 s |
 
 Parity on the whole-camp view at `--time 4000`, CPU vs Metal: in quick mode at 1920×1080, 0.22%
 of pixels differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.38% do.
 
-## Measured on an RTX 4070 Ti SUPER (driver 616.92, WSL2)
+## HQ mode and Chunky on one frame
 
-| scene | mode / backend | time |
-|---|---|---|
-| showcase, 1280×720, 64 spp, 4 bounces | hq / cuda | 0.85 s in the kernel (CUDA events), 1.43 s end to end |
+The whole-camp view of The Treehouse Camp at 1280×720, 250 samples per pixel, four bounces, with Chunky's default sky,
+sun, emitters and tone map (the full method: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
+Against Chunky's frame converged at 4000 samples, Lumenwright's 250-sample frame differs by a
+mean of 1.70/255 (SSIM 0.959), Chunky's own 250-sample frame by 1.99/255 (SSIM 0.958).
 
-The same frame on CUDA and on the CPU: no pixel differs by more than 0.05 in linear radiance.
-
-## Lumenwright and Chunky on one frame
-
-The whole-camp view at 1280×720, 250 samples per pixel and four bounces after the first hit,
-the sun stated at altitude 45° from the south-east, drawn by Chunky on the M2 Pro's CPU, by
-Lumenwright on the M2 Pro's GPU (Metal) and by Lumenwright on the RTX 4070 Ti SUPER (CUDA).
-Each ran three times, Chunky and Metal alternating, with no other build or render on either
-machine. Two clocks time each run: the renderer's own timer, and the wall clock around the
-whole command.
-
-| renderer | machine | runs, own timer (s) | median | runs, whole command (s) | median | vs Chunky (own / whole) |
-|---|---|---|---|---|---|---|
-| Chunky 2.5.0-SNAPSHOT.474 (CPU, 10 threads, JDK 17) | M2 Pro | 124.6, 115.4, 115.0 | 115.4 | 129.1, 119.4, 118.7 | 119.4 | 1× |
-| Lumenwright, Metal | M2 Pro | 48.37, 48.36, 48.36 | 48.36 | 48.71, 48.65, 48.66 | 48.66 | 2.4× / 2.5× |
-| Lumenwright, CUDA | RTX 4070 Ti SUPER | 8.464, 8.462, 8.458 | 8.462 | 9.08, 9.07, 9.07 | 9.07 | 13.6× / 13.2× |
-
-* Own timer: Chunky's `renderTime` in the saved scene; Lumenwright's `render` stage. Neither
-  counts start-up or loading the world. Whole command: Chunky's includes starting the JVM and
-  building its octree from the save (about 4 s); Lumenwright's includes reading the save and
-  the jar and building the scene (about 0.3 s on Metal, 0.6 s on CUDA). On CUDA the 250 samples
-  take 8.23 s in the kernel by CUDA events. The CUDA command's wall time is read from the
-  remote machine's monotonic clock (`/proc/uptime`): WSL2's wall clock was measured advancing
-  9.2 s in 10.0 s of uptime.
-* Chunky's first run is 8% slower than its other two (JIT warm-up and a cold disk cache).
-  Lumenwright's runs agree within 0.1%.
-* The frames differ in what they draw, so the ratio compares two renderers' cost per frame at
-  equal sample counts, not equal images. Chunky uses its Preetham sky, a sun of intensity 1.25
-  and a gamma tone curve; Lumenwright uses its analytic sky, a sun of intensity 1.5 and ACES.
-  Chunky's lanterns are emitters at its default intensity 13 and barely light the grass;
-  Lumenwright's carry the calibrated power and light the floor around each tree. Both sample
-  one emitter per diffuse vertex (`emitterSamplingStrategy` `ONE` in Chunky; Lumenwright picks
-  by power over all 2169 light quads) and the sun. Chunky renders in passes of `branchCount`
-  10 samples. Lumenwright ends paths by Russian roulette after the third bounce; Chunky's
-  path termination was not compared. Neither frame is denoised. Lumenwright's frame is the same
-  bytes on every run; Chunky's differs from run to run.
-* Lumenwright's CUDA and Metal frames differ in 767 of 921,600 pixels by more than 8/255.
+| renderer | machine | path tracing, median of 3 | whole command, median of 3 | vs Chunky |
+|---|---|---|---|---|
+| Chunky 2.5.0-SNAPSHOT.474 (CPU) | M2 Pro | 124.73 s | 129.61 s | 1× |
+| Lumenwright, Metal | M2 Pro | 32.96 s | 33.26 s | 3.8× / 3.9× |
+| Lumenwright, CUDA | RTX 4070 Ti SUPER | 6.15 s | 6.72 s | different machine |
 
 ```sh
 # Lumenwright (--backend metal on the M2 Pro, cuda on the 4070)
@@ -539,6 +513,14 @@ vertical field of view, `sppTarget` 250, `rayDepth` 5 (four bounces after the fi
 read off the pinned core's `PathTracer`), `emittersEnabled`, `emitterSamplingStrategy` `ONE`,
 and the sun at altitude π/4 and Chunky azimuth π/4 (towards +X +Z).
 
+## Measured on an RTX 4070 Ti SUPER (driver 616.92, WSL2)
+
+| scene | mode / backend | time |
+|---|---|---|
+| showcase, 1280×720, 64 spp, 4 bounces | hq / cuda | 0.85 s in the kernel (CUDA events), 1.43 s end to end |
+
+The same frame on CUDA and on the CPU: no pixel differs by more than 0.05 in linear radiance.
+
 ## Known limitations (v0.1)
 
 See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
@@ -553,11 +535,14 @@ See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
   mode the End's sky box is drawn as its fog colour, the dark disc vanilla draws below the
   horizon for a camera under sea level is not drawn, and the lightmap's daylight still
   follows the pre-1.21.11 day curve.
-* Light sampling picks emitters by power alone, not by where they are: with many emitters
-  in view, most samples go to lights far from the surface being lit.
-* Emitter light falls off by the inverse square of distance, not by the game's one level per
-  block: near a lamp HQ is brighter than the game, far from it darker
-  (`docs/research/emitters.md`).
+* HQ mode lights emitters as Chunky does, and Chunky's emitter sampling is not a light
+  transport estimate: it picks one emitter near the surface without dividing by the pick's
+  probability, so a surface among many emitters gets the average of their light rather
+  than the sum, and an emitter farther than 10 to 19 blocks along an axis (by where the grid
+  cells fall) is never sampled; it lights a surface only through bounced paths that meet it.
+* Not yet ported from Chunky: biome blending, the sun drawn in the sky, candle and campfire
+  flame particles, its fancier translucency, water shading and metals
+  ([docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
 
 ## License
 

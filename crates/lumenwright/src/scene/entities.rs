@@ -412,6 +412,7 @@ pub(crate) fn cube_quads(
             water: false,
             shade: true,
             emission: 0.0,
+            emittance: 0.0,
             cullface: None,
             ao: false,
         };
@@ -510,6 +511,7 @@ fn box_quads(m: &Mat4, sprite: &crate::assets::atlas::Sprite, tint: [u8; 4], out
             water: false,
             shade: true,
             emission: 0.0,
+            emittance: 0.0,
             cullface: None,
             ao: false,
         };
@@ -632,6 +634,7 @@ fn flat_quad(p0: Vec3, eu: Vec3, ev: Vec3, sprite: &crate::assets::atlas::Sprite
         water: false,
         shade: true,
         emission: 0.0,
+        emittance: 0.0,
         cullface: None,
         ao: false,
     }

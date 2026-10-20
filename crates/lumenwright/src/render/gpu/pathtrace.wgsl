@@ -8,8 +8,13 @@ struct Params {
     cam_up: vec4<f32>,
     sun_dir: vec4<f32>,
     sun_color: vec4<f32>,
+    sky_sun: vec4<f32>,
     sky_zenith: vec4<f32>,
-    sky_horizon: vec4<f32>,
+    perez_a: vec4<f32>,
+    perez_b: vec4<f32>,
+    perez_c: vec4<f32>,
+    perez_d: vec4<f32>,
+    perez_e: vec4<f32>,
     water_color: vec4<f32>,
     misc_f: vec4<f32>,
     grid_dims: vec4<u32>,
@@ -18,6 +23,7 @@ struct Params {
     frame: vec4<u32>,
     misc_u: vec4<u32>,
     see_through: vec4<u32>,
+    emitter: vec4<u32>,
 }
 
 // Quads are read as raw words: the w lanes of p0/eu carry bit-cast integers
@@ -30,9 +36,9 @@ struct Quad {
     uvt: vec4<f32>,
 }
 
-struct Light {
+struct Emitter {
     pos: vec4<u32>,
-    cdf: vec4<f32>,
+    faces: vec4<u32>,
 }
 
 struct Model {
@@ -48,8 +54,8 @@ struct Model {
 @group(0) @binding(3) var<storage, read> quads: array<Quad>;
 @group(0) @binding(4) var<storage, read> atlas: array<u32>;
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4<f32>>;
-@group(0) @binding(6) var<storage, read> lights: array<Light>;
-@group(0) @binding(7) var<storage, read> emitters: array<u32>;
+@group(0) @binding(6) var<storage, read> emitters: array<Emitter>;
+@group(0) @binding(7) var<storage, read> emitter_grid: array<u32>;
 
 const EMPTY: u32 = 0xFFFFFFFFu;
 const UNIFORM: u32 = 0x80000000u;
@@ -60,10 +66,16 @@ const ALPHA_CUTOUT: u32 = 1u;
 const ALPHA_TRANSLUCENT: u32 = 2u;
 const FLAG_WATER: u32 = 4u;
 const FLAG_FRONT_ONLY: u32 = 16u;
+const EMITTER_SAMPLING_NONE: u32 = 0u;
+const EMITTER_SAMPLING_ONE: u32 = 1u;
+const EMITTER_SAMPLING_ONE_BLOCK: u32 = 2u;
+const EMITTER_SAMPLING_ALL: u32 = 3u;
+const EMITTER_GRID_HEADER: u32 = 8u;
 const PI: f32 = 3.14159265358979;
 const INF: f32 = 1e30;
 const MAX_EVENTS: u32 = 48u;
 const MAX_STEPS: u32 = 65536u;
+const COPLANAR: f32 = 1e-5;
 
 // ---------------------------------------------------------------- rng / utils
 
@@ -80,8 +92,11 @@ fn rnd() -> f32 {
     return f32(rng_state >> 8u) * (1.0 / 16777216.0);
 }
 
-fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
-    return c * (c * (c * 0.30530602 + 0.6821711) + 0.012522878);
+// math::GAMMA and math::gamma_to_linear (Chunky's texture decoding: c^2.2).
+const GAMMA: f32 = 2.2;
+
+fn gamma_to_linear(c: vec3<f32>) -> vec3<f32> {
+    return select(exp(GAMMA * log(max(c, vec3<f32>(1e-30)))), vec3<f32>(0.0), c <= vec3<f32>(0.0));
 }
 
 fn unpack_rgba(c: u32) -> vec4<f32> {
@@ -89,7 +104,7 @@ fn unpack_rgba(c: u32) -> vec4<f32> {
 }
 
 fn linear_rgb(c: u32) -> vec3<f32> {
-    return srgb_to_linear(unpack_rgba(c).xyz);
+    return gamma_to_linear(unpack_rgba(c).xyz);
 }
 
 fn q_p0(q: Quad) -> vec3<f32> { return bitcast<vec3<f32>>(q.p0.xyz); }
@@ -97,9 +112,8 @@ fn q_eu(q: Quad) -> vec3<f32> { return bitcast<vec3<f32>>(q.eu.xyz); }
 fn q_ev(q: Quad) -> vec3<f32> { return bitcast<vec3<f32>>(q.ev.xyz); }
 fn q_flags(q: Quad) -> u32 { return q.p0.w; }
 fn q_tint(q: Quad) -> u32 { return q.eu.w; }
-fn q_emission(q: Quad) -> f32 { return bitcast<f32>(q.ev.w); }
+fn q_emittance(q: Quad) -> f32 { return bitcast<f32>(q.ev.w); }
 fn q_normal(q: Quad) -> vec3<f32> { return cross(q_ev(q), q_eu(q)); }
-fn q_light_scale(q: Quad) -> f32 { return q.uvt.w; }
 
 fn onb_t(n: vec3<f32>) -> vec3<f32> {
     let sign = select(-1.0, 1.0, n.z >= 0.0);
@@ -169,7 +183,10 @@ fn test_quad(qi: u32, o: vec3<f32>, d: vec3<f32>, tmin: f32, best: ptr<function,
     if (abs(denom) < 1e-12) { return; }
     let p0 = q_p0(q);
     let t = dot(n, p0 - o) / denom;
-    if (!(t > tmin && t < (*best).t)) { return; }
+    // trace::test_quad: a later coplanar quad is met instead of an earlier one.
+    var reach = (*best).t;
+    if ((*best).quad != NO_QUAD && qi > (*best).quad) { reach = (*best).t + COPLANAR; }
+    if (!(t > tmin && t < reach)) { return; }
     let p = o + d * t - p0;
     let nn = dot(n, n);
     let s = dot(cross(p, ev), n) / nn;
@@ -215,7 +232,6 @@ fn trace(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> Hit {
         clamp(i32(floor(start.y)), 0, gs.y - 1),
         clamp(i32(floor(start.z)), 0, gs.z - 1));
     let step = vec3<i32>(sgn(d.x), sgn(d.y), sgn(d.z));
-    let delta = abs(inv);
     var next = vec3<f32>(
         next_boundary(o.x, inv.x, cell.x, step.x),
         next_boundary(o.y, inv.y, cell.y, step.y),
@@ -304,28 +320,49 @@ fn trace(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> Hit {
         if (t > t_end) { break; }
         cell[axis] += step[axis];
         if (cell[axis] < 0 || cell[axis] >= gs[axis]) { break; }
-        next[axis] += delta[axis];
+        next[axis] = next_boundary(o[axis], inv[axis], cell[axis], step[axis]);
     }
     return result;
 }
 
 // ---------------------------------------------------------------- integrator
 
+// math::acos: Abramowitz and Stegun 4.4.46.
+fn acos_as(x: f32) -> f32 {
+    let a = clamp(abs(x), 0.0, 1.0);
+    let p = 1.5707963
+        + a * (-0.2145988
+            + a * (0.08897899
+                + a * (-0.0501743
+                    + a * (0.03089188
+                        + a * (-0.017088126 + a * (0.00667009 + a * -0.0012624911))))));
+    let r = sqrt(1.0 - a) * p;
+    return select(r, PI - r, x < 0.0);
+}
+
+// integrator::sky_radiance: Chunky's Preetham sky.
 fn sky_radiance(d: vec3<f32>) -> vec3<f32> {
-    let zenith = P.sky_zenith.xyz;
-    let horizon = P.sky_horizon.xyz;
-    let intensity = P.sky_zenith.w;
-    let up = max(d.y, 0.0);
-    var base: vec3<f32>;
-    if (d.y >= 0.0) {
-        base = mix(horizon, zenith, sqrt(up));
-    } else {
-        base = horizon * (1.0 - 0.5 * clamp(-d.y * 4.0, 0.0, 1.0));
+    let cos_theta = max(d.y + P.sky_zenith.w, 0.0);
+    let cos_gamma = clamp(dot(d, P.sky_sun.xyz), -1.0, 1.0);
+    let gamma = acos_as(cos_gamma);
+    let cos2_gamma = cos_gamma * cos_gamma;
+    var a = vec3<f32>(0.0);
+    if (cos_theta > 0.0) {
+        a = P.perez_a.xyz * exp(P.perez_b.xyz / cos_theta);
     }
-    let cs = max(dot(d, P.sun_dir.xyz), 0.0);
-    var glow = cs * cs;
-    glow = glow * glow * glow * glow;
-    return (base + P.sun_color.xyz * (glow * P.sky_horizon.w)) * intensity;
+    let perez = (1.0 + a) * (1.0 + P.perez_c.xyz * exp(P.perez_d.xyz * gamma) + P.perez_e.xyz * cos2_gamma);
+    let xyl = P.sky_zenith.xyz * perez;
+    if (xyl.y <= 5e-8) {
+        return vec3<f32>(0.0);
+    }
+    let f = xyl.z / xyl.y;
+    let cx = xyl.x * f;
+    let cy = xyl.z;
+    let cz = (1.0 - xyl.x - xyl.y) * f;
+    return vec3<f32>(
+        2.3706743 * cx - 0.9000405 * cy - 0.4706338 * cz,
+        -0.513885 * cx + 1.4253036 * cy + 0.0885814 * cz,
+        0.0052982 * cx - 0.0146949 * cy + 1.0093968 * cz) * (0.045 * P.sky_sun.w);
 }
 
 fn sun_disk(d: vec3<f32>) -> vec3<f32> {
@@ -387,105 +424,84 @@ fn shadow(o_in: vec3<f32>, d: vec3<f32>, tmax_in: f32) -> vec3<f32> {
     return tr;
 }
 
-fn pick_light(u: f32) -> u32 {
-    var lo = 0u;
-    var hi = P.misc_u.w - 1u;
-    while (lo < hi) {
-        let mid = (lo + hi) / 2u;
-        if (lights[mid].cdf.x > u) {
-            hi = mid;
-        } else {
-            lo = mid + 1u;
-        }
+fn pick(n: u32, u: f32) -> u32 {
+    let i = u32(u * f32(n));
+    return select(n - 1u, i, i < n);
+}
+
+// integrator::emitter_cell: (start, count) of the emitters near grid-space point p.
+fn emitter_cell(p: vec3<f32>) -> vec2<u32> {
+    let cell = f32(emitter_grid[0]);
+    let size = vec3<i32>(i32(emitter_grid[1]), i32(emitter_grid[2]), i32(emitter_grid[3]));
+    let c = vec3<i32>(
+        i32(floor(p.x / cell)) - bitcast<i32>(emitter_grid[4]),
+        i32(floor(p.y / cell)) - bitcast<i32>(emitter_grid[5]),
+        i32(floor(p.z / cell)) - bitcast<i32>(emitter_grid[6]));
+    if (any(c < vec3<i32>(0)) || any(c >= size)) {
+        return vec2<u32>(0u, 0u);
     }
-    return lo;
+    let i = u32((c.y * size.z + c.z) * size.x + c.x);
+    let at = EMITTER_GRID_HEADER + i * 2u;
+    return vec2<u32>(emitter_grid[at], emitter_grid[at + 1u]);
 }
 
-fn near_field(dist: f32) -> f32 {
-    let d2 = dist * dist;
-    if (d2 < 1.0) { return d2; }
-    return 1.0;
-}
-
-fn power_heuristic(a: f32, b: f32) -> f32 {
-    let a2 = a * a;
-    let b2 = b * b;
-    if (a2 + b2 > 0.0) { return a2 / (a2 + b2); }
-    return 0.0;
-}
-
-fn texel_share(e: u32, k: u32) -> f32 {
-    let hi = bitcast<f32>(emitters[e + 4u + k]);
-    var lo = 0.0;
-    if (k > 0u) { lo = bitcast<f32>(emitters[e + 3u + k]); }
-    return hi - lo;
-}
-
-fn light_pdf(q: Quad, d: vec3<f32>, dist: f32, s: f32, t: f32) -> f32 {
-    let eb = bitcast<u32>(q.uvt.z);
-    if (eb == 0u) { return 0.0; }
-    let e = eb - 1u;
+// integrator::sample_emitter_face: Chunky's PathTracer.sampleEmitterFace.
+fn sample_emitter_face(origin: vec3<f32>, n: vec3<f32>, e: Emitter, face: u32, scaler: f32) -> vec3<f32> {
+    let q = quads[e.pos.w + face];
+    let s = rnd();
+    let t = rnd();
+    let at = bitcast<vec3<f32>>(e.pos.xyz) + q_p0(q) + q_eu(q) * s + q_ev(q) * t;
+    let to = at - origin;
+    if (dot(to, n) <= 0.0) { return vec3<f32>(0.0); }
+    let dist = length(to);
+    let l = to / dist;
+    let eps = P.misc_f.y;
+    let h = trace(origin, l, eps, dist + 2.0 * eps);
+    if (h.quad == NO_QUAD) { return vec3<f32>(0.0); }
+    if (abs(h.t - dist) >= 2.0 * eps) { return vec3<f32>(0.0); }
     let nq = q_normal(q);
     let area = length(nq);
-    let cos_l = abs(dot(nq, d)) / area;
-    if (cos_l < 1e-6) { return 0.0; }
-    let ns = emitters[e + 1u];
-    let nt = emitters[e + 2u];
-    let i = min(u32(s * f32(ns)), ns - 1u);
-    let j = min(u32(t * f32(nt)), nt - 1u);
-    let share = texel_share(e, j * ns + i);
-    let pick = bitcast<f32>(emitters[e]);
-    return pick * share * f32(ns * nt) / area * dist * dist / cos_l;
+    let cos_l = abs(dot(nq, l)) / area;
+    let c = linear_rgb(h.texel) * linear_rgb(q_tint(quads[h.quad]));
+    return c * (cos_l / max(dist * dist, 1.0) * area * q_emittance(q) * P.misc_f.x * scaler);
 }
 
-fn sample_emitter(origin: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
-    let u = rnd();
-    let v = rnd();
-    let ju = rnd();
-    let jv = rnd();
-    let light = lights[pick_light(u)];
-    let q = quads[light.pos.w];
-    let eb = bitcast<u32>(q.uvt.z);
-    if (eb == 0u) { return vec3<f32>(0.0); }
-    let e = eb - 1u;
-    let ns = emitters[e + 1u];
-    let nt = emitters[e + 2u];
-    var lo = 0u;
-    var hi = ns * nt - 1u;
-    while (lo < hi) {
-        let mid = (lo + hi) / 2u;
-        if (bitcast<f32>(emitters[e + 4u + mid]) > v) {
-            hi = mid;
-        } else {
-            lo = mid + 1u;
+// integrator::sample_emitter.
+fn sample_emitter(origin: vec3<f32>, n: vec3<f32>, e: Emitter) -> vec3<f32> {
+    let faces = e.faces.x;
+    if (faces == 0u) { return vec3<f32>(0.0); }
+    if (P.emitter.x == EMITTER_SAMPLING_ONE) {
+        let f = pick(faces, rnd());
+        return sample_emitter_face(origin, n, e, f, 1.0);
+    }
+    var sum = vec3<f32>(0.0);
+    for (var f = 0u; f < faces; f++) {
+        sum += sample_emitter_face(origin, n, e, f, 1.0 / f32(faces));
+    }
+    return sum;
+}
+
+// integrator::sample_emitters: Chunky's emitter sampling in doDiffuseReflection.
+fn sample_emitters(pos: vec3<f32>, origin: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    let sc = emitter_cell(pos);
+    let start = sc.x;
+    let count = sc.y;
+    if (count == 0u) { return vec3<f32>(0.0); }
+    let list = EMITTER_GRID_HEADER + emitter_grid[1] * emitter_grid[2] * emitter_grid[3] * 2u + start;
+    let strategy = P.emitter.x;
+    if (strategy == EMITTER_SAMPLING_ONE || strategy == EMITTER_SAMPLING_ONE_BLOCK) {
+        let i = emitter_grid[list + pick(count, rnd())];
+        return sample_emitter(origin, n, emitters[i]) * PI;
+    }
+    if (strategy == EMITTER_SAMPLING_ALL) {
+        var sum = vec3<f32>(0.0);
+        for (var k = 0u; k < count; k++) {
+            let i = emitter_grid[list + k];
+            sum += sample_emitter(origin, n, emitters[i]);
         }
+        return sum * (PI / f32(count));
     }
-    let s = (f32(lo % ns) + ju) / f32(ns);
-    let t = (f32(lo / ns) + jv) / f32(nt);
-    let at = bitcast<vec3<f32>>(light.pos.xyz) + q_p0(q) + q_eu(q) * s + q_ev(q) * t;
-    let to = at - origin;
-    let dist = length(to);
-    if (dist < 1e-6) { return vec3<f32>(0.0); }
-    let l = to / dist;
-    let cos_s = dot(n, l);
-    if (cos_s <= 0.0) { return vec3<f32>(0.0); }
-    if ((q_flags(q) & FLAG_FRONT_ONLY) != 0u && dot(q_normal(q), l) >= 0.0) { return vec3<f32>(0.0); }
-    let pdf_l = light_pdf(q, l, dist, s, t);
-    if (pdf_l <= 0.0) { return vec3<f32>(0.0); }
-    let texel = quad_texel(q, s, t);
-    let alpha = f32(texel >> 24u) / 255.0;
-    let mode = q_flags(q) & 3u;
-    var cover = 1.0;
-    if (mode == ALPHA_CUTOUT) {
-        if ((texel >> 24u) < 128u) { return vec3<f32>(0.0); }
-    } else if (mode == ALPHA_TRANSLUCENT) {
-        cover = alpha;
-    }
-    let tr = shadow(origin, l, dist * (1.0 - 1e-4) - P.misc_f.y);
-    let c = linear_rgb(texel) * linear_rgb(q_tint(q));
-    let le = c * c * (q_light_scale(q) * P.misc_f.w * cover * near_field(dist));
-    let pdf_b = cos_s / PI;
-    return le * tr * (cos_s / PI * power_heuristic(pdf_l, pdf_b) / pdf_l);
+    return vec3<f32>(0.0);
 }
 
 fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
@@ -509,10 +525,8 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
     var bounces = 0u;
     var specular = true;
     var in_water = false;
-    var last_diffuse = vec3<f32>(0.0);
-    var pdf_bsdf = 0.0;
-    var via_water = false;
-    let n_lights = P.misc_u.w;
+    var strategy = EMITTER_SAMPLING_NONE;
+    if (P.misc_u.w > 0u) { strategy = P.emitter.x; }
     var tmin = 0.0;
     let sigma = P.water_color.xyz;
 
@@ -571,7 +585,6 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
                 o = pos - n * eps;
                 in_water = front;
             }
-            via_water = true;
             specular = true;
             tmin = 0.0;
             continue;
@@ -584,21 +597,13 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
             continue;
         }
 
-        if (bounces == 0u) {
-            let emission = q_emission(q);
-            if (emission > 0.0) {
-                radiance += beta * albedo * (emission * P.misc_f.x);
-            }
-        } else if (q_light_scale(q) > 0.0 && !via_water) {
-            let dist = length(pos - last_diffuse);
-            var w = 1.0;
-            if (bitcast<u32>(q.uvt.z) != 0u && n_lights > 0u) {
-                w = power_heuristic(pdf_bsdf, light_pdf(q, d, dist, h.s, h.tt));
-            }
-            radiance += beta * (albedo * albedo) * (q_light_scale(q) * P.misc_f.w * w * near_field(dist));
-        }
-
         if (bounces >= max_bounces) { break; }
+        let emittance = q_emittance(q) * P.misc_f.x;
+        let emits = emittance > 0.0
+            && (P.emitter.y == 0u || strategy == EMITTER_SAMPLING_NONE || bounces == 0u);
+        if (emits) {
+            radiance += beta * (albedo * albedo) * emittance;
+        }
         bounces += 1u;
 
         let origin = pos + n * eps;
@@ -611,8 +616,8 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
                 radiance += beta * albedo * P.sun_color.xyz * tr * cos_l;
             }
         }
-        if (n_lights > 0u) {
-            radiance += beta * albedo * sample_emitter(origin, n);
+        if (!emits && strategy != EMITTER_SAMPLING_NONE) {
+            radiance += beta * albedo * sample_emitters(pos, origin, n);
         }
 
         beta = beta * albedo;
@@ -625,9 +630,6 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
         o = origin;
         tmin = 0.0;
         specular = false;
-        last_diffuse = origin;
-        pdf_bsdf = dot(n, d) / PI;
-        via_water = false;
     }
     return radiance;
 }

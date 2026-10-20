@@ -4,8 +4,9 @@
 
 use crate::math::{V3, v3};
 use crate::scene::{
-    ALPHA_CUTOUT, ALPHA_OPAQUE, BRICK_WORDS, EMPTY, FLAG_FRONT_ONLY, GpuModel, GpuQuad,
-    OV_CELL_WORDS, Params, SceneView, UNIFORM,
+    ALPHA_CUTOUT, ALPHA_OPAQUE, BRICK_WORDS, EMITTER_GRID_HEADER, EMITTER_SAMPLING_ALL,
+    EMITTER_SAMPLING_NONE, EMITTER_SAMPLING_ONE, EMITTER_SAMPLING_ONE_BLOCK, EMPTY,
+    FLAG_FRONT_ONLY, GpuEmitter, GpuModel, GpuQuad, OV_CELL_WORDS, Params, SceneView, UNIFORM,
 };
 use crate::trace::{is_see_through, see_through_hit, trace};
 
@@ -39,8 +40,8 @@ struct TestScene {
     models: Vec<GpuModel>,
     quads: Vec<GpuQuad>,
     atlas: Vec<u32>,
-    lights: Vec<crate::scene::GpuLight>,
-    emitters: Vec<u32>,
+    emitters: Vec<GpuEmitter>,
+    emitter_grid: Vec<u32>,
 }
 
 impl TestScene {
@@ -103,8 +104,8 @@ impl TestScene {
             models,
             quads,
             atlas: vec![0xFFFF_FFFF, 0x0000_0000],
-            lights: vec![crate::scene::GpuLight::default()],
-            emitters: vec![0; 4],
+            emitters: vec![GpuEmitter::default()],
+            emitter_grid: vec![0; EMITTER_GRID_HEADER as usize],
         }
     }
 
@@ -115,8 +116,8 @@ impl TestScene {
             models: &self.models,
             quads: &self.quads,
             atlas: &self.atlas,
-            lights: &self.lights,
             emitters: &self.emitters,
+            emitter_grid: &self.emitter_grid,
         }
     }
 }
@@ -262,8 +263,15 @@ fn empty_scene_shows_sky() {
     s.params.cam_fwd = [0.0, 1.0, 0.0, 1.0];
     s.params.cam_right = [1.0, 0.0, 0.0, 0.0];
     s.params.cam_up = [0.0, 0.0, -1.0, 0.0];
-    s.params.sky_zenith = [0.2, 0.4, 0.8, 1.0];
-    s.params.sky_horizon = [0.5, 0.6, 0.7, 0.0];
+    // The Preetham sky for a sun at altitude 45 degrees, azimuth 45 degrees
+    // (`lumenwright::render::sky::Preetham::new`).
+    s.params.sky_sun = [0.5, std::f32::consts::FRAC_1_SQRT_2, 0.5, 1.0];
+    s.params.sky_zenith = PREETHAM_45_ZENITH;
+    s.params.perez_a = PREETHAM_PEREZ[0];
+    s.params.perez_b = PREETHAM_PEREZ[1];
+    s.params.perez_c = PREETHAM_PEREZ[2];
+    s.params.perez_d = PREETHAM_PEREZ[3];
+    s.params.perez_e = PREETHAM_PEREZ[4];
     s.params.sun_dir = [0.0, -1.0, 0.0, 1.0];
     let v = s.view();
     for y in 0..4 {
@@ -281,77 +289,90 @@ fn rng_matches_reference_values() {
     assert_eq!(crate::rng::pcg_hash(1), 2831084092);
 }
 
-/// A 16³ room floor of white cubes at y = 0 and a 1×1 emissive quad at y = 4 facing
-/// down, lit by nothing else. `nee` puts the quad in the light list.
-fn lamp_scene(nee: bool) -> TestScene {
+/// The emittance of the test lamp.
+const LAMP_EMITTANCE: f32 = 0.5;
+/// The emitter intensity of the lamp scenes.
+const LAMP_INTENSITY: f32 = 13.0;
+
+/// A 16³ room floor of white cubes at y = 0 and a lamp: a block at (7, 4, 7) whose model
+/// is one white 1×1 quad at its bottom facing down, emittance [`LAMP_EMITTANCE`]. It is
+/// emitter 0 in the emitter grid, one 16-block cell. With `decoy`, a second emitter
+/// replaces the floor cube at (2, 0, 2): a lamp quad facing up at the cube's bottom,
+/// below the floor's top, which the floor never sees; it shares the cell.
+fn lamp_scene(strategy: u32, decoy: bool) -> TestScene {
     let mut quads: Vec<GpuQuad> = cube(ALPHA_OPAQUE).to_vec();
     let mut lamp = quad(
-        v3(7.0, 4.0, 7.0),
+        v3(0.0, 0.0, 0.0),
         v3(0.0, 0.0, 1.0),
         v3(1.0, 0.0, 0.0),
         ALPHA_OPAQUE,
     );
-    lamp.ev[3] = 1.0; // visible emission
-    lamp.uvt[3] = 2.0; // light radiance scale
-    // Emitter-table entry 0 when sampled: pick 1, 2×1 cells with shares 0.25, 0.75.
-    lamp.uvt[2] = f32::from_bits(if nee { 1 } else { 0 });
+    lamp.ev[3] = LAMP_EMITTANCE;
     quads.push(lamp);
+    let mut up = quad(
+        v3(0.0, 0.0, 0.0),
+        v3(1.0, 0.0, 0.0),
+        v3(0.0, 0.0, 1.0),
+        ALPHA_OPAQUE,
+    );
+    up.ev[3] = LAMP_EMITTANCE;
+    quads.push(up);
     // White texels only: the second atlas texel is transparent.
     for q in &mut quads {
         q.uv[2] = 1.0;
     }
-    let models = vec![
-        GpuModel::default(),
-        GpuModel {
-            quad_offset: 0,
-            quad_count: 6,
-            flags: 0,
-            _pad: 0,
-        },
-    ];
+    let model = |quad_offset| GpuModel {
+        quad_offset,
+        quad_count: if quad_offset == 0 { 6 } else { 1 },
+        flags: 0,
+        _pad: 0,
+    };
+    let models = vec![GpuModel::default(), model(0), model(6), model(7)];
     let mut brick = vec![0u32; BRICK_WORDS as usize];
+    let mut put = |x: usize, y: usize, z: usize, m: u32| {
+        let local = (y * 16 + z) * 16 + x;
+        brick[local >> 1] |= m << ((local & 1) * 16);
+    };
     for z in 0..16usize {
         for x in 0..16usize {
-            let local = z * 16 + x;
-            brick[local >> 1] |= 1 << ((local & 1) * 16);
-        }
-    }
-    let mut ov_cells = vec![0u32; OV_CELL_WORDS as usize];
-    let mut ov_quads = Vec::new();
-    for y in 3..=4usize {
-        for z in 6..=8usize {
-            for x in 6..=8usize {
-                let cell = (y * 16 + z) * 16 + x;
-                ov_cells[cell * 2] = ov_quads.len() as u32;
-                ov_cells[cell * 2 + 1] = 1;
-                ov_quads.push(6u32);
+            if !(decoy && x == 2 && z == 2) {
+                put(x, 0, z, 1);
             }
         }
+    }
+    put(7, 4, 7, 2);
+    if decoy {
+        put(2, 0, 2, 3);
     }
     let mut grid = vec![0u32]; // top: brick 0
     let off_bricks = grid.len() as u32;
     grid.append(&mut brick);
     let off_ov_top = grid.len() as u32;
-    grid.push(0);
+    grid.push(EMPTY);
     let off_ov_cells = grid.len() as u32;
-    grid.append(&mut ov_cells);
     let off_ov_quads = grid.len() as u32;
-    grid.append(&mut ov_quads);
     grid.push(0);
+    let mut emitters = vec![GpuEmitter {
+        pos: [7.0, 4.0, 7.0, f32::from_bits(6)],
+        faces: [1, 0, 0, 0],
+    }];
+    if decoy {
+        emitters.push(GpuEmitter {
+            pos: [2.0, 0.0, 2.0, f32::from_bits(7)],
+            faces: [1, 0, 0, 0],
+        });
+    }
+    let mut emitter_grid = vec![16, 1, 1, 1, 0, 0, 0, 0];
+    emitter_grid.extend([0, emitters.len() as u32]);
+    emitter_grid.extend(0..emitters.len() as u32);
     let mut params = Params::default();
     params.grid_dims = [1, 1, 1, 1];
     params.off = [0, off_bricks, off_ov_top, off_ov_cells];
     params.off2 = [off_ov_quads, 2, 1, quads.len() as u32];
-    params.misc_f = [1.0, 1e-3, 0.0, 1.0];
-    params.misc_u = [7, 1, 2, if nee { 1 } else { 0 }];
+    params.misc_f = [LAMP_INTENSITY, 1e-3, 0.0, 0.0];
+    params.misc_u = [7, 1, 4, emitters.len() as u32];
+    params.emitter = [strategy, 0, 0, 0];
     params.frame = [8, 8, 0, 3];
-    params.cam_pos = [2.5, 7.0, 2.5, 0.8];
-    let fwd = v3(1.0, -1.2, 1.0).normalize();
-    let right = v3(1.0, 0.0, -1.0).normalize();
-    let up = right.cross(fwd);
-    params.cam_fwd = [fwd.x, fwd.y, fwd.z, 1.0];
-    params.cam_right = [right.x, right.y, right.z, 0.0];
-    params.cam_up = [up.x, up.y, up.z, 0.0];
     params.sun_dir = [0.0, -1.0, 0.0, 1.0];
     TestScene {
         params,
@@ -359,62 +380,108 @@ fn lamp_scene(nee: bool) -> TestScene {
         models,
         quads,
         atlas: vec![0xFFFF_FFFF, 0x0000_0000],
-        lights: vec![crate::scene::GpuLight {
-            pos: [0.0, 0.0, 0.0, f32::from_bits(6)],
-            cdf: [1.0, 0.0, 0.0, 0.0],
-        }],
-        emitters: vec![1f32.to_bits(), 2, 1, 0, 0.25f32.to_bits(), 1f32.to_bits()],
+        emitters,
+        emitter_grid,
     }
 }
 
-/// Mean radiance over the frame and the mean per-pixel variance of one sample.
-fn frame_stats(s: &TestScene, spp: u32) -> (f64, f64) {
+/// Chunky's emitter sampling at a floor point under the lamp, averaged over many draws,
+/// against its expectation: π × intensity × emittance × ∫ |cos θ| / max(d², 1) dA over
+/// the lamp (the colour is white and nothing is in the way), integrated in `f64`.
+fn floor_emitter_light(s: &TestScene, draws: u32) -> f64 {
     let v = s.view();
-    let (mut mean, mut var) = (0.0f64, 0.0f64);
-    for y in 0..8 {
-        for x in 0..8 {
-            let (mut a, mut a2) = (0.0f64, 0.0f64);
-            for i in 0..spp {
-                let c = crate::render_sample(&v, x, y, i);
-                let l = (c.x + c.y + c.z) as f64 / 3.0;
-                a += l;
-                a2 += l * l;
-            }
-            let m = a / spp as f64;
-            mean += m;
-            var += a2 / spp as f64 - m * m;
+    let pos = v3(7.3, 1.0, 7.6);
+    let n = v3(0.0, 1.0, 0.0);
+    let mut rng = crate::rng::Rng::new(3, 0, 11);
+    let mut sum = 0.0f64;
+    for _ in 0..draws {
+        let c = crate::integrator::sample_emitters(&v, pos, pos + n * 1e-3, n, &mut rng);
+        sum += c.y as f64;
+    }
+    sum / draws as f64
+}
+
+fn floor_emitter_expectation() -> f64 {
+    let (px, py, pz) = (7.3f64, 1.001f64, 7.6f64);
+    let k = 400;
+    let mut acc = 0.0;
+    for i in 0..k {
+        for j in 0..k {
+            let (x, z) = (
+                7.0 + (i as f64 + 0.5) / k as f64,
+                7.0 + (j as f64 + 0.5) / k as f64,
+            );
+            let d = [x - px, 4.0 - py, z - pz];
+            let d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+            acc += (d[1] / d2.sqrt()) / d2.max(1.0) / (k * k) as f64;
         }
     }
-    (mean / 64.0, var / 64.0)
+    std::f64::consts::PI * LAMP_INTENSITY as f64 * LAMP_EMITTANCE as f64 * acc
 }
 
-/// Light sampling with MIS is unbiased: the frame's mean matches BSDF sampling alone
-/// (16384 spp: one standard error of the difference is about 1.3% of the mean, so the
-/// bound is three of them) while one sample's variance falls.
+/// Chunky's emitter sampling (`ONE`, `ONE_BLOCK` and `ALL` alike with one emitter of one
+/// face) converges to its expectation; with `NONE` it gives nothing. One standard error
+/// at 200 000 draws is far below the 1% bound.
 #[test]
-fn emitter_sampling_converges_to_the_same_light_with_less_noise() {
-    let (with, var_with) = frame_stats(&lamp_scene(true), 16384);
-    let (without, var_without) = frame_stats(&lamp_scene(false), 16384);
-    let rel = (with - without).abs() / without;
-    eprintln!(
-        "lamp room: mean {with:.5} with light sampling, {without:.5} without ({:.2}%); \
-         sample variance {var_with:.5} vs {var_without:.5}",
-        rel * 100.0
-    );
-    assert!(without > 0.005, "the lamp lights the floor: {without}");
-    assert!(
-        rel < 0.04,
-        "light sampling changes the mean by {:.2}%",
-        rel * 100.0
-    );
-    assert!(
-        var_with < var_without * 0.5,
-        "light sampling should at least halve the variance: {var_with} vs {var_without}"
+fn emitter_sampling_is_chunkys_estimate() {
+    let want = floor_emitter_expectation();
+    for strategy in [
+        EMITTER_SAMPLING_ONE,
+        EMITTER_SAMPLING_ONE_BLOCK,
+        EMITTER_SAMPLING_ALL,
+    ] {
+        let got = floor_emitter_light(&lamp_scene(strategy, false), 200_000);
+        eprintln!("emitter sampling {strategy}: {got:.5} against {want:.5}");
+        assert!(
+            ((got - want) / want).abs() < 0.01,
+            "{strategy}: {got} vs {want}"
+        );
+    }
+    assert_eq!(
+        floor_emitter_light(&lamp_scene(EMITTER_SAMPLING_NONE, false), 1000),
+        0.0
     );
 }
 
-/// `sin_cos_turns` is within `MAX_TURN_ERROR` of `f64` sine and cosine on every `u = i/2^20`
-/// in `[0, 1)` (the range the samplers use), and on a spread of turns outside it.
+/// Chunky picks one emitter of the cell uniformly and does not divide by the pick's
+/// probability (`Grid.sampleEmitterPosition`), so an emitter the floor cannot see in the
+/// same cell halves the light `ONE` brings, and `ALL` averages over the cell alike.
+#[test]
+fn an_unseen_emitter_in_the_cell_halves_the_sampled_light() {
+    let want = floor_emitter_expectation() / 2.0;
+    for strategy in [EMITTER_SAMPLING_ONE, EMITTER_SAMPLING_ALL] {
+        let got = floor_emitter_light(&lamp_scene(strategy, true), 200_000);
+        eprintln!("with a decoy, emitter sampling {strategy}: {got:.5} against {want:.5}");
+        assert!(
+            ((got - want) / want).abs() < 0.02,
+            "{strategy}: {got} vs {want}"
+        );
+    }
+}
+
+/// A camera ray that meets an emitter sees its texel colour squared times its emittance
+/// times the emitter intensity (Chunky's quadratic emitter mapping). With one bounce the
+/// path ends at the next surface, which adds nothing (Chunky's ray depth), and an
+/// emitter is not lit by emitter sampling, so the lamp's emitted light is all there is.
+#[test]
+fn an_emitter_seen_from_the_camera_shows_its_emitted_light() {
+    let mut s = lamp_scene(EMITTER_SAMPLING_ONE, false);
+    s.params.frame = [1, 1, 0, 1];
+    s.params.cam_pos = [7.5, 2.0, 7.5, 0.01];
+    s.params.cam_fwd = [0.0, 1.0, 0.0, 1.0];
+    s.params.cam_right = [1.0, 0.0, 0.0, 0.0];
+    s.params.cam_up = [0.0, 0.0, -1.0, 0.0];
+    let v = s.view();
+    let want = LAMP_EMITTANCE * LAMP_INTENSITY;
+    for i in 0..16 {
+        let c = crate::render_sample(&v, 0, 0, i);
+        assert!(
+            (c.x - want).abs() < 1e-4 && (c.y - want).abs() < 1e-4,
+            "{c:?}"
+        );
+    }
+}
+
 #[test]
 fn sin_cos_turns_is_within_its_bound_of_f64() {
     use crate::math::{MAX_TURN_ERROR, sin_cos_turns};
@@ -441,4 +508,179 @@ fn sin_cos_turns_is_within_its_bound_of_f64() {
     assert_eq!(sin_cos_turns(0.25), (1.0, -0.0));
     assert_eq!(sin_cos_turns(0.5), (-0.0, -1.0));
     assert_eq!(sin_cos_turns(0.75), (-1.0, 0.0));
+}
+
+#[test]
+fn ln_and_gamma_decoding_are_within_their_bounds_of_f64() {
+    use crate::math::{GAMMA, MAX_GAMMA_ERROR, MAX_LN_ERROR, gamma_to_linear, ln};
+    let mut worst_ln = 0.0f64;
+    let mut n = 0;
+    for i in 0..1u32 << 20 {
+        let x = (1.0 / 255.0) + (1.0 - 1.0 / 255.0) * i as f32 / ((1u32 << 20) - 1) as f32;
+        worst_ln = worst_ln.max((ln(x) as f64 - (x as f64).ln()).abs());
+        n += 1;
+    }
+    // Every byte value a texel channel can hold, as relative error of the decoded value.
+    let mut worst_gamma = 0.0f64;
+    for k in 1..=255u32 {
+        let c = k as f32 / 255.0;
+        let exact = (c as f64).powf(GAMMA as f64);
+        worst_gamma = worst_gamma.max(((gamma_to_linear(c) as f64 - exact) / exact).abs());
+    }
+    eprintln!(
+        "ln: worst absolute error {worst_ln:.3e} over {n} values; gamma decoding: worst relative \
+         error {worst_gamma:.3e} over 255 byte values"
+    );
+    assert_eq!(n, 1 << 20);
+    assert!(worst_ln <= MAX_LN_ERROR as f64, "{worst_ln:.3e}");
+    assert!(worst_gamma <= MAX_GAMMA_ERROR as f64, "{worst_gamma:.3e}");
+    assert_eq!(gamma_to_linear(0.0), 0.0);
+    assert_eq!(gamma_to_linear(1.0), 1.0);
+}
+
+#[test]
+fn acos_is_within_its_bound_of_f64() {
+    use crate::math::{MAX_ACOS_ERROR, acos};
+    let mut worst = 0.0f64;
+    let mut n = 0;
+    for i in 0..=1u32 << 20 {
+        let x = -1.0 + 2.0 * i as f32 / (1u32 << 20) as f32;
+        worst = worst.max((acos(x) as f64 - (x as f64).acos()).abs());
+        n += 1;
+    }
+    eprintln!("acos: worst absolute error {worst:.3e} over {n} values");
+    assert_eq!(n, (1 << 20) + 1);
+    assert!(worst <= MAX_ACOS_ERROR as f64, "{worst:.3e}");
+}
+
+/// `lumenwright::render::sky::Preetham::new` for a sun at altitude 45 degrees: the zenith
+/// x, y and Y times their normalisation.
+const PREETHAM_45_ZENITH: [f32; 4] = [0.296_242_06, 0.307_511_93, 8.306_274, 0.0];
+/// The Perez coefficients A to E for x, y and Y at turbidity 2.5 (Chunky's `PreethamSky`).
+const PREETHAM_PEREZ: [[f32; 4]; 5] = [
+    [-0.307_45, -0.302_55, -1.016_25, 0.0],
+    [-0.165_45, -0.228_3, -0.461, 0.0],
+    [0.211_5, 0.190_45, 5.268_35, 0.0],
+    [-1.059_15, -1.763_95, -2.275_6, 0.0],
+    [0.036_95, 0.025_65, 0.202_8, 0.0],
+];
+
+/// A ray that crosses some 250 cells before it meets a front-only face at its cell's
+/// entry still meets it: the traversal's cell boundaries must not drift past the margin
+/// of the range each cell tests its quads in. Every brick holds a block, so the ray
+/// steps cell by cell all the way.
+#[test]
+fn a_front_face_far_along_the_ray_is_met() {
+    let quads: Vec<GpuQuad> = cube(ALPHA_OPAQUE | FLAG_FRONT_ONLY).to_vec();
+    let models = vec![
+        GpuModel::default(),
+        GpuModel {
+            quad_offset: 0,
+            quad_count: 6,
+            flags: 0,
+            _pad: 0,
+        },
+    ];
+    // 16 × 1 × 1 bricks. Bricks 0 to 14 hold one cube in a corner no ray passes; brick
+    // 15 holds a wall of cubes at x = 250, y and z 0..16.
+    let nb = 16u32;
+    let mut top = vec![0u32; nb as usize];
+    top[15] = 1;
+    let mut stray = vec![0u32; BRICK_WORDS as usize];
+    let corner = (15 * 16 + 15) * 16;
+    stray[corner >> 1] |= 1 << ((corner & 1) * 16);
+    let mut wall = vec![0u32; BRICK_WORDS as usize];
+    for y in 0..16usize {
+        for z in 0..16usize {
+            let local = (y * 16 + z) * 16 + (250 - 240);
+            wall[local >> 1] |= 1 << ((local & 1) * 16);
+        }
+    }
+    let mut grid = top;
+    let off_bricks = grid.len() as u32;
+    grid.append(&mut stray);
+    grid.append(&mut wall);
+    let off_ov_top = grid.len() as u32;
+    grid.extend(vec![EMPTY; nb as usize]);
+    let off_ov_cells = grid.len() as u32;
+    grid.push(0);
+    let mut params = Params::default();
+    params.grid_dims = [16, 1, 1, nb];
+    params.off = [0, off_bricks, off_ov_top, off_ov_cells];
+    params.off2 = [off_ov_cells, 2, 1, quads.len() as u32];
+    let s = TestScene {
+        params,
+        grid,
+        models,
+        quads,
+        atlas: vec![0xFFFF_FFFF, 0x0000_0000],
+        emitters: vec![GpuEmitter::default()],
+        emitter_grid: vec![0; EMITTER_GRID_HEADER as usize],
+    };
+    let v = s.view();
+    let mut missed = 0;
+    let mut n = 0;
+    for i in 0..64 {
+        for j in 0..64 {
+            let o = v3(
+                0.137 + i as f32 * 0.0131,
+                1.1 + i as f32 * 0.03,
+                1.3 + j as f32 * 0.05,
+            );
+            let d = v3(
+                1.0,
+                0.04 + 0.002 * (j as f32 - 32.0) / 32.0,
+                0.03 + 0.002 * (i as f32 - 32.0) / 32.0,
+            )
+            .normalize();
+            match trace(&v, o, d, 0.0, f32::INFINITY) {
+                Some(h) if (o + d * h.t).x > 249.99 && (o + d * h.t).x < 250.01 => {}
+                _ => missed += 1,
+            }
+            n += 1;
+        }
+    }
+    assert_eq!(n, 4096);
+    assert_eq!(
+        missed, 0,
+        "{missed} of {n} rays missed the wall 250 blocks away"
+    );
+}
+
+/// Of two coplanar quads of a model, the later one is met (a grass block's tinted side
+/// overlay over its side), whichever way the ray comes.
+#[test]
+fn a_later_coplanar_quad_is_met() {
+    let mut s = TestScene::new(false);
+    // Model 1 is the cube's six faces at quads 0..6; add copies of its up and north
+    // faces at 6 and 7.
+    let (up, north) = (s.quads[4], s.quads[0]);
+    s.quads.push(up);
+    s.quads.push(north);
+    s.models[1].quad_count = 8;
+    s.params.off2[3] = s.quads.len() as u32;
+    let v = s.view();
+    // The cube is at brick 1, local (4, 5, 5): grid (20, 5, 5).
+    let mut n = 0;
+    for i in 0..16 {
+        let f = 0.1 + 0.7 * (i as f32 + 0.5) / 16.0;
+        let down = trace(
+            &v,
+            v3(20.0 + f, 9.0, 5.0 + f),
+            v3(0.01, -1.0, 0.02).normalize(),
+            0.0,
+            100.0,
+        );
+        assert_eq!(down.map(|h| h.quad), Some(6), "from above at {f}");
+        let south = trace(
+            &v,
+            v3(20.0 + f, 5.0 + f, 1.0),
+            v3(0.02, 0.01, 1.0).normalize(),
+            0.0,
+            100.0,
+        );
+        assert_eq!(south.map(|h| h.quad), Some(7), "from the north at {f}");
+        n += 2;
+    }
+    assert_eq!(n, 32);
 }

@@ -1077,9 +1077,10 @@ pub fn build_quads(scene: &mut Scene, models: &BlockEntityModels, plan: &BlockEn
                         alpha: Alpha::Cutout,
                         water: false,
                         shade: false,
-                        // HQ: glowing text gives off about its own albedo under the
-                        // default emitter strength, so it reads as lit, not as a lamp.
-                        emission: if *full_bright { 0.2 } else { 0.0 },
+                        emission: 0.0,
+                        // Chunky's glowing sign text emits nothing: it is drawn in the
+                        // brighter glowing dye colours.
+                        emittance: 0.0,
                         cullface: None,
                         ao: false,
                     });

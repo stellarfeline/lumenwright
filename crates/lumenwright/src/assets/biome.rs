@@ -45,7 +45,10 @@ const fn bw(t: f32, d: f32, water: u32) -> BiomeInfo {
 }
 
 /// The vanilla values for a biome id, with or without the `minecraft:`
-/// namespace. An unknown biome gets the plains climate.
+/// namespace. An unknown biome (a data pack's, say) gets Chunky's unknown biome's
+/// climate, temperature 0.5 and downfall 0.5 (GPL-3.0, `Biomes.unknown` at
+/// chunky-dev/chunky 156e2bb), whose grass and foliage Chunky takes from the colormaps
+/// as it does every biome's.
 pub fn biome_info(name: &str) -> BiomeInfo {
     let n = name.strip_prefix("minecraft:").unwrap_or(name);
     match n {
@@ -108,7 +111,7 @@ pub fn biome_info(name: &str) -> BiomeInfo {
         "dripstone_caves" | "deep_dark" => b(0.8, 0.4),
         "nether_wastes" | "soul_sand_valley" | "crimson_forest" | "warped_forest"
         | "basalt_deltas" => b(2.0, 0.0),
-        _ => b(0.8, 0.4),
+        _ => b(0.5, 0.5),
     }
 }
 

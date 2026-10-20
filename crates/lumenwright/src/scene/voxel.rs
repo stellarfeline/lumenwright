@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use glam::Vec3;
 use lumenwright_kernel::scene::{
-    ALPHA_CUTOUT, ALPHA_TRANSLUCENT, BRICK_WORDS, EMPTY, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY,
-    GpuLight, GpuModel, GpuQuad, OV_CELL_WORDS, UNIFORM, unpack_rgba,
+    BRICK_WORDS, EMITTER_GRID_HEADER, EMPTY, FLAG_FRONT_ONLY, GpuEmitter, GpuModel, GpuQuad,
+    OV_CELL_WORDS, UNIFORM,
 };
 use rayon::prelude::*;
 
@@ -35,14 +35,13 @@ pub struct HqScene {
     pub offsets: [u32; 5],
     /// First index and count of the see-through quads in `quads`.
     pub see_through: [u32; 2],
-    /// The light list: one entry per instance of a light-casting quad. Never empty
-    /// (one unused entry when there are no lights); `light_count` says how many count.
-    pub lights: Vec<GpuLight>,
-    /// Number of lights in `lights`.
-    pub light_count: u32,
-    /// The emitter table: per light quad, its pick probability and the cumulative
-    /// shares of its texel cells (layout in `lumenwright_kernel::scene::SceneView`).
-    pub emitters: Vec<u32>,
+    /// The emitters: one entry per block whose material emits. Never empty (one unused
+    /// entry when there are none); `emitter_count` says how many count.
+    pub emitters: Vec<GpuEmitter>,
+    /// Number of emitters in `emitters`.
+    pub emitter_count: u32,
+    /// The emitter grid (layout in `lumenwright_kernel::scene::SceneView`).
+    pub emitter_grid: Vec<u32>,
     /// What the grid holds, for logging.
     pub stats: HqStats,
 }
@@ -63,8 +62,8 @@ pub struct HqStats {
     pub overlay_bricks: usize,
     /// Entity and block-entity quads.
     pub entity_quads: usize,
-    /// Instances of light-casting quads in the light list.
-    pub lights: usize,
+    /// Emitting blocks in the emitter list.
+    pub emitters: usize,
 }
 
 /// Identifies one block model instance: everything that changes its quads.
@@ -92,8 +91,8 @@ impl HqScene {
             + self.models.len() * 16
             + self.quads.len() * 80
             + self.atlas.len() * 4
-            + self.lights.len() * 32
-            + self.emitters.len() * 4
+            + self.emitters.len() * 32
+            + self.emitter_grid.len() * 4
     }
 }
 
@@ -266,10 +265,10 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
     let mut bricks: Vec<u32> = Vec::new();
     let mut scratch = Vec::new();
     let mut quad_buf = Vec::new();
-    // Per model id: its light-casting quads (index, cullface).
-    let mut model_lights: Vec<Vec<(u32, Option<Dir>)>> = vec![Vec::new()];
-    // (voxel corner in grid space, quad index), in brick then voxel order.
-    let mut light_sites: Vec<([f32; 3], u32)> = Vec::new();
+    // Per model id: whether its block's material emits.
+    let mut model_emits: Vec<bool> = vec![false];
+    // (voxel corner in grid space, model id), in brick then voxel order.
+    let mut emitter_sites: Vec<([i32; 3], u32)> = Vec::new();
     for (bi, sk) in keyed.into_iter().enumerate() {
         let Some(sk) = sk else { continue };
         if sk.keys.is_empty() {
@@ -284,7 +283,7 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
                         scene,
                         &mut models,
                         &mut quads,
-                        &mut model_lights,
+                        &mut model_emits,
                         *pos,
                         key.state,
                         key.cull,
@@ -309,36 +308,16 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
                 let o = d.offset();
                 brick_index([bx + o[0], by + o[1], bz + o[2]]).is_some_and(|n| all_occluding[n])
             });
-        if !buried {
-            let base = [
-                (v.min_chunk[0] + bx) * 16,
-                (v.min_section + by) * 16,
-                (v.min_chunk[1] + bz) * 16,
-            ];
-            for (local, &id) in ids.iter().enumerate() {
-                let ml = &model_lights[id as usize];
-                if ml.is_empty() {
-                    continue;
-                }
+        // Every emitting block is an emitter, buried or not, as Chunky adds every
+        // block whose material emits to its grid.
+        for (local, &id) in ids.iter().enumerate() {
+            if model_emits[id as usize] {
                 let (lx, ly, lz) = (
                     local as i32 & 15,
                     local as i32 >> 8,
                     (local as i32 >> 4) & 15,
                 );
-                let world = [base[0] + lx, base[1] + ly, base[2] + lz];
-                let state = scene.volume.block(world[0], world[1], world[2]);
-                let corner = [
-                    (bx * 16 + lx) as f32,
-                    (by * 16 + ly) as f32,
-                    (bz * 16 + lz) as f32,
-                ];
-                for &(qi, cullface) in ml {
-                    // A face against an occluding neighbour casts no light anyone sees.
-                    if cullface.is_some_and(|d| scene.face_culled(state, world, d)) {
-                        continue;
-                    }
-                    light_sites.push((corner, qi));
-                }
+                emitter_sites.push(([bx * 16 + lx, by * 16 + ly, bz * 16 + lz], id as u32));
             }
         }
         if buried {
@@ -449,13 +428,21 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
     stats.overlay_bricks = ov_cells.len() / OV_CELL_WORDS as usize;
     stats.entity_quads = overlay.len();
 
-    let (lights, light_count, emitters) = light_list(
-        &mut quads,
-        &scene.atlas.pixels,
-        scene.atlas.width,
-        &light_sites,
-    );
-    stats.lights = light_count as usize;
+    let (emitters, emitter_grid) = emitter_list(&models, &emitter_sites);
+    stats.emitters = emitter_sites.len();
+    if log::log_enabled!(log::Level::Info) && !emitter_sites.is_empty() {
+        let mut by_name: std::collections::BTreeMap<&str, usize> = Default::default();
+        for &([x, y, z], _) in &emitter_sites {
+            let w = [
+                x + v.min_chunk[0] * 16,
+                y + v.min_section * 16,
+                z + v.min_chunk[1] * 16,
+            ];
+            let state = scene.registry.state(scene.volume.block(w[0], w[1], w[2]));
+            *by_name.entry(state.short_name()).or_default() += 1;
+        }
+        log::info!("emitters: {by_name:?}");
+    }
 
     let mut grid =
         Vec::with_capacity(top.len() * 2 + bricks.len() + ov_cells.len() + ov_quads.len() + 1);
@@ -483,9 +470,9 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
         dims,
         offsets: [off_top, off_bricks, off_ov_top, off_ov_cells, off_ov_quads],
         see_through,
-        lights,
-        light_count,
+        emitter_count: emitter_sites.len() as u32,
         emitters,
+        emitter_grid,
         stats,
     };
     log::info!(
@@ -502,7 +489,7 @@ fn add_instance(
     scene: &Scene,
     models: &mut Vec<GpuModel>,
     quads: &mut Vec<GpuQuad>,
-    model_lights: &mut Vec<Vec<(u32, Option<Dir>)>>,
+    model_emits: &mut Vec<bool>,
     pos: [i32; 3],
     id: StateId,
     cull: u8,
@@ -512,35 +499,19 @@ fn add_instance(
     buf.clear();
     scene.block_quads(pos, id, &|d| cull & dir_bit(d) != 0, scratch, buf);
     let offset = quads.len() as u32;
-    quads.extend(buf.iter().map(|q| q.to_gpu()));
-    // The block's light level decides what its glowing quads cast.
-    let level = scene.blocks[id as usize].emission;
-    let mut lit = Vec::new();
-    if level > 0 {
-        let glowing: Vec<usize> = (0..buf.len()).filter(|&i| buf[i].emission > 0.0).collect();
-        for &i in &glowing {
-            let q = &mut quads[offset as usize + i];
-            *q = trim_to_opaque(q, &scene.atlas.pixels, scene.atlas.width);
+    // A block model's faces are met from the front only, as Chunky's block models are
+    // (`Quad.intersect` is one-sided; `AABB.intersect` meets the face a ray enters by):
+    // a ray through a hole in a leaf face goes on into the next block instead of meeting
+    // the far face of the same block from behind. Water surfaces stay two-sided (the
+    // kernel refracts out of the water through them).
+    quads.extend(buf.iter().map(|q| {
+        let mut g = q.to_gpu();
+        if !q.water {
+            g.p0[3] = f32::from_bits(g.p0[3].to_bits() | FLAG_FRONT_ONLY);
         }
-        let power: Vec<f32> = glowing
-            .iter()
-            .map(|&i| {
-                unit_power(
-                    &quads[offset as usize + i],
-                    &scene.atlas.pixels,
-                    scene.atlas.width,
-                )
-            })
-            .collect();
-        let scale = light_scale(level, power.iter().sum());
-        for (&i, &p) in glowing.iter().zip(&power) {
-            if p > 0.0 && scale > 0.0 {
-                quads[offset as usize + i].uvt[3] = scale;
-                lit.push((offset + i as u32, buf[i].cullface));
-            }
-        }
-    }
-    model_lights.push(lit);
+        g
+    }));
+    model_emits.push(!buf.is_empty() && scene.blocks[id as usize].emittance > 0.0);
     models.push(GpuModel {
         quad_offset: offset,
         quad_count: buf.len() as u32,
@@ -550,224 +521,145 @@ fn add_instance(
     (models.len() - 1) as u32
 }
 
-/// The most texel cells an emitter-table entry divides a quad into along each edge.
-const MAX_CELLS: u32 = 64;
+/// The edge of an emitter-grid cell in blocks: Chunky's default (`PersistentSettings.
+/// getGridSizeDefault`, chunky-dev/chunky 156e2bb).
+pub const EMITTER_CELL: i32 = 10;
 
-/// The light-sampling weight of each texel cell of a quad, row by row along `s`, and
-/// the cell counts `(ns, nt)`: one cell per texel along each edge (at most
-/// [`MAX_CELLS`]), weighted by the luminance of the squared linear colour of the
-/// texel at its centre (the kernel's emitter mapping) times its coverage.
-fn cell_weights(q: &GpuQuad, atlas: &[u32], atlas_w: u32) -> (Vec<f32>, u32, u32) {
-    let h = (atlas.len() as u32 / atlas_w.max(1)) as i32;
-    let ns = (q.uv[2].abs() + q.uv[3].abs())
-        .round()
-        .clamp(1.0, MAX_CELLS as f32) as u32;
-    let nt = (q.uvt[0].abs() + q.uvt[1].abs())
-        .round()
-        .clamp(1.0, MAX_CELLS as f32) as u32;
-    let tint = linear(q.tint());
-    let mode = q.flags() & FLAG_ALPHA_MASK;
-    let mut w = Vec::with_capacity((ns * nt) as usize);
-    for j in 0..nt {
-        for i in 0..ns {
-            let s = ((i as f32 + 0.5) / ns as f32).clamp(0.0005, 0.9995);
-            let t = ((j as f32 + 0.5) / nt as f32).clamp(0.0005, 0.9995);
-            let u = q.uv[0] + s * q.uv[2] + t * q.uvt[0];
-            let v = q.uv[1] + s * q.uv[3] + t * q.uvt[1];
-            let x = (u.floor() as i32).clamp(0, atlas_w as i32 - 1);
-            let y = (v.floor() as i32).clamp(0, h - 1);
-            let texel = atlas[(y * atlas_w as i32 + x) as usize];
-            let cover = match mode {
-                ALPHA_CUTOUT if texel >> 24 < 128 => 0.0,
-                ALPHA_CUTOUT => 1.0,
-                ALPHA_TRANSLUCENT => (texel >> 24) as f32 / 255.0,
-                _ => 1.0,
-            };
-            let c = linear(texel);
-            let e = [c[0] * tint[0], c[1] * tint[1], c[2] * tint[2]];
-            w.push((0.2126 * e[0] * e[0] + 0.7152 * e[1] * e[1] + 0.0722 * e[2] * e[2]) * cover);
-        }
+/// The emitter list and the emitter grid (layouts in `lumenwright_kernel::scene`) from
+/// (voxel corner in grid space, model id) sites: Chunky's `Grid.addEmitter` and
+/// `Grid.prepare` (GPL-3.0, chunky-dev/chunky 156e2bb). Cells of [`EMITTER_CELL`]
+/// blocks span the emitters' cells and one more on each side; each emitter is listed
+/// in its own cell and in its 26 neighbours. An emitter's faces are its block model's
+/// quads. Chunky's cells start at its octree origin, the loaded chunks' smallest
+/// corner with the height rounded down to a multiple of 16; these start at the grid
+/// origin, the same point when the scene's lowest height is the world's.
+fn emitter_list(models: &[GpuModel], sites: &[([i32; 3], u32)]) -> (Vec<GpuEmitter>, Vec<u32>) {
+    if sites.is_empty() {
+        let mut grid = vec![0u32; EMITTER_GRID_HEADER as usize];
+        grid[0] = EMITTER_CELL as u32;
+        return (vec![GpuEmitter::default()], grid);
     }
-    (w, ns, nt)
-}
-
-/// The radiant power a quad emits for a unit radiance scale: π × area × the mean of
-/// its [`cell_weights`].
-fn unit_power(q: &GpuQuad, atlas: &[u32], atlas_w: u32) -> f32 {
-    let (w, _, _) = cell_weights(q, atlas, atlas_w);
-    let mean = w.iter().map(|&x| x as f64).sum::<f64>() / w.len() as f64;
-    std::f32::consts::PI * q.normal().length() * mean as f32
-}
-
-/// The kernel's sRGB -> linear polynomial, per channel.
-fn linear(c: u32) -> [f32; 3] {
-    let c = unpack_rgba(c);
-    let f = lumenwright_kernel::math::srgb_to_linear;
-    [f(c[0]), f(c[1]), f(c[2])]
-}
-
-/// Builds the light list and the emitter table (layouts in `lumenwright_kernel::scene`)
-/// from (voxel corner, quad) sites. Each light is picked with probability proportional
-/// to its power, and a point on it by its texel cells' shares of that power; each
-/// light quad records its table entry ([`GpuQuad::emitter`]) for the kernel's MIS weights.
-fn light_list(
-    quads: &mut [GpuQuad],
-    atlas: &[u32],
-    atlas_w: u32,
-    sites: &[([f32; 3], u32)],
-) -> (Vec<GpuLight>, u32, Vec<u32>) {
-    let mut power_of: std::collections::BTreeMap<u32, f64> = std::collections::BTreeMap::new();
-    let mut total = 0.0f64;
-    for &(_, qi) in sites {
-        let q = &quads[qi as usize];
-        let p = *power_of
-            .entry(qi)
-            .or_insert_with(|| (unit_power(q, atlas, atlas_w) * q.light_scale()) as f64);
-        total += p;
-    }
-    if sites.is_empty() || total <= 0.0 {
-        return (vec![GpuLight::default()], 0, vec![0; 4]);
-    }
-    let mut table: Vec<u32> = Vec::new();
-    for (&qi, &p) in &power_of {
-        let q = &mut quads[qi as usize];
-        let (w, ns, nt) = cell_weights(q, atlas, atlas_w);
-        let sum: f64 = w.iter().map(|&x| x as f64).sum();
-        if sum <= 0.0 {
-            continue;
-        }
-        q.uvt[2] = f32::from_bits(table.len() as u32 + 1);
-        table.extend([((p / total) as f32).to_bits(), ns, nt, 0]);
-        let mut acc = 0.0f64;
-        let n = w.len();
-        for (k, &x) in w.iter().enumerate() {
-            acc += x as f64;
-            let c = if k + 1 == n { 1.0 } else { (acc / sum) as f32 };
-            table.push(c.to_bits());
-        }
-    }
-    let mut acc = 0.0f64;
-    let mut lights: Vec<GpuLight> = sites
+    let emitters: Vec<GpuEmitter> = sites
         .iter()
-        .map(|&(c, qi)| {
-            acc += power_of[&qi];
-            GpuLight {
-                pos: [c[0], c[1], c[2], f32::from_bits(qi)],
-                cdf: [(acc / total) as f32, 0.0, 0.0, 0.0],
+        .map(|&(c, m)| {
+            let model = models[m as usize];
+            GpuEmitter {
+                pos: [
+                    c[0] as f32,
+                    c[1] as f32,
+                    c[2] as f32,
+                    f32::from_bits(model.quad_offset),
+                ],
+                faces: [model.quad_count, 0, 0, 0],
             }
         })
         .collect();
-    if let Some(last) = lights.last_mut() {
-        last.cdf[0] = 1.0;
+    let cell_of = |c: [i32; 3]| c.map(|v| v.div_euclid(EMITTER_CELL));
+    let (mut lo, mut hi) = ([i32::MAX; 3], [i32::MIN; 3]);
+    for &(c, _) in sites {
+        let g = cell_of(c);
+        for a in 0..3 {
+            lo[a] = lo[a].min(g[a]);
+            hi[a] = hi[a].max(g[a]);
+        }
     }
-    let n = lights.len() as u32;
-    (lights, n, table)
-}
-
-/// Radiant power of a light-level-15 block, in the kernel's units (the sun's
-/// irradiance is `sun_color`). Calibrated by `emitter_calibration` in
-/// `lumenwright-cli/tests/render.rs` (its best fit was 9.19 × 64 ≈ 588 on the CPU at
-/// 256 spp); see docs/research/emitters.md.
-pub const LEVEL_15_POWER: f32 = 600.0;
-
-/// The radiant power of a block of light level `level`: `LEVEL_15_POWER × (level/15)²`.
-/// Under inverse-square falloff the distance at which a light's irradiance falls to
-/// a given value grows with the square root of its power, so this makes a block's
-/// reach proportional to its level, as the game's light does (one level per block).
-pub fn block_light_power(level: u8) -> f32 {
-    let f = level as f32 / 15.0;
-    LEVEL_15_POWER * f * f
-}
-
-/// The emitted radiance scale of a block's glowing quads: the scale at which their
-/// total power is [`block_light_power`] of the block's level, whatever its shape.
-fn light_scale(level: u8, unit_power: f32) -> f32 {
-    if unit_power <= 0.0 {
-        return 0.0;
-    }
-    block_light_power(level) / unit_power
-}
-
-/// A cutout quad cut down to the smallest rectangle of whole texels that holds every
-/// texel it draws (alpha 128 or more). It draws exactly what the quad drew, since a ray
-/// passes through every texel outside; light sampling, uniform over a light's area,
-/// then lands on texels that emit (a torch's planes are 16 × 16 texels around a 2 × 10
-/// stick). Quads of other alpha modes, and quads with no drawn texel, are returned unchanged.
-fn trim_to_opaque(q: &GpuQuad, atlas: &[u32], atlas_w: u32) -> GpuQuad {
-    if q.flags() & FLAG_ALPHA_MASK != ALPHA_CUTOUT {
-        return *q;
-    }
-    let h = (atlas.len() as u32 / atlas_w.max(1)) as i32;
-    // Texels along each edge (atlas UVs are axis-aligned, so one of each pair is 0).
-    let ns = (q.uv[2].abs() + q.uv[3].abs()).round().max(1.0) as u32;
-    let nt = (q.uvt[0].abs() + q.uvt[1].abs()).round().max(1.0) as u32;
-    let (mut i0, mut i1, mut j0, mut j1) = (u32::MAX, 0u32, u32::MAX, 0u32);
-    for j in 0..nt {
-        for i in 0..ns {
-            let s = (i as f32 + 0.5) / ns as f32;
-            let t = (j as f32 + 0.5) / nt as f32;
-            let u = q.uv[0] + s * q.uv[2] + t * q.uvt[0];
-            let v = q.uv[1] + s * q.uv[3] + t * q.uvt[1];
-            let x = (u.floor() as i32).clamp(0, atlas_w as i32 - 1);
-            let y = (v.floor() as i32).clamp(0, h - 1);
-            if atlas[(y * atlas_w as i32 + x) as usize] >> 24 >= 128 {
-                (i0, i1, j0, j1) = (i0.min(i), i1.max(i), j0.min(j), j1.max(j));
+    let offset = lo.map(|v| v - 1);
+    let size: [i32; 3] = std::array::from_fn(|a| hi[a] - lo[a] + 3);
+    let index = |g: [i32; 3]| -> usize {
+        let l = [g[0] - offset[0], g[1] - offset[1], g[2] - offset[2]];
+        ((l[1] * size[2] + l[2]) * size[0] + l[0]) as usize
+    };
+    let mut cells: Vec<Vec<u32>> = vec![Vec::new(); (size[0] * size[1] * size[2]) as usize];
+    for (i, &(c, _)) in sites.iter().enumerate() {
+        let g = cell_of(c);
+        for dy in -1..=1 {
+            for dz in -1..=1 {
+                for dx in -1..=1 {
+                    cells[index([g[0] + dx, g[1] + dy, g[2] + dz])].push(i as u32);
+                }
             }
         }
     }
-    if i0 == u32::MAX {
-        return *q;
-    }
-    let (s0, s1) = (i0 as f32 / ns as f32, (i1 + 1) as f32 / ns as f32);
-    let (t0, t1) = (j0 as f32 / nt as f32, (j1 + 1) as f32 / nt as f32);
-    if s0 == 0.0 && s1 == 1.0 && t0 == 0.0 && t1 == 1.0 {
-        return *q;
-    }
-    let mut r = *q;
-    let (p0, eu, ev) = (q.origin(), q.edge_u(), q.edge_v());
-    let o = p0 + eu * s0 + ev * t0;
-    let (eu2, ev2) = (eu * (s1 - s0), ev * (t1 - t0));
-    r.p0 = [o.x, o.y, o.z, q.p0[3]];
-    r.eu = [eu2.x, eu2.y, eu2.z, q.eu[3]];
-    r.ev = [ev2.x, ev2.y, ev2.z, q.ev[3]];
-    r.uv = [
-        q.uv[0] + s0 * q.uv[2] + t0 * q.uvt[0],
-        q.uv[1] + s0 * q.uv[3] + t0 * q.uvt[1],
-        q.uv[2] * (s1 - s0),
-        q.uv[3] * (s1 - s0),
+    let mut grid = vec![
+        EMITTER_CELL as u32,
+        size[0] as u32,
+        size[1] as u32,
+        size[2] as u32,
+        offset[0] as u32,
+        offset[1] as u32,
+        offset[2] as u32,
+        0,
     ];
-    r.uvt[0] = q.uvt[0] * (t1 - t0);
-    r.uvt[1] = q.uvt[1] * (t1 - t0);
-    r
+    let mut list = Vec::new();
+    for c in &cells {
+        grid.push(list.len() as u32);
+        grid.push(c.len() as u32);
+        list.extend_from_slice(c);
+    }
+    grid.extend(list);
+    (emitters, grid)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Chunky's grid guarantee (`Grid`): from any point, every emitter less than a cell
+    /// away along each axis is a candidate, and none is two cells or more away; read
+    /// back through the kernel's own cell lookup.
     #[test]
-    fn a_cutout_quad_is_trimmed_to_the_texels_it_draws() {
-        // 4×4 atlas, opaque only at column 1, rows 1..=2.
-        let mut atlas = vec![0u32; 16];
-        atlas[4 + 1] = 0xFFFF_FFFF;
-        atlas[8 + 1] = 0xFFFF_FFFF;
-        let q = GpuQuad {
-            p0: [0.0, 1.0, 0.0, f32::from_bits(ALPHA_CUTOUT)],
-            eu: [1.0, 0.0, 0.0, f32::from_bits(0xFFFF_FFFF)],
-            ev: [0.0, -1.0, 0.0, 1.0],
-            uv: [0.0, 0.0, 4.0, 0.0],
-            uvt: [0.0, 4.0, 0.0, 0.0],
+    fn the_emitter_grid_lists_every_emitter_within_a_cell() {
+        let models = vec![
+            GpuModel::default(),
+            GpuModel {
+                quad_offset: 3,
+                quad_count: 2,
+                flags: 0,
+                _pad: 0,
+            },
+        ];
+        let sites: Vec<([i32; 3], u32)> = vec![([25, 3, 0], 1), ([4, 40, 17], 1), ([26, 3, 1], 1)];
+        let (emitters, grid) = emitter_list(&models, &sites);
+        assert_eq!(emitters.len(), 3);
+        assert_eq!(emitters[1].pos, [4.0, 40.0, 17.0, f32::from_bits(3)]);
+        assert_eq!(emitters[1].face_count(), 2);
+        let params = lumenwright_kernel::Params::default();
+        let view = lumenwright_kernel::SceneView {
+            params: &params,
+            grid: &[],
+            models: &[],
+            quads: &[],
+            atlas: &[],
+            emitters: &emitters,
+            emitter_grid: &grid,
         };
-        let r = trim_to_opaque(&q, &atlas, 4);
-        assert_eq!(r.p0[..3], [0.25, 0.75, 0.0]);
-        assert_eq!(r.eu[..3], [0.25, 0.0, 0.0]);
-        assert_eq!(r.ev[..3], [0.0, -0.5, 0.0]);
-        assert_eq!(r.uv, [1.0, 1.0, 1.0, 0.0]);
-        assert_eq!(r.uvt[..2], [0.0, 2.0]);
-        // Opaque quads are left alone.
-        let mut o = q;
-        o.p0[3] = f32::from_bits(0);
-        let same = trim_to_opaque(&o, &atlas, 4);
-        assert_eq!(bytemuck::bytes_of(&same), bytemuck::bytes_of(&o));
+        let cells = (grid[1] * grid[2] * grid[3]) as usize;
+        let list = &grid[EMITTER_GRID_HEADER as usize + cells * 2..];
+        let mut checked = 0;
+        for x in -5..50 {
+            for y in -5..60 {
+                for z in -5..40 {
+                    let p = lumenwright_kernel::math::v3(
+                        x as f32 + 0.5,
+                        y as f32 + 0.5,
+                        z as f32 + 0.5,
+                    );
+                    let (start, count) = lumenwright_kernel::integrator::emitter_cell(&view, p);
+                    let found = &list[start as usize..(start + count) as usize];
+                    for (i, &(c, _)) in sites.iter().enumerate() {
+                        let d = [x - c[0], y - c[1], z - c[2]].map(i32::abs);
+                        let listed = found.contains(&(i as u32));
+                        if d.iter().all(|&a| a < EMITTER_CELL) {
+                            assert!(listed, "emitter {i} from {x},{y},{z}");
+                        }
+                        if d.iter().any(|&a| a >= 2 * EMITTER_CELL) {
+                            assert!(!listed, "emitter {i} listed from {x},{y},{z}");
+                        }
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 55 * 65 * 45 * 3);
     }
 }
