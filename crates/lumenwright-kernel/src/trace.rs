@@ -151,7 +151,6 @@ pub fn trace(scene: &SceneView, o: V3, d: V3, tmin: f32, tmax: f32) -> Option<Hi
         (floor(start.z) as i32).clamp(0, gs[2] - 1),
     ];
     let step = [sign(d.x), sign(d.y), sign(d.z)];
-    let delta = [abs(inv.x), abs(inv.y), abs(inv.z)];
     let mut next = [0.0f32; 3];
     for a in 0..3 {
         next[a] = next_boundary(o.get(a), inv.get(a), cell[a], step[a]);
@@ -268,7 +267,12 @@ pub fn trace(scene: &SceneView, o: V3, d: V3, tmin: f32, tmax: f32) -> Option<Hi
         if cell[axis] < 0 || cell[axis] >= gs[axis] {
             break;
         }
-        next[axis] += delta[axis];
+        // The next boundary's distance is computed afresh from the cell, as Chunky's
+        // `Octree.enterBlock` computes each node's bounds: summing the step instead
+        // drifts, over a couple of hundred cells, past the 1e-4 margin of the range a
+        // cell tests its quads in, and a front face at the cell's entry was then missed
+        // (`a_front_face_far_along_the_ray_is_met`).
+        next[axis] = next_boundary(o.get(axis), inv.get(axis), cell[axis], step[axis]);
     }
     None
 }

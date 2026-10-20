@@ -228,7 +228,6 @@ fn trace(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> Hit {
         clamp(i32(floor(start.y)), 0, gs.y - 1),
         clamp(i32(floor(start.z)), 0, gs.z - 1));
     let step = vec3<i32>(sgn(d.x), sgn(d.y), sgn(d.z));
-    let delta = abs(inv);
     var next = vec3<f32>(
         next_boundary(o.x, inv.x, cell.x, step.x),
         next_boundary(o.y, inv.y, cell.y, step.y),
@@ -317,7 +316,7 @@ fn trace(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> Hit {
         if (t > t_end) { break; }
         cell[axis] += step[axis];
         if (cell[axis] < 0 || cell[axis] >= gs[axis]) { break; }
-        next[axis] += delta[axis];
+        next[axis] = next_boundary(o[axis], inv[axis], cell[axis], step[axis]);
     }
     return result;
 }

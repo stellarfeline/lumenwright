@@ -564,3 +564,85 @@ const PREETHAM_PEREZ: [[f32; 4]; 5] = [
     [-1.059_15, -1.763_95, -2.275_6, 0.0],
     [0.036_95, 0.025_65, 0.202_8, 0.0],
 ];
+
+/// A ray that crosses some 250 cells before it meets a front-only face at its cell's
+/// entry still meets it: the traversal's cell boundaries must not drift past the margin
+/// of the range each cell tests its quads in. Every brick holds a block, so the ray
+/// steps cell by cell all the way.
+#[test]
+fn a_front_face_far_along_the_ray_is_met() {
+    let quads: Vec<GpuQuad> = cube(ALPHA_OPAQUE | FLAG_FRONT_ONLY).to_vec();
+    let models = vec![
+        GpuModel::default(),
+        GpuModel {
+            quad_offset: 0,
+            quad_count: 6,
+            flags: 0,
+            _pad: 0,
+        },
+    ];
+    // 16 × 1 × 1 bricks. Bricks 0 to 14 hold one cube in a corner no ray passes; brick
+    // 15 holds a wall of cubes at x = 250, y and z 0..16.
+    let nb = 16u32;
+    let mut top = vec![0u32; nb as usize];
+    top[15] = 1;
+    let mut stray = vec![0u32; BRICK_WORDS as usize];
+    let corner = (15 * 16 + 15) * 16;
+    stray[corner >> 1] |= 1 << ((corner & 1) * 16);
+    let mut wall = vec![0u32; BRICK_WORDS as usize];
+    for y in 0..16usize {
+        for z in 0..16usize {
+            let local = (y * 16 + z) * 16 + (250 - 240);
+            wall[local >> 1] |= 1 << ((local & 1) * 16);
+        }
+    }
+    let mut grid = top;
+    let off_bricks = grid.len() as u32;
+    grid.append(&mut stray);
+    grid.append(&mut wall);
+    let off_ov_top = grid.len() as u32;
+    grid.extend(vec![EMPTY; nb as usize]);
+    let off_ov_cells = grid.len() as u32;
+    grid.push(0);
+    let mut params = Params::default();
+    params.grid_dims = [16, 1, 1, nb];
+    params.off = [0, off_bricks, off_ov_top, off_ov_cells];
+    params.off2 = [off_ov_cells, 2, 1, quads.len() as u32];
+    let s = TestScene {
+        params,
+        grid,
+        models,
+        quads,
+        atlas: vec![0xFFFF_FFFF, 0x0000_0000],
+        emitters: vec![GpuEmitter::default()],
+        emitter_grid: vec![0; EMITTER_GRID_HEADER as usize],
+    };
+    let v = s.view();
+    let mut missed = 0;
+    let mut n = 0;
+    for i in 0..64 {
+        for j in 0..64 {
+            let o = v3(
+                0.137 + i as f32 * 0.0131,
+                1.1 + i as f32 * 0.03,
+                1.3 + j as f32 * 0.05,
+            );
+            let d = v3(
+                1.0,
+                0.04 + 0.002 * (j as f32 - 32.0) / 32.0,
+                0.03 + 0.002 * (i as f32 - 32.0) / 32.0,
+            )
+            .normalize();
+            match trace(&v, o, d, 0.0, f32::INFINITY) {
+                Some(h) if (o + d * h.t).x > 249.99 && (o + d * h.t).x < 250.01 => {}
+                _ => missed += 1,
+            }
+            n += 1;
+        }
+    }
+    assert_eq!(n, 4096);
+    assert_eq!(
+        missed, 0,
+        "{missed} of {n} rays missed the wall 250 blocks away"
+    );
+}
