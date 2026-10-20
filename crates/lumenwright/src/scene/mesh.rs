@@ -55,16 +55,9 @@ pub struct Lighting {
 
 /// Vanilla lightmap for (sky, block) light levels (fractional, 0..15). sRGB-ish 0..1.
 pub fn lightmap(sky: f32, block: f32, l: &Lighting) -> Vec3 {
-    let curve = |lv: f32| {
-        let f = (lv / 15.0).clamp(0.0, 1.0);
-        f / (4.0 - 3.0 * f)
-    };
-    let sky_col = Vec3::new(l.sky_factor, l.sky_factor, 1.0).lerp(Vec3::ONE, 0.35);
-    let s = curve(sky) * l.sky_factor;
-    let b = curve(block) * 1.5;
-    let bg = b * ((b * 0.6 + 0.4) * 0.6 + 0.4);
-    let bb = b * (b * b * 0.6 + 0.4);
-    let mut c = Vec3::new(b, bg, bb) + sky_col * s;
+    use lumenwright_kernel::lightmap::{block_rgb, sky_rgb};
+    let v = block_rgb(block) + sky_rgb(sky, l.sky_factor);
+    let mut c = Vec3::new(v.x, v.y, v.z);
     c = c.lerp(Vec3::splat(0.75), 0.04).clamp(Vec3::ZERO, Vec3::ONE);
     let not_gamma = Vec3::ONE - (Vec3::ONE - c).powf(4.0);
     c = c.lerp(not_gamma, l.gamma);

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use glam::Vec3;
 use lumenwright_kernel::scene::{
     ALPHA_CUTOUT, ALPHA_TRANSLUCENT, BRICK_WORDS, EMPTY, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY,
-    GpuLight, GpuModel, GpuQuad, OV_CELL_WORDS, UNIFORM, unpack_rgba,
+    GpuLight, GpuModel, GpuQuad, LIGHT_BRICK_WORDS, OV_CELL_WORDS, UNIFORM, unpack_rgba,
 };
 use rayon::prelude::*;
 
@@ -33,6 +33,11 @@ pub struct HqScene {
     pub dims: [u32; 3],
     /// Word offsets: top, bricks, ov_top, ov_cells, ov_quads.
     pub offsets: [u32; 5],
+    /// Word offsets of the game's stored light: lt_top, lt_bricks.
+    pub light_offsets: [u32; 2],
+    /// Whether the world stores light levels, so that the light emissive blocks cast
+    /// is limited by them (`lumenwright_kernel::integrator::block_light_gate`).
+    pub light_gated: bool,
     /// First index and count of the see-through quads in `quads`.
     pub see_through: [u32; 2],
     /// The light list: one entry per instance of a light-casting quad. Never empty
@@ -65,6 +70,8 @@ pub struct HqStats {
     pub entity_quads: usize,
     /// Instances of light-casting quads in the light list.
     pub lights: usize,
+    /// Bricks of stored light kept voxel by voxel (the rest are one level each).
+    pub light_bricks: usize,
 }
 
 /// Identifies one block model instance: everything that changes its quads.
@@ -457,8 +464,37 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
     );
     stats.lights = light_count as usize;
 
-    let mut grid =
-        Vec::with_capacity(top.len() * 2 + bricks.len() + ov_cells.len() + ov_quads.len() + 1);
+    // The game's stored light, per brick: one entry when the whole brick has one level.
+    let light_gated = v.stores_light();
+    let mut lt_top = vec![UNIFORM | 0xF0; nb];
+    let mut lt_bricks: Vec<u32> = Vec::new();
+    if light_gated {
+        let per_brick: Vec<Vec<u8>> = (0..nb)
+            .into_par_iter()
+            .map(|bi| {
+                let [bx, by, bz] = brick_xyz(bi);
+                v.section_light(v.min_chunk[0] + bx, v.min_section + by, v.min_chunk[1] + bz)
+            })
+            .collect();
+        for (bi, l) in per_brick.iter().enumerate() {
+            if l.iter().all(|&b| b == l[0]) {
+                lt_top[bi] = UNIFORM | l[0] as u32;
+            } else {
+                lt_top[bi] = (lt_bricks.len() / LIGHT_BRICK_WORDS as usize) as u32;
+                lt_bricks.extend(l.as_chunks::<4>().0.iter().map(|w| u32::from_le_bytes(*w)));
+            }
+        }
+    } else {
+        log::warn!(
+            "the world stores no light levels: the light emissive blocks cast in HQ is not \
+             limited by the game's lightmap"
+        );
+    }
+    stats.light_bricks = lt_bricks.len() / LIGHT_BRICK_WORDS as usize;
+
+    let mut grid = Vec::with_capacity(
+        top.len() * 3 + bricks.len() + ov_cells.len() + ov_quads.len() + lt_bricks.len() + 1,
+    );
     let off_top = 0u32;
     grid.extend_from_slice(&top);
     let off_bricks = grid.len() as u32;
@@ -469,6 +505,10 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
     grid.extend_from_slice(&ov_cells);
     let off_ov_quads = grid.len() as u32;
     grid.extend_from_slice(&ov_quads);
+    let off_lt_top = grid.len() as u32;
+    grid.extend_from_slice(&lt_top);
+    let off_lt_bricks = grid.len() as u32;
+    grid.extend_from_slice(&lt_bricks);
     grid.push(0);
     if quads.is_empty() {
         quads.push(GpuQuad::default());
@@ -482,6 +522,8 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
         atlas_size: [scene.atlas.width, scene.atlas.height],
         dims,
         offsets: [off_top, off_bricks, off_ov_top, off_ov_cells, off_ov_quads],
+        light_offsets: [off_lt_top, off_lt_bricks],
+        light_gated,
         see_through,
         lights,
         light_count,

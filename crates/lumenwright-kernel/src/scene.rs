@@ -7,6 +7,12 @@
 //! * `ov_top[nb]`: `EMPTY` or an overlay brick index (entity geometry).
 //! * `ov_cells[n * 8192]`: per voxel `(offset, count)` into `ov_quads`.
 //! * `ov_quads[..]`: indices into the quad array (world-space entity quads).
+//! * `lt_top[nb]`: the game's stored light per brick (offset [`Params::light_grid`]`.x`):
+//!   `UNIFORM | level byte` when every voxel of the brick has the same levels, else a
+//!   light-brick index.
+//! * `lt_bricks[n * 1024]` (offset [`Params::light_grid`]`.y`): one level byte per voxel,
+//!   four per word (lowest byte = voxel index ≡ 0 mod 4), the byte being
+//!   `sky << 4 | block`. Voxel index as in `bricks`.
 
 use bytemuck::{Pod, Zeroable};
 
@@ -18,6 +24,8 @@ pub const EMPTY: u32 = 0xFFFF_FFFF;
 pub const UNIFORM: u32 = 0x8000_0000;
 /// Words per brick in the `bricks` region: 4096 u16 model ids, two per word.
 pub const BRICK_WORDS: u32 = 2048;
+/// Words per light brick in the `lt_bricks` region: 4096 level bytes, four per word.
+pub const LIGHT_BRICK_WORDS: u32 = 1024;
 /// Words per overlay brick in the `ov_cells` region: an `(offset, count)` pair per voxel.
 pub const OV_CELL_WORDS: u32 = 8192;
 
@@ -148,7 +156,7 @@ impl GpuLight {
     }
 }
 
-/// Per-frame parameters (uniform buffer), 16 × vec4.
+/// Per-frame parameters (uniform buffer), 18 × vec4.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 pub struct Params {
@@ -186,6 +194,13 @@ pub struct Params {
     /// x = index of the first see-through quad (text displays drawn over everything),
     /// y = their count; they are also in the overlay cells. z, w = unused.
     pub see_through: [u32; 4],
+    /// x = word offset of `lt_top`, y = word offset of `lt_bricks`, z = 1 when the
+    /// light emissive blocks cast is limited by the game's light levels (the world
+    /// stores them), 0 when it is not; w unused.
+    pub light_grid: [u32; 4],
+    /// x = the lightmap's daylight factor (vanilla `skyDarken`) for the frame;
+    /// y, z, w unused.
+    pub lightmap: [f32; 4],
 }
 
 /// Borrowed view of all scene buffers.
@@ -235,6 +250,33 @@ impl SceneView<'_> {
         let local = (((y & 15) * 16 + (z & 15)) * 16 + (x & 15)) as u32;
         let w = self.grid[(self.params.off[1] + e * BRICK_WORDS + (local >> 1)) as usize];
         (w >> ((local & 1) * 16)) & 0xFFFF
+    }
+
+    /// The game's stored `(sky, block)` light levels at voxel `(x, y, z)`; outside
+    /// the grid, full sky light and no block light (vanilla's light above the world).
+    #[inline(always)]
+    pub fn light_levels(&self, x: i32, y: i32, z: i32) -> (u32, u32) {
+        let d = self.params.grid_dims;
+        if x < 0
+            || y < 0
+            || z < 0
+            || x >= (d[0] * 16) as i32
+            || y >= (d[1] * 16) as i32
+            || z >= (d[2] * 16) as i32
+        {
+            return (15, 0);
+        }
+        let b = (((y >> 4) as u32 * d[2] + (z >> 4) as u32) * d[0] + (x >> 4) as u32) as usize;
+        let e = self.grid[self.params.light_grid[0] as usize + b];
+        let byte = if e & UNIFORM != 0 {
+            e & 0xFF
+        } else {
+            let local = (((y & 15) * 16 + (z & 15)) * 16 + (x & 15)) as u32;
+            let w = self.grid
+                [(self.params.light_grid[1] + e * LIGHT_BRICK_WORDS + (local >> 2)) as usize];
+            (w >> ((local & 3) * 8)) & 0xFF
+        };
+        (byte >> 4, byte & 15)
     }
 
     /// RGBA8 texel (sRGB, straight alpha) at atlas pixel (u, v).

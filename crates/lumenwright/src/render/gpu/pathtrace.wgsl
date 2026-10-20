@@ -1,4 +1,4 @@
-// HQ path tracer. Line-by-line mirror of crates/lumenwright-kernel/src/{trace,integrator}.rs.
+// HQ path tracer. Line-by-line mirror of crates/lumenwright-kernel/src/{trace,integrator,lightmap}.rs.
 // Buffer layouts are defined in crates/lumenwright-kernel/src/scene.rs.
 
 struct Params {
@@ -18,6 +18,8 @@ struct Params {
     frame: vec4<u32>,
     misc_u: vec4<u32>,
     see_through: vec4<u32>,
+    light_grid: vec4<u32>,
+    lightmap: vec4<f32>,
 }
 
 // Quads are read as raw words: the w lanes of p0/eu carry bit-cast integers
@@ -54,6 +56,7 @@ struct Model {
 const EMPTY: u32 = 0xFFFFFFFFu;
 const UNIFORM: u32 = 0x80000000u;
 const BRICK_WORDS: u32 = 2048u;
+const LIGHT_BRICK_WORDS: u32 = 1024u;
 const OV_CELL_WORDS: u32 = 8192u;
 const NO_QUAD: u32 = 0xFFFFFFFFu;
 const ALPHA_CUTOUT: u32 = 1u;
@@ -401,6 +404,52 @@ fn pick_light(u: f32) -> u32 {
     return lo;
 }
 
+// The game's stored (sky, block) light levels at a voxel (scene.rs `light_levels`).
+fn light_levels(x: i32, y: i32, z: i32) -> vec2<u32> {
+    let dims = P.grid_dims;
+    if (x < 0 || y < 0 || z < 0 || x >= i32(dims.x * 16u) || y >= i32(dims.y * 16u) || z >= i32(dims.z * 16u)) {
+        return vec2<u32>(15u, 0u);
+    }
+    let b = ((u32(y >> 4u) * dims.z + u32(z >> 4u)) * dims.x + u32(x >> 4u));
+    let e = grid[P.light_grid.x + b];
+    var byte = 0u;
+    if ((e & UNIFORM) != 0u) {
+        byte = e & 0xFFu;
+    } else {
+        let local = u32(((y & 15) * 16 + (z & 15)) * 16 + (x & 15));
+        let w = grid[P.light_grid.y + e * LIGHT_BRICK_WORDS + (local >> 2u)];
+        byte = (w >> ((local & 3u) * 8u)) & 0xFFu;
+    }
+    return vec2<u32>(byte >> 4u, byte & 15u);
+}
+
+// lightmap.rs
+fn lm_curve(level: f32) -> f32 {
+    let f = clamp(level / 15.0, 0.0, 1.0);
+    return f / (4.0 - 3.0 * f);
+}
+
+fn lm_share(b: f32, s: f32) -> f32 {
+    if (b <= 0.0) { return 0.0; }
+    return min(max(1.0 - s, 0.0), b) / b;
+}
+
+fn block_share(sky: f32, block: f32, sky_factor: f32) -> vec3<f32> {
+    let b = lm_curve(block) * 1.5;
+    let bc = vec3<f32>(b, b * ((b * 0.6 + 0.4) * 0.6 + 0.4), b * (b * b * 0.6 + 0.4));
+    let col = vec3<f32>(sky_factor, sky_factor, 1.0);
+    let sc = (col + (vec3<f32>(1.0) - col) * 0.35) * (lm_curve(sky) * sky_factor);
+    return vec3<f32>(lm_share(bc.x, sc.x), lm_share(bc.y, sc.y), lm_share(bc.z, sc.z));
+}
+
+// integrator.rs `block_light_gate`
+fn block_light_gate(p: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    if (P.light_grid.z == 0u) { return vec3<f32>(1.0); }
+    let c = p + n * 0.5;
+    let l = light_levels(i32(floor(c.x)), i32(floor(c.y)), i32(floor(c.z)));
+    return block_share(f32(l.x), f32(l.y), P.lightmap.x);
+}
+
 fn near_field(dist: f32) -> f32 {
     let d2 = dist * dist;
     if (d2 < 1.0) { return d2; }
@@ -512,6 +561,7 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
     var last_diffuse = vec3<f32>(0.0);
     var pdf_bsdf = 0.0;
     var via_water = false;
+    var gate = vec3<f32>(1.0);
     let n_lights = P.misc_u.w;
     var tmin = 0.0;
     let sigma = P.water_color.xyz;
@@ -595,10 +645,13 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
             if (bitcast<u32>(q.uvt.z) != 0u && n_lights > 0u) {
                 w = power_heuristic(pdf_bsdf, light_pdf(q, d, dist, h.s, h.tt));
             }
-            radiance += beta * (albedo * albedo) * (q_light_scale(q) * P.misc_f.w * w * near_field(dist));
+            radiance += beta * (albedo * albedo) * gate * (q_light_scale(q) * P.misc_f.w * w * near_field(dist));
         }
 
         if (bounces >= max_bounces) { break; }
+        if (bounces == 0u) {
+            gate = block_light_gate(pos, n);
+        }
         bounces += 1u;
 
         let origin = pos + n * eps;
@@ -612,7 +665,7 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
             }
         }
         if (n_lights > 0u) {
-            radiance += beta * albedo * sample_emitter(origin, n);
+            radiance += beta * albedo * gate * sample_emitter(origin, n);
         }
 
         beta = beta * albedo;

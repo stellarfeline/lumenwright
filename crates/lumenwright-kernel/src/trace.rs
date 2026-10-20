@@ -311,7 +311,7 @@ pub fn hit_point(o: V3, d: V3, h: &Hit) -> V3 {
 fn _assert_layout() {
     // Compile-time size checks used by the GPU mirrors.
     const _: () = assert!(core::mem::size_of::<GpuQuad>() == 80);
-    const _: () = assert!(core::mem::size_of::<crate::scene::Params>() == 256);
+    const _: () = assert!(core::mem::size_of::<crate::scene::Params>() == 288);
     const _: () = assert!(core::mem::size_of::<crate::scene::GpuModel>() == 16);
     const _: () = assert!(core::mem::size_of::<crate::scene::GpuLight>() == 32);
 }
