@@ -189,7 +189,7 @@ pub struct Params {
     /// Water absorption coefficients per block (Beer-Lambert); w = water IOR.
     pub water_color: [f32; 4],
     /// x = emitter intensity (Chunky's, see [`GpuQuad::emittance`]), y = ray epsilon,
-    /// z, w unused.
+    /// z = the sky cache's resolution (0: no sky), w unused.
     pub misc_f: [f32; 4],
     /// Grid size in bricks (xyz); w = brick count.
     pub grid_dims: [u32; 4],
@@ -241,6 +241,10 @@ pub struct SceneView<'a> {
     /// neighbours. Cells are cubes of the header's size in grid space, from the grid
     /// origin.
     pub emitter_grid: &'a [u32],
+    /// The sky cache (Chunky's `SkyCache`, see [`crate::integrator::sky_radiance`]):
+    /// `(n + 1)²` HSL triples for the resolution `n` in `misc_f.z`, entry `(i, j)` at
+    /// `(i (n + 1) + j) × 3`, `i` along the azimuth and `j` along the height.
+    pub sky: &'a [f32],
 }
 
 impl SceneView<'_> {

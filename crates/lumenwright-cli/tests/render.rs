@@ -609,6 +609,59 @@ fn gpu_matches_cpu_in_hq_mode() {
     }
 }
 
+/// A frame of nothing but sky is the same function of the pixel on every backend, so the
+/// GPU's sky cache lookup must give the CPU's sky to within 2/255 everywhere, a bound the
+/// path-traced frames above are too noisy to hold.
+#[test]
+fn gpu_draws_the_sky_as_the_cpu_does() {
+    let jar = require_jar!();
+    if !gpu_available() {
+        eprintln!("skipping: no GPU adapter");
+        return;
+    }
+    let dir = tmp("parity-sky");
+    let args = |b: &'static str| {
+        vec![
+            "--mode",
+            "hq",
+            "--backend",
+            b,
+            "--spp",
+            "4",
+            "--width",
+            "160",
+            "--height",
+            "90",
+            "--camera",
+            "18.5,120,22.5",
+            "--look-at",
+            "18.5,200,40",
+            "--fov",
+            "150",
+            "--sun-altitude",
+            "5",
+            "--sun-azimuth",
+            "0",
+        ]
+    };
+    let (cpu, gpu) = (dir.join("sky-cpu.png"), dir.join("sky-gpu.png"));
+    render(showcase(), &jar, &cpu, &args("cpu")).unwrap();
+    render(showcase(), &jar, &gpu, &args("gpu")).unwrap();
+    let (a, b) = (load(&cpu), load(&gpu));
+    let worst = a
+        .pixels()
+        .zip(b.pixels())
+        .flat_map(|(p, q)| (0..3).map(move |i| (p.0[i] as i32 - q.0[i] as i32).abs()))
+        .max()
+        .unwrap();
+    let mean = a.pixels().map(|p| p.0[2] as f64).sum::<f64>() / (a.width() * a.height()) as f64;
+    eprintln!(
+        "hq sky: largest channel difference {worst}/255 between CPU and GPU (mean blue {mean:.1})"
+    );
+    assert!(mean > 60.0, "the frame shows sky: mean blue {mean:.1}");
+    assert!(worst <= 2, "{worst}/255");
+}
+
 /// The CUDA kernel is the CPU kernel compiled to PTX: an HQ frame agrees with
 /// the CPU's within the GPU bounds above. Quick mode on CUDA is the CPU rasterizer.
 #[cfg(feature = "cuda")]

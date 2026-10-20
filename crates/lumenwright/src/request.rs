@@ -600,7 +600,9 @@ pub fn render(req: &Request) -> Result<Rendered> {
                 scene: &hq,
                 params,
                 spp: req.hq.spp,
+                sky: sky::sky_cache(&params),
             };
+            lap("sky cache", &mut t);
             let started = Instant::now();
             let progress = |done: u32, total: u32| {
                 log::debug!("{done}/{total} ({:.1?})", started.elapsed());
@@ -776,7 +778,12 @@ pub fn hq_params(
         perez_d: f4(Vec3::from(sky.perez[3]), 0.0),
         perez_e: f4(Vec3::from(sky.perez[4]), 0.0),
         water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
-        misc_f: [o.emitter_intensity, 1e-3, 0.0, 0.0],
+        misc_f: [
+            o.emitter_intensity,
+            1e-3,
+            sky::SKY_CACHE_RESOLUTION as f32,
+            0.0,
+        ],
         grid_dims: [
             hq.dims[0],
             hq.dims[1],

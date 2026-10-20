@@ -8,7 +8,9 @@
 //! emitter intensity `misc_f.x` (Chunky's quadratic emitter mapping: a texel half as
 //! bright emits a quarter of the light).
 
-use crate::math::{V3, abs, acos, clamp, exp, gamma_to_linear, max, onb, sin_cos_turns, sqrt, v3};
+use crate::math::{
+    V3, abs, acos, atan2, clamp, exp, gamma_to_linear, max, onb, sin_cos_turns, sqrt, v3,
+};
 use crate::rng::Rng;
 use crate::scene::{
     ALPHA_TRANSLUCENT, EMITTER_GRID_HEADER, EMITTER_SAMPLING_ALL, EMITTER_SAMPLING_NONE,
@@ -31,16 +33,15 @@ fn linear_rgb(c: u32) -> V3 {
     )
 }
 
-/// The radiance of the sky in the unit direction `d`: Chunky's Preetham sky (GPL-3.0,
+/// Chunky's Preetham sky in the unit direction `d` (GPL-3.0,
 /// `PreethamSky.calcIncidentLight` at chunky-dev/chunky 156e2bb; A. J. Preetham, P.
 /// Shirley and B. Smits, "A Practical Analytic Model for Daylight", SIGGRAPH 1999).
 /// The Perez distribution gives x, y and Y at the direction's zenith angle θ (its height
 /// plus the horizon offset, no lower than the horizon) and angle γ from the sun; xyY
 /// goes to XYZ and to RGB by the matrix Chunky uses (Bruce Lindbloom's), scaled by
-/// 0.045 and by the sky light. Below the horizon the sky holds its horizon value.
-/// Chunky evaluates the same function through a 128 × 128 cache interpolated in HSL
-/// (`SkyCache`); the kernel evaluates it directly.
-pub fn sky_radiance(scene: &SceneView, d: V3) -> V3 {
+/// 0.045. Below the horizon the sky holds its horizon value. Chunky reads this function
+/// only through its sky cache ([`build_sky_cache`], [`sky_radiance`]).
+pub fn preetham_radiance(scene: &SceneView, d: V3) -> V3 {
     let p = scene.params;
     let sun = V3::from4(p.sky_sun);
     let cos_theta = max(d.y + p.sky_zenith[3], 0.0);
@@ -69,7 +70,121 @@ pub fn sky_radiance(scene: &SceneView, d: V3) -> V3 {
         2.370_674_3 * cx - 0.900_040_5 * cy - 0.470_633_8 * cz,
         -0.513_885 * cx + 1.425_303_6 * cy + 0.088_581_4 * cz,
         0.005_298_2 * cx - 0.014_694_9 * cy + 1.009_396_8 * cz,
-    ) * (0.045 * p.sky_sun[3])
+    ) * 0.045
+}
+
+/// Chunky's `ColorUtil.RGBtoHSL` (chunky-dev/chunky 156e2bb): each channel limited to
+/// `[0, 1]` first, then hue (with Java's `%`, so it may be negative), saturation and
+/// lightness.
+pub fn rgb_to_hsl(c: V3) -> [f32; 3] {
+    let (r, g, b) = (
+        clamp(c.x, 0.0, 1.0),
+        clamp(c.y, 0.0, 1.0),
+        clamp(c.z, 0.0, 1.0),
+    );
+    let cmax = max(max(r, g), b);
+    let cmin = crate::math::min(crate::math::min(r, g), b);
+    let delta = cmax - cmin;
+    let lightness = (cmax + cmin) / 2.0;
+    let hue = if delta == 0.0 {
+        0.0
+    } else if cmax == r {
+        (((g - b) / delta) % 6.0) / 6.0
+    } else if cmax == g {
+        (((b - r) / delta) + 2.0) / 6.0
+    } else {
+        (((r - g) / delta) + 4.0) / 6.0
+    };
+    let saturation = if delta < 5e-8 {
+        0.0
+    } else {
+        delta / (1.0 - abs(2.0 * lightness - 1.0))
+    };
+    [hue, saturation, lightness]
+}
+
+/// Chunky's `ColorUtil.RGBfromHSL` (chunky-dev/chunky 156e2bb), with Java's `%`.
+#[inline(always)]
+pub fn rgb_from_hsl(hue: f32, saturation: f32, lightness: f32) -> V3 {
+    let c = crate::math::min(1.0, (1.0 - abs(2.0 * lightness - 1.0)) * saturation);
+    let h = hue * 6.0;
+    let x = c * (1.0 - abs(h % 2.0 - 1.0));
+    let rgb = if h < 1.0 {
+        v3(c, x, 0.0)
+    } else if h < 2.0 {
+        v3(x, c, 0.0)
+    } else if h < 3.0 {
+        v3(0.0, c, x)
+    } else if h < 4.0 {
+        v3(0.0, x, c)
+    } else if h < 5.0 {
+        v3(x, 0.0, c)
+    } else {
+        v3(c, 0.0, x)
+    };
+    let m = max(0.0, lightness - 0.5 * c);
+    rgb + v3(m, m, m)
+}
+
+/// Fills `out` with Chunky's sky cache for resolution `n` (`SkyCache.precalculateSky`,
+/// chunky-dev/chunky 156e2bb): entry `(i, j)` is [`rgb_to_hsl`] of [`preetham_radiance`]
+/// towards azimuth `i / n` turns and height `j / n · π − π/2`, for `i` and `j` in `0..=n`.
+/// `out` holds `(n + 1)² × 3` values.
+pub fn build_sky_cache(scene: &SceneView, n: u32, out: &mut [f32]) {
+    let m = n + 1;
+    for i in 0..m {
+        let (sin_t, cos_t) = sin_cos_turns(i as f32 / n as f32);
+        for j in 0..m {
+            // φ = j/n · π − π/2 is j/(2n) − 1/4 turns.
+            let (sin_p, cos_p) = sin_cos_turns(j as f32 / (2 * n) as f32 - 0.25);
+            let r = abs(cos_p);
+            let hsl = rgb_to_hsl(preetham_radiance(scene, v3(cos_t * r, sin_p, sin_t * r)));
+            let at = ((i * m + j) * 3) as usize;
+            out[at] = hsl[0];
+            out[at + 1] = hsl[1];
+            out[at + 2] = hsl[2];
+        }
+    }
+}
+
+/// The radiance of the sky in the unit direction `d`: Chunky's simulated sky as it reads
+/// it, through its sky cache (`SkyCache.calcIncidentLight` and `getColorInterpolated`,
+/// chunky-dev/chunky 156e2bb), times the sky light. The direction's azimuth in turns and
+/// its height `(asin d.y + π/2) / π`, each times the resolution, index the cache; its
+/// HSL values are interpolated bilinearly (hue too, without wrapping) and turned back
+/// into RGB. The cache limits each channel to 1, so the sky is never brighter than 1
+/// near the sun. With no cache (resolution 0) the sky is black.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
+pub fn sky_radiance(scene: &SceneView, d: V3) -> V3 {
+    let p = scene.params;
+    let n = p.misc_f[2];
+    if n < 1.0 {
+        return V3::ZERO;
+    }
+    let theta = atan2(d.z, d.x) / (2.0 * PI);
+    let theta = ((theta % 1.0) + 1.0) % 1.0;
+    // (asin y + π/2) / π = 1 − acos(y) / π.
+    let phi = 1.0 - acos(clamp(d.y, -1.0, 1.0)) / PI;
+    let (x, y) = (theta * n, phi * n);
+    let fx = crate::math::floor(clamp(x, 0.0, n - 1.0));
+    let fy = crate::math::floor(clamp(y, 0.0, n - 1.0));
+    let m = n as u32 + 1;
+    let at = |i: f32, j: f32| ((i as u32 * m + j as u32) * 3) as usize;
+    let (a00, a10, a01, a11) = (
+        at(fx, fy),
+        at(fx + 1.0, fy),
+        at(fx, fy + 1.0),
+        at(fx + 1.0, fy + 1.0),
+    );
+    let sky = scene.sky;
+    let mut hsl = [0.0f32; 3];
+    for (k, out) in hsl.iter_mut().enumerate() {
+        // `interp1D` along x at both rows, then along y.
+        let y0 = sky[a00 + k] + (x - fx) * (sky[a10 + k] - sky[a00 + k]);
+        let y1 = sky[a01 + k] + (x - fx) * (sky[a11 + k] - sky[a01 + k]);
+        *out = y0 + (y - fy) * (y1 - y0);
+    }
+    rgb_from_hsl(hsl[0], hsl[1], hsl[2]) * p.sky_sun[3]
 }
 
 /// The sun drawn in the sky: Chunky's `Sun.intersect` (GPL-3.0, chunky-dev/chunky
@@ -94,12 +209,12 @@ pub fn sun_texture(scene: &SceneView, d: V3) -> V3 {
     }
     // `Texture.getColor(u, v)`: texel ((int) (u w − ε), (int) ((1 − v) h − ε)).
     let x = clamp(
-        crate::math::floor(a / width2 * sprite[2] - 5e-5),
+        crate::math::floor(a / width2 * sprite[2] - 5e-8),
         0.0,
         sprite[2] - 1.0,
     );
     let y = clamp(
-        crate::math::floor((1.0 - b / width2) * sprite[3] - 5e-5),
+        crate::math::floor((1.0 - b / width2) * sprite[3] - 5e-8),
         0.0,
         sprite[3] - 1.0,
     );

@@ -638,6 +638,7 @@ mod tests {
             atlas: &[],
             emitters: &emitters,
             emitter_grid: &grid,
+            sky: &[],
         };
         let cells = (grid[1] * grid[2] * grid[3]) as usize;
         let list = &grid[EMITTER_GRID_HEADER as usize + cells * 2..];

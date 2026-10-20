@@ -105,6 +105,45 @@ pub fn acos(x: f32) -> f32 {
 /// The bound [`acos`] is tested to, in absolute error against `f64` on `[-1, 1]`.
 pub const MAX_ACOS_ERROR: f32 = 1e-6;
 
+/// `atan2(y, x)` in `(-π, π]` in `f32` arithmetic alone (no `f64`, no call), so the CPU
+/// and CUDA backends compute it alike: Abramowitz and Stegun 4.4.49,
+/// `atan t = t (1 + a₂t² + a₄t⁴ + … + a₁₆t¹⁶)` on `[0, 1]` (approximation error at most
+/// `2e-8`), of the smaller of `|x|`, `|y|` over the larger, then placed in its octant.
+/// `atan2(0, 0)` is 0. A test holds it to [`MAX_ATAN2_ERROR`] against `f64`.
+#[inline(always)]
+pub fn atan2(y: f32, x: f32) -> f32 {
+    let (ax, ay) = (abs(x), abs(y));
+    let (lo, hi) = (min(ax, ay), max(ax, ay));
+    if hi == 0.0 {
+        return 0.0;
+    }
+    let t = lo / hi;
+    let t2 = t * t;
+    let p = t
+        * (1.0
+            + t2 * (-0.333_331_45
+                + t2 * (0.199_935_51
+                    + t2 * (-0.142_088_99
+                        + t2 * (0.106_562_64
+                            + t2 * (-0.075_289_64
+                                + t2 * (0.042_909_614
+                                    + t2 * (-0.016_165_737 + t2 * 0.002_866_225_7))))))));
+    let r = if ay > ax {
+        core::f32::consts::FRAC_PI_2 - p
+    } else {
+        p
+    };
+    let r = if x < 0.0 {
+        core::f32::consts::PI - r
+    } else {
+        r
+    };
+    if y < 0.0 { -r } else { r }
+}
+
+/// The bound [`atan2`] is tested to, in absolute error against `f64`.
+pub const MAX_ATAN2_ERROR: f32 = 1e-6;
+
 /// Absolute value.
 #[inline(always)]
 pub fn abs(x: f32) -> f32 {
