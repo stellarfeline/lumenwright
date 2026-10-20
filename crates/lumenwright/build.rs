@@ -26,7 +26,11 @@ fn main() {
         panic!(
             "the `cuda` feature needs {}: run scripts/build-ptx.sh first{}",
             ptx.display(),
-            if clone { "" } else { ", or set LUMENWRIGHT_PTX to the PTX it writes" }
+            if clone {
+                ""
+            } else {
+                ", or set LUMENWRIGHT_PTX to the PTX it writes"
+            }
         );
     }
     let ptx = ptx.canonicalize().expect("canonicalize the PTX path");
