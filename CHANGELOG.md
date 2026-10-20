@@ -20,11 +20,16 @@ The first release: `lumenwright`, `lumenwright-cli` and `lumenwright-kernel`.
   client's sky (sky disc, sunrise glow, sun, moon phases and stars) from the jar's environment
   attributes and day timeline. Block textures are read through the client's mip chains with
   trilinear, 4× anisotropic filtering (`QuickOptions::mipmap_levels`, `--mipmap-levels`).
-- HQ mode: a path tracer in the style of Chunky, with sun and sky light, emissive blocks
-  with next-event estimation and multiple importance sampling (each block casts light by its
-  light level, calibrated against the game's block light; `--emitter-intensity`,
-  `--emitter-glow`, `--no-light-sampling`), diffuse bounces, Fresnel water with refraction, stochastic translucency and ACES, filmic or
-  gamma tonemapping.
+- HQ mode: a path tracer ported from Chunky's (chunky-dev/chunky, GPL-3.0; see
+  `ACKNOWLEDGEMENTS.md` and `docs/research/chunky-parity.md`): the Preetham sky; Chunky's sun
+  (irradiance intensity^2.2, default intensity 1.25) with next-event estimation; Chunky's
+  emitters, with an emittance per block material, quadratic emitted light, intensity 13, the
+  emitter grid and its sampling strategies (`--emitter-intensity`, `--emitter-sampling`,
+  `--prevent-normal-emitter`); one-sided block faces; diffuse bounces; Fresnel water with
+  refraction; stochastic translucency; textures decoded and frames encoded with the display
+  gamma 2.2, and Chunky's gamma (default), ACES and Hable filters. On the treehouse benchmark
+  frame its 250-sample frame is as close to Chunky's converged frame as Chunky's own
+  250-sample frame is.
 - Backends: CPU on every core, Metal, Vulkan and DX12 through wgpu (feature `gpu`, on by
   default) and CUDA (feature `cuda`, built from a clone of the repository). On the CPU, a
   request gives the same bytes for any thread count. The CUDA kernel is the path tracer
