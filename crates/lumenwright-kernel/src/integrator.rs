@@ -403,13 +403,19 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
         }
         bounces += 1;
 
-        // Next-event estimation towards the sun.
+        // Next-event estimation towards the sun: a uniform direction in its cone lights
+        // the surface when it faces it (Chunky's `frontLight` in `doDiffuseReflection`)
+        // and, Lumenwright's own, when it is not below the horizon, where the ground
+        // beyond the world hides the sun. Some direction in the cone passes both tests
+        // only when the sun's centre is less than its radius below the surface's plane
+        // and below the horizon, so no sample is drawn otherwise.
         let origin = pos + n * eps;
         let sun = V3::from4(p.sun_dir);
-        if n.dot(sun) > 0.0 && p.sun_dir[1] > -0.1 {
+        let sin_r = sqrt(max(1.0 - p.sun_dir[3] * p.sun_dir[3], 0.0));
+        if n.dot(sun) > -sin_r && p.sun_dir[1] > -sin_r {
             let l = sample_sun(scene, &mut rng);
             let cos_l = n.dot(l);
-            if cos_l > 0.0 {
+            if cos_l > 0.0 && l.y >= 0.0 {
                 let tr = shadow(scene, origin, l, f32::INFINITY);
                 radiance = radiance + beta.mul(albedo).mul(V3::from4(p.sun_color)).mul(tr) * cos_l;
             }

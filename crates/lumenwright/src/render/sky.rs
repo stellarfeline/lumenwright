@@ -558,26 +558,39 @@ pub struct HqSky {
 /// Chunky's default sun intensity (`Sun.DEFAULT_INTENSITY`, chunky-dev/chunky 156e2bb).
 pub const DEFAULT_SUN_INTENSITY: f32 = 1.25;
 
+/// The sun's angular radius in radians (Chunky's `Sun.DEFAULT_RADIUS`, the `radius` of
+/// the benchmark scene, chunky-dev/chunky 156e2bb).
+pub const SUN_RADIUS: f32 = 0.03;
+
+/// The sun's altitude at which civil twilight ends: its centre 6 degrees below the
+/// horizon (the definition the US Naval Observatory uses).
+pub const CIVIL_TWILIGHT_END: f32 = -6.0 * std::f32::consts::PI / 180.0;
+
+/// The sky light of a night, as a fraction of the sky's: Lumenwright's.
+pub const NIGHT_SKY_LIGHT: f32 = 0.03;
+
+/// The fraction of the Preetham sky's light a sun at `altitude` (radians) leaves: 1
+/// while any part of the sun's disc is above the horizon (Chunky's sky, which has no
+/// other behaviour), falling linearly to [`NIGHT_SKY_LIGHT`] at [`CIVIL_TWILIGHT_END`]
+/// and holding it below. The fall is Lumenwright's own: Chunky has no time of day, and
+/// its Preetham sky keeps the sunset sky at any altitude below the horizon.
+pub fn twilight(altitude: f32) -> f32 {
+    ((altitude - CIVIL_TWILIGHT_END) / (-SUN_RADIUS - CIVIL_TWILIGHT_END))
+        .clamp(0.0, 1.0)
+        .max(NIGHT_SKY_LIGHT)
+}
+
 /// Derives the HQ sun and sky for a sun direction. The sun is Chunky's (GPL-3.0,
 /// `Sun.initSun` at chunky-dev/chunky 156e2bb): white, with irradiance
-/// `sun_intensity^2.2` (`Scene.DEFAULT_GAMMA`). The sky is Chunky's default, the
-/// Preetham sky ([`Preetham`]), scaled by `sky_intensity` (Chunky's sky light).
-///
-/// Below about 9 degrees of altitude (a sine of 1/6) the sun fades to nothing at the
-/// horizon, and below about 8.6 degrees (a sine of 0.15) the sky dims to 3% at a sine
-/// of −0.1, so a world open below its terrain is not lit from under the ground and a
-/// night is dark. Both fades are Lumenwright's: Chunky's sun does not fade, and its
-/// Preetham sky holds the sunset sky whenever the sun is below the horizon.
+/// `sun_intensity^2.2` (`Scene.DEFAULT_GAMMA`) at every altitude; the kernel hides the
+/// part of its disc below the horizon. The sky is Chunky's default, the Preetham sky
+/// ([`Preetham`]), scaled by `sky_intensity` (Chunky's sky light) and by [`twilight`].
 pub fn hq_sky(sun_dir: Vec3, sun_intensity: f32, sky_intensity: f32) -> HqSky {
-    let alt = sun_dir.y;
-    let day = (alt * 4.0 + 0.4).clamp(0.0, 1.0);
-    let sun_color = Vec3::ONE
-        * sun_intensity.powf(lumenwright_kernel::math::GAMMA)
-        * (alt * 6.0).clamp(0.0, 1.0);
+    let altitude = sun_dir.y.clamp(-1.0, 1.0).asin();
     HqSky {
         sun_dir,
-        sun_color,
-        sky_light: sky_intensity * day.max(0.03),
+        sun_color: Vec3::ONE * sun_intensity.powf(lumenwright_kernel::math::GAMMA),
+        sky_light: sky_intensity * twilight(altitude),
     }
 }
 
@@ -828,6 +841,31 @@ mod tests {
         eprintln!("Preetham sky: worst relative difference {worst:.2e} over {n} directions");
         assert_eq!(n, 4 * 64 * 17);
         assert!(worst < 1e-4, "{worst:.2e}");
+    }
+
+    /// The sky keeps Chunky's full Preetham light while the sun's disc touches the
+    /// horizon and falls to the night's at the end of civil twilight; the sun is never
+    /// dimmed on the host.
+    #[test]
+    fn twilight_holds_chunkys_sky_until_the_disc_sets() {
+        assert_eq!(twilight(0.5), 1.0);
+        assert_eq!(twilight(0.0), 1.0);
+        assert_eq!(twilight(-SUN_RADIUS), 1.0);
+        assert!(twilight(-SUN_RADIUS - 1e-3) < 1.0);
+        assert_eq!(twilight(CIVIL_TWILIGHT_END), NIGHT_SKY_LIGHT);
+        assert_eq!(twilight(-std::f32::consts::FRAC_PI_2), NIGHT_SKY_LIGHT);
+        let mut last = 1.0;
+        for i in 0..=100 {
+            let t = twilight(-SUN_RADIUS + (CIVIL_TWILIGHT_END + SUN_RADIUS) * i as f32 / 100.0);
+            assert!(t <= last, "monotone");
+            last = t;
+        }
+        // The Treehouse Camp's --time 12800 sun: altitude -0.005091 rad.
+        let dusk = hq_sky(sun_direction(-0.005091f32.to_degrees(), 270.0), 1.25, 1.0);
+        assert_eq!(dusk.sky_light, 1.0);
+        assert_eq!(dusk.sun_color, Vec3::splat(1.25f32.powf(2.2)));
+        let night = hq_sky(-Vec3::Y, 1.25, 1.0);
+        assert_eq!(night.sky_light, NIGHT_SKY_LIGHT);
     }
 
     #[test]

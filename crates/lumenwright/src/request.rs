@@ -757,7 +757,7 @@ pub fn hq_params(
     rays: &CameraRays,
     s: &HqSky,
 ) -> Params {
-    let sun_radius: f32 = 0.03;
+    let sun_radius = sky::SUN_RADIUS;
     let solid_angle = std::f32::consts::TAU * (1.0 - sun_radius.cos());
     let f4 = |v: Vec3, w: f32| [v.x, v.y, v.z, w];
     let sky = sky::Preetham::new(s.sun_dir);

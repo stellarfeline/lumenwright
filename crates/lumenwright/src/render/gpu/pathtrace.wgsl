@@ -608,10 +608,11 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
 
         let origin = pos + n * eps;
         let sun = P.sun_dir.xyz;
-        if (dot(n, sun) > 0.0 && P.sun_dir.y > -0.1) {
+        let sin_r = sqrt(max(1.0 - P.sun_dir.w * P.sun_dir.w, 0.0));
+        if (dot(n, sun) > -sin_r && P.sun_dir.y > -sin_r) {
             let l = sample_sun();
             let cos_l = dot(n, l);
-            if (cos_l > 0.0) {
+            if (cos_l > 0.0 && l.y >= 0.0) {
                 let tr = shadow(origin, l, INF);
                 radiance += beta * albedo * P.sun_color.xyz * tr * cos_l;
             }

@@ -523,10 +523,18 @@ fn gpu_matches_cpu_in_hq_mode() {
         return;
     }
     let dir = tmp("parity-hq");
-    for (name, world, view) in [
-        ("showcase", showcase(), &[][..]),
-        ("block-entities", gallery(), &GALLERY_VIEW[..]),
-        ("items", items_world(true), &fixture::ITEM_GALLERY_VIEW[..]),
+    // The dusk frame's sun is half a degree below the horizon, part of its disc above
+    // it: the sky at full light and the sun's horizon test on every backend.
+    for (name, world, view, sun_altitude) in [
+        ("showcase", showcase(), &[][..], "40"),
+        ("showcase-dusk", showcase(), &[][..], "-0.5"),
+        ("block-entities", gallery(), &GALLERY_VIEW[..], "40"),
+        (
+            "items",
+            items_world(true),
+            &fixture::ITEM_GALLERY_VIEW[..],
+            "40",
+        ),
     ] {
         let args = |b: &'static str| {
             let mut v = vec![
@@ -541,7 +549,7 @@ fn gpu_matches_cpu_in_hq_mode() {
                 "--height",
                 "90",
                 "--sun-altitude",
-                "40",
+                sun_altitude,
             ];
             v.extend_from_slice(view);
             v
@@ -595,10 +603,18 @@ fn cuda_matches_cpu_in_hq_mode() {
         return;
     }
     let dir = tmp("parity-cuda");
-    for (name, world, view) in [
-        ("showcase", showcase(), &[][..]),
-        ("block-entities", gallery(), &GALLERY_VIEW[..]),
-        ("items", items_world(true), &fixture::ITEM_GALLERY_VIEW[..]),
+    // The dusk frame's sun is half a degree below the horizon, part of its disc above
+    // it: the sky at full light and the sun's horizon test on every backend.
+    for (name, world, view, sun_altitude) in [
+        ("showcase", showcase(), &[][..], "40"),
+        ("showcase-dusk", showcase(), &[][..], "-0.5"),
+        ("block-entities", gallery(), &GALLERY_VIEW[..], "40"),
+        (
+            "items",
+            items_world(true),
+            &fixture::ITEM_GALLERY_VIEW[..],
+            "40",
+        ),
     ] {
         let args = |b: &'static str| {
             let mut v = vec![
@@ -613,7 +629,7 @@ fn cuda_matches_cpu_in_hq_mode() {
                 "--height",
                 "90",
                 "--sun-altitude",
-                "40",
+                sun_altitude,
             ];
             v.extend_from_slice(view);
             v
