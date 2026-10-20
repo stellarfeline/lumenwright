@@ -148,7 +148,7 @@ impl GpuLight {
     }
 }
 
-/// Per-frame parameters (uniform buffer), 16 × vec4.
+/// Per-frame parameters (uniform buffer), 21 × vec4.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 pub struct Params {
@@ -164,10 +164,22 @@ pub struct Params {
     pub sun_dir: [f32; 4],
     /// Linear sun irradiance colour; w = angular radius (rad).
     pub sun_color: [f32; 4],
-    /// Linear sky colour at the zenith; w = sky intensity.
+    /// The Preetham sky (see [`crate::integrator::sky_radiance`]): xyz = the unit
+    /// vector towards the sun it is lit by; w = the radiance scale.
+    pub sky_sun: [f32; 4],
+    /// xyz = the zenith values of the chromaticities x, y and the luminance Y, each times
+    /// its normalisation; w = the horizon offset added to a direction's height.
     pub sky_zenith: [f32; 4],
-    /// Linear sky colour at the horizon; w = sun-glow strength.
-    pub sky_horizon: [f32; 4],
+    /// The Perez coefficient A for x, y and Y; w unused.
+    pub perez_a: [f32; 4],
+    /// The Perez coefficient B for x, y and Y; w unused.
+    pub perez_b: [f32; 4],
+    /// The Perez coefficient C for x, y and Y; w unused.
+    pub perez_c: [f32; 4],
+    /// The Perez coefficient D for x, y and Y; w unused.
+    pub perez_d: [f32; 4],
+    /// The Perez coefficient E for x, y and Y; w unused.
+    pub perez_e: [f32; 4],
     /// Water absorption coefficients per block (Beer-Lambert); w = water IOR.
     pub water_color: [f32; 4],
     /// x = visible emitter radiance scale, y = ray epsilon, z = sun disk radiance scale,

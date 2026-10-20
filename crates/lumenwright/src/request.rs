@@ -730,6 +730,7 @@ pub fn hq_params(
     let sun_radius: f32 = 0.03;
     let solid_angle = std::f32::consts::TAU * (1.0 - sun_radius.cos());
     let f4 = |v: Vec3, w: f32| [v.x, v.y, v.z, w];
+    let sky = sky::Preetham::new(s.sun_dir);
     Params {
         cam_pos: f4(eye, rays.tan_half_fov),
         cam_fwd: f4(rays.forward, rays.aspect),
@@ -737,8 +738,13 @@ pub fn hq_params(
         cam_up: f4(rays.up, 0.0),
         sun_dir: f4(s.sun_dir, sun_radius.cos()),
         sun_color: f4(s.sun_color, sun_radius),
-        sky_zenith: f4(s.zenith, 1.0),
-        sky_horizon: f4(s.horizon, 0.25),
+        sky_sun: f4(sky.sun, s.sky_light),
+        sky_zenith: f4(Vec3::from(sky.zenith), 0.0),
+        perez_a: f4(Vec3::from(sky.perez[0]), 0.0),
+        perez_b: f4(Vec3::from(sky.perez[1]), 0.0),
+        perez_c: f4(Vec3::from(sky.perez[2]), 0.0),
+        perez_d: f4(Vec3::from(sky.perez[3]), 0.0),
+        perez_e: f4(Vec3::from(sky.perez[4]), 0.0),
         water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
         misc_f: [o.emitter_glow, 1e-3, 1.0 / solid_angle, o.emitter_intensity],
         grid_dims: [

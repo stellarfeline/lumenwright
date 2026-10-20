@@ -10,7 +10,7 @@
 //! bright casts a quarter of the light, so a torch's flame lights the room and
 //! its stick barely does) times [`GpuQuad::light_scale`] times `misc_f.w`.
 
-use crate::math::{V3, abs, clamp, gamma_to_linear, max, onb, sin_cos_turns, sqrt, v3};
+use crate::math::{V3, abs, acos, clamp, exp, gamma_to_linear, max, onb, sin_cos_turns, sqrt, v3};
 use crate::rng::Rng;
 use crate::scene::{
     ALPHA_CUTOUT, ALPHA_TRANSLUCENT, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY, FLAG_WATER, GpuQuad,
@@ -32,25 +32,45 @@ fn linear_rgb(c: u32) -> V3 {
     )
 }
 
-/// Analytic sky: zenith/horizon gradient plus a glow around the sun.
+/// The radiance of the sky in the unit direction `d`: Chunky's Preetham sky (GPL-3.0,
+/// `PreethamSky.calcIncidentLight` at chunky-dev/chunky 156e2bb; A. J. Preetham, P.
+/// Shirley and B. Smits, "A Practical Analytic Model for Daylight", SIGGRAPH 1999).
+/// The Perez distribution gives x, y and Y at the direction's zenith angle θ (its height
+/// plus the horizon offset, no lower than the horizon) and angle γ from the sun; xyY
+/// goes to XYZ and to RGB by the matrix Chunky uses (Bruce Lindbloom's), scaled by
+/// 0.045 and by the sky light. Below the horizon the sky holds its horizon value.
+/// Chunky evaluates the same function through a 128 × 128 cache interpolated in HSL
+/// (`SkyCache`); the kernel evaluates it directly.
 pub fn sky_radiance(scene: &SceneView, d: V3) -> V3 {
     let p = scene.params;
-    let zenith = V3::from4(p.sky_zenith);
-    let horizon = V3::from4(p.sky_horizon);
-    let intensity = p.sky_zenith[3];
-    let up = max(d.y, 0.0);
-    let base = if d.y >= 0.0 {
-        horizon.lerp(zenith, sqrt(up))
-    } else {
-        // Below the horizon: fade towards a darker ground-bounce colour.
-        horizon * (1.0 - 0.5 * clamp(-d.y * 4.0, 0.0, 1.0))
+    let sun = V3::from4(p.sky_sun);
+    let cos_theta = max(d.y + p.sky_zenith[3], 0.0);
+    let cos_gamma = clamp(d.dot(sun), -1.0, 1.0);
+    let gamma = acos(cos_gamma);
+    let cos2_gamma = cos_gamma * cos_gamma;
+    let perez = |k: usize| -> f32 {
+        // B is negative, so at the horizon (cos θ = 0) the first factor is 1, as Java's
+        // exp(B / 0) = exp(-∞) = 0 gives it.
+        let a = if cos_theta > 0.0 {
+            p.perez_a[k] * exp(p.perez_b[k] / cos_theta)
+        } else {
+            0.0
+        };
+        (1.0 + a) * (1.0 + p.perez_c[k] * exp(p.perez_d[k] * gamma) + p.perez_e[k] * cos2_gamma)
     };
-    let sun = V3::from4(p.sun_dir);
-    let cs = max(d.dot(sun), 0.0);
-    let glow = cs * cs;
-    let glow = glow * glow * glow * glow; // ^8
-    let sun_col = V3::from4(p.sun_color);
-    (base + sun_col * (glow * p.sky_horizon[3])) * intensity
+    let x = p.sky_zenith[0] * perez(0);
+    let y = p.sky_zenith[1] * perez(1);
+    let lum = p.sky_zenith[2] * perez(2);
+    if y <= 5e-8 {
+        return V3::ZERO;
+    }
+    let f = lum / y;
+    let (cx, cy, cz) = (x * f, lum, (1.0 - x - y) * f);
+    v3(
+        2.370_674_3 * cx - 0.900_040_5 * cy - 0.470_633_8 * cz,
+        -0.513_885 * cx + 1.425_303_6 * cy + 0.088_581_4 * cz,
+        0.005_298_2 * cx - 0.014_694_9 * cy + 1.009_396_8 * cz,
+    ) * (0.045 * p.sky_sun[3])
 }
 
 #[inline(always)]

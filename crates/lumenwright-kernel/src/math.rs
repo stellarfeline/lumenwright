@@ -79,6 +79,30 @@ pub fn exp(x: f32) -> f32 {
     }
 }
 
+/// `acos x` for `x` in `[-1, 1]` in `f32` arithmetic alone (no `f64`, no call), so the
+/// CPU and CUDA backends compute it alike: Abramowitz and Stegun 4.4.46,
+/// `acos x = √(1−x) · (a₀ + a₁x + … + a₇x⁷)` on `[0, 1]` (approximation error at most
+/// `2e-8`), and `π − acos(−x)` below 0. A test holds it to [`MAX_ACOS_ERROR`] against `f64`.
+#[inline(always)]
+pub fn acos(x: f32) -> f32 {
+    let a = clamp(abs(x), 0.0, 1.0);
+    let p = 1.570_796_3
+        + a * (-0.214_598_8
+            + a * (0.088_978_99
+                + a * (-0.050_174_3
+                    + a * (0.030_891_88
+                        + a * (-0.017_088_126 + a * (0.006_670_09 + a * -0.001_262_491_1))))));
+    let r = sqrt(1.0 - a) * p;
+    if x < 0.0 {
+        core::f32::consts::PI - r
+    } else {
+        r
+    }
+}
+
+/// The bound [`acos`] is tested to, in absolute error against `f64` on `[-1, 1]`.
+pub const MAX_ACOS_ERROR: f32 = 1e-6;
+
 /// Absolute value.
 #[inline(always)]
 pub fn abs(x: f32) -> f32 {

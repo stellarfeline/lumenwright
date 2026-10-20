@@ -8,8 +8,13 @@ struct Params {
     cam_up: vec4<f32>,
     sun_dir: vec4<f32>,
     sun_color: vec4<f32>,
+    sky_sun: vec4<f32>,
     sky_zenith: vec4<f32>,
-    sky_horizon: vec4<f32>,
+    perez_a: vec4<f32>,
+    perez_b: vec4<f32>,
+    perez_c: vec4<f32>,
+    perez_d: vec4<f32>,
+    perez_e: vec4<f32>,
     water_color: vec4<f32>,
     misc_f: vec4<f32>,
     grid_dims: vec4<u32>,
@@ -314,21 +319,42 @@ fn trace(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> Hit {
 
 // ---------------------------------------------------------------- integrator
 
+// math::acos: Abramowitz and Stegun 4.4.46.
+fn acos_as(x: f32) -> f32 {
+    let a = clamp(abs(x), 0.0, 1.0);
+    let p = 1.5707963
+        + a * (-0.2145988
+            + a * (0.08897899
+                + a * (-0.0501743
+                    + a * (0.03089188
+                        + a * (-0.017088126 + a * (0.00667009 + a * -0.0012624911))))));
+    let r = sqrt(1.0 - a) * p;
+    return select(r, PI - r, x < 0.0);
+}
+
+// integrator::sky_radiance: Chunky's Preetham sky.
 fn sky_radiance(d: vec3<f32>) -> vec3<f32> {
-    let zenith = P.sky_zenith.xyz;
-    let horizon = P.sky_horizon.xyz;
-    let intensity = P.sky_zenith.w;
-    let up = max(d.y, 0.0);
-    var base: vec3<f32>;
-    if (d.y >= 0.0) {
-        base = mix(horizon, zenith, sqrt(up));
-    } else {
-        base = horizon * (1.0 - 0.5 * clamp(-d.y * 4.0, 0.0, 1.0));
+    let cos_theta = max(d.y + P.sky_zenith.w, 0.0);
+    let cos_gamma = clamp(dot(d, P.sky_sun.xyz), -1.0, 1.0);
+    let gamma = acos_as(cos_gamma);
+    let cos2_gamma = cos_gamma * cos_gamma;
+    var a = vec3<f32>(0.0);
+    if (cos_theta > 0.0) {
+        a = P.perez_a.xyz * exp(P.perez_b.xyz / cos_theta);
     }
-    let cs = max(dot(d, P.sun_dir.xyz), 0.0);
-    var glow = cs * cs;
-    glow = glow * glow * glow * glow;
-    return (base + P.sun_color.xyz * (glow * P.sky_horizon.w)) * intensity;
+    let perez = (1.0 + a) * (1.0 + P.perez_c.xyz * exp(P.perez_d.xyz * gamma) + P.perez_e.xyz * cos2_gamma);
+    let xyl = P.sky_zenith.xyz * perez;
+    if (xyl.y <= 5e-8) {
+        return vec3<f32>(0.0);
+    }
+    let f = xyl.z / xyl.y;
+    let cx = xyl.x * f;
+    let cy = xyl.z;
+    let cz = (1.0 - xyl.x - xyl.y) * f;
+    return vec3<f32>(
+        2.3706743 * cx - 0.9000405 * cy - 0.4706338 * cz,
+        -0.513885 * cx + 1.4253036 * cy + 0.0885814 * cz,
+        0.0052982 * cx - 0.0146949 * cy + 1.0093968 * cz) * (0.045 * P.sky_sun.w);
 }
 
 fn sun_disk(d: vec3<f32>) -> vec3<f32> {

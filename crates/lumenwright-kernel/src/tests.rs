@@ -262,8 +262,15 @@ fn empty_scene_shows_sky() {
     s.params.cam_fwd = [0.0, 1.0, 0.0, 1.0];
     s.params.cam_right = [1.0, 0.0, 0.0, 0.0];
     s.params.cam_up = [0.0, 0.0, -1.0, 0.0];
-    s.params.sky_zenith = [0.2, 0.4, 0.8, 1.0];
-    s.params.sky_horizon = [0.5, 0.6, 0.7, 0.0];
+    // The Preetham sky for a sun at altitude 45 degrees, azimuth 45 degrees
+    // (`lumenwright::render::sky::Preetham::new`).
+    s.params.sky_sun = [0.5, std::f32::consts::FRAC_1_SQRT_2, 0.5, 1.0];
+    s.params.sky_zenith = PREETHAM_45_ZENITH;
+    s.params.perez_a = PREETHAM_PEREZ[0];
+    s.params.perez_b = PREETHAM_PEREZ[1];
+    s.params.perez_c = PREETHAM_PEREZ[2];
+    s.params.perez_d = PREETHAM_PEREZ[3];
+    s.params.perez_e = PREETHAM_PEREZ[4];
     s.params.sun_dir = [0.0, -1.0, 0.0, 1.0];
     let v = s.view();
     for y in 0..4 {
@@ -470,3 +477,30 @@ fn ln_and_gamma_decoding_are_within_their_bounds_of_f64() {
     assert_eq!(gamma_to_linear(0.0), 0.0);
     assert_eq!(gamma_to_linear(1.0), 1.0);
 }
+
+#[test]
+fn acos_is_within_its_bound_of_f64() {
+    use crate::math::{MAX_ACOS_ERROR, acos};
+    let mut worst = 0.0f64;
+    let mut n = 0;
+    for i in 0..=1u32 << 20 {
+        let x = -1.0 + 2.0 * i as f32 / (1u32 << 20) as f32;
+        worst = worst.max((acos(x) as f64 - (x as f64).acos()).abs());
+        n += 1;
+    }
+    eprintln!("acos: worst absolute error {worst:.3e} over {n} values");
+    assert_eq!(n, (1 << 20) + 1);
+    assert!(worst <= MAX_ACOS_ERROR as f64, "{worst:.3e}");
+}
+
+/// `lumenwright::render::sky::Preetham::new` for a sun at altitude 45 degrees: the zenith
+/// x, y and Y times their normalisation.
+const PREETHAM_45_ZENITH: [f32; 4] = [0.296_242_06, 0.307_511_93, 8.306_274, 0.0];
+/// The Perez coefficients A to E for x, y and Y at turbidity 2.5 (Chunky's `PreethamSky`).
+const PREETHAM_PEREZ: [[f32; 4]; 5] = [
+    [-0.307_45, -0.302_55, -1.016_25, 0.0],
+    [-0.165_45, -0.228_3, -0.461, 0.0],
+    [0.211_5, 0.190_45, 5.268_35, 0.0],
+    [-1.059_15, -1.763_95, -2.275_6, 0.0],
+    [0.036_95, 0.025_65, 0.202_8, 0.0],
+];
