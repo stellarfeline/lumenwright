@@ -17,7 +17,7 @@ Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vul
 
 ![The Treehouse Camp by day, path traced](docs/renders/treehouse-camp-day-hq.png)
 
-*hq · `--time 4000` · 4096 spp · 8 bounces · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 90 s end to end*
+*hq · `--time 4000` · 4096 spp · 8 bounces · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 92 s end to end*
 
 | | quick (vanilla look) | hq (path traced) |
 |---|---|---|
@@ -36,13 +36,12 @@ lanterns and campfires as emitters at intensity 13 with one emitter sampled per 
 and the display gamma 2.2. By day the sun and the sky light the camp, and each lantern lights
 the post it stands on.
 
-At `--time 12800` the sun stands on the horizon. Quick mode draws the client's sunset: the sun
-disc, the orange glow and the light the game stored in the save. HQ mode draws the Preetham
-sky's sunset, a yellow glow around the sun's place on the horizon, dimmed by Lumenwright's own
-fade as the sun goes down (Chunky's sky keeps its full sunset brightness; see
-[docs/research/chunky-parity.md](docs/research/chunky-parity.md)). The sun at the horizon
-casts no light, so the camp is lit by that dim sky and by its lanterns, which glow and light
-little more than the block they stand on.
+At `--time 12800` the sun stands just below the horizon. Quick mode draws the client's sunset:
+the sun disc, the orange glow and the light the game stored in the save. HQ mode draws
+Chunky's sunset: the Preetham sky at its full sunset light, with the client's sun texture drawn
+at the sun's place. A sun below the horizon casts no light, so the camp is lit by that sky and
+by its lanterns, which glow and light little more than the block they stand on (see
+[docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
 
 Each image's command, run from the repository root with the save from
 [Get the camp](#get-the-camp) in `the-treehouse-camp`. The HQ commands need the CUDA build
@@ -74,9 +73,9 @@ target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look
 | image | Apple M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end / in the kernel) |
 |---|---|---|
 | camp, quick, day / dusk | 0.27 s / 0.27 s | |
-| camp, hq, day (4096 spp) / dusk (16384 spp) | | 90 s / 341 s (89 s / 340 s) |
+| camp, hq, day (4096 spp) / dusk (16384 spp) | | 92 s / 333 s (90 s / 331 s) |
 | bridge, quick, day / dusk | 0.23 s / 0.23 s | |
-| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 120 s / 464 s (119 s / 462 s) |
+| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 123 s / 447 s (121 s / 444 s) |
 
 The quick times are the second of two runs. The 4070 Ti SUPER runs under WSL2 on a 16-thread PC.
 Each HQ image rendered twice with the same command on the CUDA backend gave byte-identical
