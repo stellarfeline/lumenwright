@@ -68,12 +68,24 @@ pub fn quad_texel(scene: &SceneView, q: &GpuQuad, s: f32, t: f32) -> u32 {
     scene.texel(u, v)
 }
 
+/// How much farther than the nearest hit so far a later quad may be and still be met
+/// instead: a quad coplanar with an earlier one, in blocks.
+pub const COPLANAR: f32 = 1e-5;
+
 /// Tests a quad, applying alpha testing and front-only culling. Updates `best`
-/// when closer.
+/// when closer, or when coplanar with it (within [`COPLANAR`]) and later in the quad
+/// list: a model's later element is drawn over an earlier one in the same plane, as
+/// the client draws it and as Chunky's grass block draws its tinted side overlay
+/// over the side (`GrassBlockModel`, chunky-dev/chunky 156e2bb).
 #[inline(always)]
 fn test_quad(scene: &SceneView, qi: u32, o: V3, d: V3, tmin: f32, best: &mut Hit) {
     let q = &scene.quads[qi as usize];
-    if let Some((t, s, tt)) = intersect_quad(q, o, d, tmin, best.t) {
+    let reach = if best.quad != u32::MAX && qi > best.quad {
+        best.t + COPLANAR
+    } else {
+        best.t
+    };
+    if let Some((t, s, tt)) = intersect_quad(q, o, d, tmin, reach) {
         // Tested after the intersection: with the test ahead of it, the PTX build's
         // multi-sample launches disagreed with the CPU on text pixels (cause not
         // established), and an intersection is rarer than a test.

@@ -75,6 +75,7 @@ const PI: f32 = 3.14159265358979;
 const INF: f32 = 1e30;
 const MAX_EVENTS: u32 = 48u;
 const MAX_STEPS: u32 = 65536u;
+const COPLANAR: f32 = 1e-5;
 
 // ---------------------------------------------------------------- rng / utils
 
@@ -182,7 +183,10 @@ fn test_quad(qi: u32, o: vec3<f32>, d: vec3<f32>, tmin: f32, best: ptr<function,
     if (abs(denom) < 1e-12) { return; }
     let p0 = q_p0(q);
     let t = dot(n, p0 - o) / denom;
-    if (!(t > tmin && t < (*best).t)) { return; }
+    // trace::test_quad: a later coplanar quad is met instead of an earlier one.
+    var reach = (*best).t;
+    if ((*best).quad != NO_QUAD && qi > (*best).quad) { reach = (*best).t + COPLANAR; }
+    if (!(t > tmin && t < reach)) { return; }
     let p = o + d * t - p0;
     let nn = dot(n, n);
     let s = dot(cross(p, ev), n) / nn;

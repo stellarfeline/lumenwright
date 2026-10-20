@@ -646,3 +646,41 @@ fn a_front_face_far_along_the_ray_is_met() {
         "{missed} of {n} rays missed the wall 250 blocks away"
     );
 }
+
+/// Of two coplanar quads of a model, the later one is met (a grass block's tinted side
+/// overlay over its side), whichever way the ray comes.
+#[test]
+fn a_later_coplanar_quad_is_met() {
+    let mut s = TestScene::new(false);
+    // Model 1 is the cube's six faces at quads 0..6; add copies of its up and north
+    // faces at 6 and 7.
+    let (up, north) = (s.quads[4], s.quads[0]);
+    s.quads.push(up);
+    s.quads.push(north);
+    s.models[1].quad_count = 8;
+    s.params.off2[3] = s.quads.len() as u32;
+    let v = s.view();
+    // The cube is at brick 1, local (4, 5, 5): grid (20, 5, 5).
+    let mut n = 0;
+    for i in 0..16 {
+        let f = 0.1 + 0.7 * (i as f32 + 0.5) / 16.0;
+        let down = trace(
+            &v,
+            v3(20.0 + f, 9.0, 5.0 + f),
+            v3(0.01, -1.0, 0.02).normalize(),
+            0.0,
+            100.0,
+        );
+        assert_eq!(down.map(|h| h.quad), Some(6), "from above at {f}");
+        let south = trace(
+            &v,
+            v3(20.0 + f, 5.0 + f, 1.0),
+            v3(0.02, 0.01, 1.0).normalize(),
+            0.0,
+            100.0,
+        );
+        assert_eq!(south.map(|h| h.quad), Some(7), "from the north at {f}");
+        n += 2;
+    }
+    assert_eq!(n, 32);
+}
