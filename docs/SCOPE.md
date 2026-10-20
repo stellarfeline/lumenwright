@@ -87,7 +87,6 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 | A spatial light structure (light BVH or ReSTIR), volumetric fog, a physical sky model (Chunky's Nishita sky) | Quality improvements | The kernel structure already allows them |
 | CUDA quick mode | Rasterization is served by `wgpu` (Vulkan on NVIDIA) | Quick mode on `--backend cuda` falls back to the CPU rasterizer with a warning |
 | Pre-1.16 worlds (numeric IDs, pre-flattening) | Legacy | Not planned |
-| Executing the CUDA backend locally | No NVIDIA GPU on the development machine (Apple M2 Pro) | The kernel is compiled to PTX and the host code builds with `--features cuda`. It needs a run on an NVIDIA box. |
 
 ## 4. Key design decisions
 
@@ -163,11 +162,11 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 | HQ mode performance | 1280×720 at 256 spp: 21 s on Metal for 33×33 chunks, 11.8 s for the showcase. The CPU is about 6× slower. |
 | Backend parity | Quick mode, CPU vs Metal: 0.075% of pixels differ by more than 8/255. HQ at 32 spp: 0.03% of pixels differ, because both backends use the same RNG streams. |
 | Determinism | Identical inputs give bit-identical images on CPU and Metal, in both modes. |
-| CUDA | `scripts/build-ptx.sh` compiles the shared kernel to PTX: ISA 7.0, sm_70, no unresolved externs. `-p lumenwright-cli --features cuda` builds, and without a driver the backend reports `libcuda not found` cleanly. **Not executed:** there is no NVIDIA GPU on the development machine. |
+| CUDA | `scripts/build-ptx.sh` compiles the shared kernel to PTX: ISA 7.0, sm_70, no unresolved externs, no f64 instruction, no call but panics. `-p lumenwright-cli --features cuda` builds, and without a driver the backend reports `libcuda not found` cleanly. On an RTX 4070 Ti SUPER (WSL2, driver 616.92) `cuda_matches_cpu_in_hq_mode` passes with 0.000% of pixels off on all three scenes, and the showcase at 1280×720 and 64 spp takes 0.85 s in the kernel. |
 | Vulkan / DX12 | Same wgpu and WGSL code as Metal. Not exercised on macOS: wgpu builds neither backend there by default. |
 
 Follow-ups, in priority order:
-1. Run the CUDA backend and the Vulkan/DX12 parity tests on a Linux or Windows machine with an NVIDIA GPU.
+1. Run the Vulkan/DX12 parity tests on a Linux or Windows machine with an NVIDIA GPU.
 2. Entity layers with a second texture: sheep wool, drowned outer layer, glowing eyes.
 3. Remaining block-entity models: beds, shulker boxes, the conduit.
 4. A spatial light structure, so emitter sampling stays efficient with many emitters in view.

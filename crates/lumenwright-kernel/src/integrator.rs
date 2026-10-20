@@ -10,7 +10,7 @@
 //! bright casts a quarter of the light, so a torch's flame lights the room and
 //! its stick barely does) times [`GpuQuad::light_scale`] times `misc_f.w`.
 
-use crate::math::{V3, abs, clamp, cos, max, onb, sin, sqrt, srgb_to_linear, v3};
+use crate::math::{V3, abs, clamp, max, onb, sin_cos_turns, sqrt, srgb_to_linear, v3};
 use crate::rng::Rng;
 use crate::scene::{
     ALPHA_CUTOUT, ALPHA_TRANSLUCENT, FLAG_ALPHA_MASK, FLAG_FRONT_ONLY, FLAG_WATER, GpuQuad,
@@ -69,9 +69,9 @@ fn cosine_hemisphere(n: V3, rng: &mut Rng) -> V3 {
     let r1 = rng.next();
     let r2 = rng.next();
     let r = sqrt(r1);
-    let phi = 2.0 * PI * r2;
+    let (sin_phi, cos_phi) = sin_cos_turns(r2);
     let (t, b) = onb(n);
-    (t * (r * cos(phi)) + b * (r * sin(phi)) + n * sqrt(max(1.0 - r1, 0.0))).normalize()
+    (t * (r * cos_phi) + b * (r * sin_phi) + n * sqrt(max(1.0 - r1, 0.0))).normalize()
 }
 
 /// Uniform direction inside the sun's cone.
@@ -84,9 +84,9 @@ fn sample_sun(scene: &SceneView, rng: &mut Rng) -> V3 {
     let r2 = rng.next();
     let cos_t = 1.0 - r1 * (1.0 - cos_max);
     let sin_t = sqrt(max(1.0 - cos_t * cos_t, 0.0));
-    let phi = 2.0 * PI * r2;
+    let (sin_phi, cos_phi) = sin_cos_turns(r2);
     let (t, b) = onb(sun);
-    (t * (sin_t * cos(phi)) + b * (sin_t * sin(phi)) + sun * cos_t).normalize()
+    (t * (sin_t * cos_phi) + b * (sin_t * sin_phi) + sun * cos_t).normalize()
 }
 
 /// Origin of a ray in grid space for the given quad hit. Model quads live in
@@ -103,6 +103,7 @@ fn shading_normal(q: &GpuQuad, d: V3) -> (V3, bool) {
 }
 
 /// Transmittance from `o` along `d` up to distance `tmax` (0 when blocked).
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
 fn shadow(scene: &SceneView, mut o: V3, d: V3, mut tmax: f32) -> V3 {
     let eps = scene.params.misc_f[1];
     let mut tr = V3::ONE;
@@ -266,6 +267,8 @@ fn sample_emitter(scene: &SceneView, origin: V3, n: V3, rng: &mut Rng) -> V3 {
 }
 
 /// Radiance estimate for one camera sample at pixel (px, py).
+// On CUDA the whole path tracer is one function: see `pt_render` in crates/lumenwright-ptx.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
 pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
     let p = scene.params;
     let width = p.frame[0];

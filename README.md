@@ -314,7 +314,7 @@ target/release/lumenwright render -w /tmp/items \
 | cpu | software rasterizer | Rust kernel on rayon | yes |
 | metal | wgpu render pipeline | WGSL compute | yes, matches the CPU (see below) |
 | vulkan / dx12 | same wgpu code | same WGSL | no, but these are the same code paths as Metal |
-| cuda | falls back to the CPU rasterizer | Rust kernel as PTX | builds and the PTX compiles; not executed (no NVIDIA GPU) |
+| cuda | falls back to the CPU rasterizer | Rust kernel as PTX | not on the M2 Pro; on an RTX 4070 Ti SUPER (WSL2) HQ matches the CPU |
 
 The CUDA backend needs the PTX built first:
 
@@ -325,6 +325,20 @@ lumenwright render ... --mode hq --backend cuda
 ```
 
 `libcuda` is loaded at runtime, so CUDA builds work on machines without the CUDA toolkit.
+
+`scripts/build-ptx.sh` refuses a kernel whose PTX carries an f64 instruction (consumer NVIDIA
+GPUs run f64 at a small fraction of f32 speed) or calls a function other than a panic. The
+path tracer is inlined whole into the kernel because, with its functions called, the driver's
+optimizing PTX compiler (driver 616.92) produced wrong pixels or launches that never finished,
+while the same PTX compiled without optimization matched the CPU.
+
+On WSL2 the driver library is `/usr/lib/wsl/lib/libcuda.so.1`. A Linux NVIDIA driver package
+installed inside WSL (Ubuntu's `libnvidia-compute-*`, pulled in by `nvidia-utils-*`) puts a
+native `libcuda.so` in `/usr/lib/x86_64-linux-gnu`, which the backend loads first and which
+finds no device (`cuInit` returns 100, `CUDA_ERROR_NO_DEVICE`). Run with
+`LD_LIBRARY_PATH=/usr/lib/wsl/lib`, or remove that package.
+
+An HQ frame logs its kernel time by CUDA events beside the wall clock (`--log info`).
 
 ## Testing
 
@@ -367,6 +381,14 @@ cargo test --workspace --release
 Parity on the same view: quick mode, CPU vs Metal, differs in 0.075% of pixels; HQ mode at
 32 spp differs in 0.03%.
 
+## Measured on an RTX 4070 Ti SUPER (driver 616.92, WSL2)
+
+| scene | mode / backend | time |
+|---|---|---|
+| showcase, 1280×720, 64 spp, 4 bounces | hq / cuda | 0.85 s in the kernel (CUDA events), 1.43 s end to end |
+
+The same frame on CUDA and on the CPU: no pixel differs by more than 0.05 in linear radiance.
+
 ## Known limitations (v0.1)
 
 See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
@@ -386,7 +408,6 @@ See [docs/SCOPE.md §3](docs/SCOPE.md). The main gaps:
 * Emitter light falls off by the inverse square of distance, not by the game's one level per
   block: near a lamp HQ is brighter than the game, far from it darker
   (`docs/research/emitters.md`).
-* The CUDA backend has not been run on NVIDIA hardware yet.
 
 ## License
 

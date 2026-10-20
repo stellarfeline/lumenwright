@@ -412,3 +412,33 @@ fn emitter_sampling_converges_to_the_same_light_with_less_noise() {
         "light sampling should at least halve the variance: {var_with} vs {var_without}"
     );
 }
+
+/// `sin_cos_turns` is within `MAX_TURN_ERROR` of `f64` sine and cosine on every `u = i/2^20`
+/// in `[0, 1)` (the range the samplers use), and on a spread of turns outside it.
+#[test]
+fn sin_cos_turns_is_within_its_bound_of_f64() {
+    use crate::math::{MAX_TURN_ERROR, sin_cos_turns};
+    let inside = (0..1u32 << 20).map(|i| i as f32 / (1u32 << 20) as f32);
+    let outside = (0..20_000).map(|i| (i as f32 - 10_000.0) * 0.037_f32);
+    let mut worst = 0.0f64;
+    let mut n = 0;
+    for u in inside.chain(outside) {
+        let (s, c) = sin_cos_turns(u);
+        let a = 2.0 * core::f64::consts::PI * u as f64;
+        worst = worst
+            .max((s as f64 - a.sin()).abs())
+            .max((c as f64 - a.cos()).abs());
+        n += 1;
+    }
+    eprintln!("sin_cos_turns: worst absolute error {worst:.3e} over {n} turns");
+    assert_eq!(n, (1 << 20) + 20_000);
+    assert!(
+        worst <= MAX_TURN_ERROR as f64,
+        "worst error {worst:.3e} exceeds {MAX_TURN_ERROR:e}"
+    );
+    // Quadrant boundaries are exact.
+    assert_eq!(sin_cos_turns(0.0), (0.0, 1.0));
+    assert_eq!(sin_cos_turns(0.25), (1.0, -0.0));
+    assert_eq!(sin_cos_turns(0.5), (-0.0, -1.0));
+    assert_eq!(sin_cos_turns(0.75), (-1.0, 0.0));
+}

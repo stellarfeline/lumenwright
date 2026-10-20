@@ -120,6 +120,8 @@ pub fn see_through_hit(scene: &SceneView, o: V3, d: V3, tmin: f32) -> Option<Hit
 
 /// Finds the closest surface along the ray `o + t*d`, `t ∈ (tmin, tmax)`.
 /// `o` is in grid-relative coordinates.
+// On CUDA the whole path tracer is one function: see `pt_render` in crates/lumenwright-ptx.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
 pub fn trace(scene: &SceneView, o: V3, d: V3, tmin: f32, tmax: f32) -> Option<Hit> {
     let p = scene.params;
     let dims = p.grid_dims;
