@@ -24,6 +24,9 @@ struct Params {
     misc_u: vec4<u32>,
     see_through: vec4<u32>,
     emitter: vec4<u32>,
+    sun_su: vec4<f32>,
+    sun_sv: vec4<f32>,
+    sun_sprite: vec4<f32>,
 }
 
 // Quads are read as raw words: the w lanes of p0/eu carry bit-cast integers
@@ -365,11 +368,22 @@ fn sky_radiance(d: vec3<f32>) -> vec3<f32> {
         0.0052982 * cx - 0.0146949 * cy + 1.0093968 * cz) * (0.045 * P.sky_sun.w);
 }
 
-fn sun_disk(d: vec3<f32>) -> vec3<f32> {
-    if (dot(d, P.sun_dir.xyz) >= P.sun_dir.w) {
-        return P.sun_color.xyz * P.misc_f.z;
+// integrator::sun_texture: Chunky's Sun.intersect.
+fn sun_texture(d: vec3<f32>) -> vec3<f32> {
+    let sprite = P.sun_sprite;
+    if (sprite.z <= 0.0 || dot(d, P.sun_dir.xyz) < 0.5) {
+        return vec3<f32>(0.0);
     }
-    return vec3<f32>(0.0);
+    let width = P.sun_sv.w;
+    let width2 = width * 2.0;
+    let a = 0.5 * PI - acos_as(dot(d, P.sun_su.xyz)) + width;
+    let b = 0.5 * PI - acos_as(dot(d, P.sun_sv.xyz)) + width;
+    if (a < 0.0 || a >= width2 || b < 0.0 || b >= width2) {
+        return vec3<f32>(0.0);
+    }
+    let x = clamp(floor(a / width2 * sprite.z - 5e-5), 0.0, sprite.z - 1.0);
+    let y = clamp(floor((1.0 - b / width2) * sprite.w - 5e-5), 0.0, sprite.w - 1.0);
+    return linear_rgb(texel_at(sprite.x + x + 0.5, sprite.y + y + 0.5)) * P.sun_su.w;
 }
 
 fn cosine_hemisphere(n: vec3<f32>) -> vec3<f32> {
@@ -550,7 +564,7 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
             if (!in_water) {
                 radiance += beta * sky_radiance(d);
                 if (specular && bounces == 0u) {
-                    radiance += beta * sun_disk(d);
+                    radiance += beta * sun_texture(d);
                 }
             }
             break;

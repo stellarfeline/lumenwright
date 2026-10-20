@@ -515,6 +515,25 @@ fn gpu_matches_cpu_in_quick_mode() {
     }
 }
 
+/// The parity frames' suns: a day sun; a dusk sun half a degree below the horizon, part
+/// of its disc above it (the sky at full light and the sun's horizon test); and a low sun
+/// at the centre of a narrow view, exposed so the sun texture drawn in the sky does not
+/// clip.
+const DAY_SUN: &[&str] = &["--sun-altitude", "40"];
+const DUSK_SUN: &[&str] = &["--sun-altitude", "-0.5"];
+const SUN_IN_VIEW: &[&str] = &["--sun-altitude", "8", "--sun-azimuth", "330"];
+/// A camera on the showcase looking at the [`SUN_IN_VIEW`] sun with a 12 degree view.
+const SUN_VIEW: &[&str] = &[
+    "--camera",
+    "18.5,76,22.5",
+    "--look-at",
+    "13.55,77.39,13.92",
+    "--fov",
+    "12",
+    "--exposure",
+    "0.1",
+];
+
 #[test]
 fn gpu_matches_cpu_in_hq_mode() {
     let jar = require_jar!();
@@ -523,17 +542,16 @@ fn gpu_matches_cpu_in_hq_mode() {
         return;
     }
     let dir = tmp("parity-hq");
-    // The dusk frame's sun is half a degree below the horizon, part of its disc above
-    // it: the sky at full light and the sun's horizon test on every backend.
-    for (name, world, view, sun_altitude) in [
-        ("showcase", showcase(), &[][..], "40"),
-        ("showcase-dusk", showcase(), &[][..], "-0.5"),
-        ("block-entities", gallery(), &GALLERY_VIEW[..], "40"),
+    for (name, world, view, sun) in [
+        ("showcase", showcase(), &[][..], DAY_SUN),
+        ("showcase-dusk", showcase(), &[][..], DUSK_SUN),
+        ("showcase-sun", showcase(), SUN_VIEW, SUN_IN_VIEW),
+        ("block-entities", gallery(), &GALLERY_VIEW[..], DAY_SUN),
         (
             "items",
             items_world(true),
             &fixture::ITEM_GALLERY_VIEW[..],
-            "40",
+            DAY_SUN,
         ),
     ] {
         let args = |b: &'static str| {
@@ -548,9 +566,8 @@ fn gpu_matches_cpu_in_hq_mode() {
                 "160",
                 "--height",
                 "90",
-                "--sun-altitude",
-                sun_altitude,
             ];
+            v.extend_from_slice(sun);
             v.extend_from_slice(view);
             v
         };
@@ -603,17 +620,16 @@ fn cuda_matches_cpu_in_hq_mode() {
         return;
     }
     let dir = tmp("parity-cuda");
-    // The dusk frame's sun is half a degree below the horizon, part of its disc above
-    // it: the sky at full light and the sun's horizon test on every backend.
-    for (name, world, view, sun_altitude) in [
-        ("showcase", showcase(), &[][..], "40"),
-        ("showcase-dusk", showcase(), &[][..], "-0.5"),
-        ("block-entities", gallery(), &GALLERY_VIEW[..], "40"),
+    for (name, world, view, sun) in [
+        ("showcase", showcase(), &[][..], DAY_SUN),
+        ("showcase-dusk", showcase(), &[][..], DUSK_SUN),
+        ("showcase-sun", showcase(), SUN_VIEW, SUN_IN_VIEW),
+        ("block-entities", gallery(), &GALLERY_VIEW[..], DAY_SUN),
         (
             "items",
             items_world(true),
             &fixture::ITEM_GALLERY_VIEW[..],
-            "40",
+            DAY_SUN,
         ),
     ] {
         let args = |b: &'static str| {
@@ -628,9 +644,8 @@ fn cuda_matches_cpu_in_hq_mode() {
                 "160",
                 "--height",
                 "90",
-                "--sun-altitude",
-                sun_altitude,
             ];
+            v.extend_from_slice(sun);
             v.extend_from_slice(view);
             v
         };

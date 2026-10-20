@@ -72,15 +72,38 @@ pub fn sky_radiance(scene: &SceneView, d: V3) -> V3 {
     ) * (0.045 * p.sky_sun[3])
 }
 
+/// The sun drawn in the sky: Chunky's `Sun.intersect` (GPL-3.0, chunky-dev/chunky
+/// 156e2bb). The client's sun texture covers a square around the sun whose half-width is
+/// four times the sun's radius, laid along the axes `su` and `sv` by the angles
+/// `π/2 − acos(d·su)` and `π/2 − acos(d·sv)`, sampled at the nearest texel (as
+/// `Texture.getColor`), decoded to linear and scaled by the texture's brightness; the
+/// caller adds it to the sky, as `Sky.addSunColor` does.
 #[inline(always)]
-fn sun_disk(scene: &SceneView, d: V3) -> V3 {
+pub fn sun_texture(scene: &SceneView, d: V3) -> V3 {
     let p = scene.params;
-    let sun = V3::from4(p.sun_dir);
-    if d.dot(sun) >= p.sun_dir[3] {
-        V3::from4(p.sun_color) * p.misc_f[2]
-    } else {
-        V3::ZERO
+    let sprite = p.sun_sprite;
+    if sprite[2] <= 0.0 || d.dot(V3::from4(p.sun_dir)) < 0.5 {
+        return V3::ZERO;
     }
+    let width = p.sun_sv[3];
+    let width2 = width * 2.0;
+    let a = 0.5 * PI - acos(d.dot(V3::from4(p.sun_su))) + width;
+    let b = 0.5 * PI - acos(d.dot(V3::from4(p.sun_sv))) + width;
+    if a < 0.0 || a >= width2 || b < 0.0 || b >= width2 {
+        return V3::ZERO;
+    }
+    // `Texture.getColor(u, v)`: texel ((int) (u w − ε), (int) ((1 − v) h − ε)).
+    let x = clamp(
+        crate::math::floor(a / width2 * sprite[2] - 5e-5),
+        0.0,
+        sprite[2] - 1.0,
+    );
+    let y = clamp(
+        crate::math::floor((1.0 - b / width2) * sprite[3] - 5e-5),
+        0.0,
+        sprite[3] - 1.0,
+    );
+    linear_rgb(scene.texel(sprite[0] + x + 0.5, sprite[1] + y + 0.5)) * p.sun_su[3]
 }
 
 #[inline(always)]
@@ -335,10 +358,11 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
             None => {
                 if !in_water {
                     radiance = radiance + beta.mul(sky_radiance(scene, d));
-                    // Only purely specular camera paths see the sun disk; diffuse
-                    // paths already account for it through next-event estimation.
+                    // Only purely specular camera paths see the sun drawn (Chunky's
+                    // direct and specular sky hits); diffuse paths already account for
+                    // the sun through next-event estimation (Chunky's `FAST`).
                     if specular && bounces == 0 {
-                        radiance = radiance + beta.mul(sun_disk(scene, d));
+                        radiance = radiance + beta.mul(sun_texture(scene, d));
                     }
                 }
                 break;

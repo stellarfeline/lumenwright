@@ -29,6 +29,8 @@ pub struct HqScene {
     pub atlas: Vec<u32>,
     /// Atlas width and height in texels.
     pub atlas_size: [u32; 2],
+    /// The client's sun texture in the atlas (x, y, width, height), when the jar has one.
+    pub sun_sprite: Option<[u32; 4]>,
     /// Grid size in bricks.
     pub dims: [u32; 3],
     /// Word offsets: top, bricks, ov_top, ov_cells, ov_quads.
@@ -467,6 +469,10 @@ pub fn build_hq(scene: &Scene) -> anyhow::Result<HqScene> {
         quads,
         atlas: scene.atlas.pixels.clone(),
         atlas_size: [scene.atlas.width, scene.atlas.height],
+        sun_sprite: crate::scene::SUN_TEXTURES.iter().find_map(|t| {
+            let s = scene.atlas.sprites[scene.atlas.id(t)? as usize];
+            Some([s.x, s.y, s.w, s.h])
+        }),
         dims,
         offsets: [off_top, off_bricks, off_ov_top, off_ov_cells, off_ov_quads],
         see_through,

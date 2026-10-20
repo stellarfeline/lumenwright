@@ -758,9 +758,9 @@ pub fn hq_params(
     s: &HqSky,
 ) -> Params {
     let sun_radius = sky::SUN_RADIUS;
-    let solid_angle = std::f32::consts::TAU * (1.0 - sun_radius.cos());
     let f4 = |v: Vec3, w: f32| [v.x, v.y, v.z, w];
     let sky = sky::Preetham::new(s.sun_dir);
+    let (su, sv) = sky::sun_texture_axes(s.sun_dir);
     Params {
         cam_pos: f4(eye, rays.tan_half_fov),
         cam_fwd: f4(rays.forward, rays.aspect),
@@ -776,7 +776,7 @@ pub fn hq_params(
         perez_d: f4(Vec3::from(sky.perez[3]), 0.0),
         perez_e: f4(Vec3::from(sky.perez[4]), 0.0),
         water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
-        misc_f: [o.emitter_intensity, 1e-3, 1.0 / solid_angle, 0.0],
+        misc_f: [o.emitter_intensity, 1e-3, 0.0, 0.0],
         grid_dims: [
             hq.dims[0],
             hq.dims[1],
@@ -808,5 +808,8 @@ pub fn hq_params(
             0,
             0,
         ],
+        sun_su: f4(su, sky::SUN_TEXTURE_BRIGHTNESS),
+        sun_sv: f4(sv, 4.0 * sun_radius),
+        sun_sprite: hq.sun_sprite.map_or([0.0; 4], |r| r.map(|v| v as f32)),
     }
 }

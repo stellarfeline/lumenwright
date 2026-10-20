@@ -562,6 +562,27 @@ pub const DEFAULT_SUN_INTENSITY: f32 = 1.25;
 /// the benchmark scene, chunky-dev/chunky 156e2bb).
 pub const SUN_RADIUS: f32 = 0.03;
 
+/// The brightness of the sun texture drawn in the sky: Chunky's `apparentTextureBrightness`
+/// times 10 (`Sun.intersect`), where `apparentTextureBrightness` is the apparent brightness
+/// to the power 2.2 and the apparent brightness defaults to `Sun.DEFAULT_INTENSITY`
+/// (chunky-dev/chunky 156e2bb). Chunky sets it apart from the sun's intensity.
+pub const SUN_TEXTURE_BRIGHTNESS: f32 = 16.338_118;
+
+/// The axes along which the sun texture lies in the sky for a unit vector `sw` towards
+/// the sun: Chunky's `Sun.initSun` (chunky-dev/chunky 156e2bb). `su` starts as up, or as
+/// +x when `sw` is within 0.1 of the yz plane; `sv = normalize(sw × su)`; `su = sv × sw`.
+pub fn sun_texture_axes(sw: Vec3) -> (Vec3, Vec3) {
+    let sw = sw.as_dvec3();
+    let su = if sw.x.abs() > 0.1 {
+        glam::DVec3::Y
+    } else {
+        glam::DVec3::X
+    };
+    let sv = sw.cross(su).normalize();
+    let su = sv.cross(sw);
+    (su.as_vec3(), sv.as_vec3())
+}
+
 /// The sun's altitude at which civil twilight ends: its centre 6 degrees below the
 /// horizon (the definition the US Naval Observatory uses).
 pub const CIVIL_TWILIGHT_END: f32 = -6.0 * std::f32::consts::PI / 180.0;
@@ -866,6 +887,123 @@ mod tests {
         assert_eq!(dusk.sun_color, Vec3::splat(1.25f32.powf(2.2)));
         let night = hq_sky(-Vec3::Y, 1.25, 1.0);
         assert_eq!(night.sky_light, NIGHT_SKY_LIGHT);
+    }
+
+    #[test]
+    fn the_sun_texture_is_as_bright_as_chunkys() {
+        assert!(
+            (SUN_TEXTURE_BRIGHTNESS as f64 - 10.0 * 1.25f64.powf(2.2)).abs() < 1e-4,
+            "{}",
+            10.0 * 1.25f64.powf(2.2)
+        );
+        let (su, sv) = sun_texture_axes(Vec3::new(-0.999987, -0.005091, 0.0));
+        assert!(
+            (su - Vec3::new(-0.005091, 0.999987, 0.0)).length() < 1e-5,
+            "{su}"
+        );
+        assert!((sv - Vec3::new(0.0, 0.0, -1.0)).length() < 1e-5, "{sv}");
+    }
+
+    /// Chunky's `Sun.intersect` and `Texture.getColor`, transcribed in `f64` from the
+    /// Java, against the kernel's `sun_texture` on a 32 × 32 sprite whose every texel
+    /// differs, placed at (3, 5) in a larger atlas.
+    #[test]
+    fn the_kernel_draws_chunkys_sun_texture() {
+        let (aw, ah) = (40u32, 40u32);
+        let texel = |x: u32, y: u32| -> u32 {
+            0xFF00_0000 | (x * 7 + 3) | ((y * 7 + 3) << 8) | (((x + y) * 3) << 16)
+        };
+        let mut atlas = vec![0u32; (aw * ah) as usize];
+        for y in 0..32 {
+            for x in 0..32 {
+                atlas[((y + 5) * aw + x + 3) as usize] = texel(x, y);
+            }
+        }
+        let lin = |c: u32, s: u32| ((c >> s) & 0xFF) as f64 / 255.0;
+        let chunky = |sw: glam::DVec3, d: glam::DVec3| -> Option<(u32, u32)> {
+            let r = SUN_RADIUS as f64;
+            if d.dot(sw) < 0.5 {
+                return None;
+            }
+            let su0 = if sw.x.abs() > 0.1 {
+                glam::DVec3::Y
+            } else {
+                glam::DVec3::X
+            };
+            let sv = sw.cross(su0).normalize();
+            let su = sv.cross(sw);
+            let (width, width2) = (r * 4.0, r * 8.0);
+            let a = std::f64::consts::FRAC_PI_2 - d.dot(su).acos() + width;
+            let b = std::f64::consts::FRAC_PI_2 - d.dot(sv).acos() + width;
+            if !(a >= 0.0 && a < width2 && b >= 0.0 && b < width2) {
+                return None;
+            }
+            let x = ((a / width2) * 32.0 - 5e-5) as i32;
+            let y = ((1.0 - b / width2) * 32.0 - 5e-5) as i32;
+            Some((x.clamp(0, 31) as u32, y.clamp(0, 31) as u32))
+        };
+        let (mut drawn, mut checked, mut edge) = (0, 0, 0);
+        for sun in [
+            Vec3::new(-0.999987, -0.005091, 0.0),
+            sun_direction(8.0, 330.0),
+            sun_direction(45.0, 135.0),
+            sun_direction(80.0, 3.0),
+        ] {
+            let (su, sv) = sun_texture_axes(sun);
+            let params = lumenwright_kernel::Params {
+                sun_dir: [sun.x, sun.y, sun.z, SUN_RADIUS.cos()],
+                sun_su: [su.x, su.y, su.z, SUN_TEXTURE_BRIGHTNESS],
+                sun_sv: [sv.x, sv.y, sv.z, 4.0 * SUN_RADIUS],
+                sun_sprite: [3.0, 5.0, 32.0, 32.0],
+                off2: [0, aw, ah, 0],
+                ..Default::default()
+            };
+            let view = lumenwright_kernel::SceneView {
+                params: &params,
+                grid: &[],
+                models: &[],
+                quads: &[],
+                atlas: &atlas,
+                emitters: &[],
+                emitter_grid: &[],
+            };
+            let sw = sun.as_dvec3();
+            for i in -60..=60 {
+                for j in -60..=60 {
+                    // Directions over the square the texture covers and a little beyond.
+                    let (da, db) = (i as f64 * 0.0025, j as f64 * 0.0025);
+                    let d = (sw + su.as_dvec3() * da + sv.as_dvec3() * db).normalize();
+                    let want = chunky(sw, d);
+                    let got = lumenwright_kernel::integrator::sun_texture(
+                        &view,
+                        lumenwright_kernel::math::v3(d.x as f32, d.y as f32, d.z as f32),
+                    );
+                    checked += 1;
+                    let Some((x, y)) = want else {
+                        if got.x != 0.0 || got.y != 0.0 || got.z != 0.0 {
+                            edge += 1;
+                        }
+                        continue;
+                    };
+                    let c = texel(x, y);
+                    let w = [lin(c, 0), lin(c, 8), lin(c, 16)]
+                        .map(|v| v.powf(2.2) * SUN_TEXTURE_BRIGHTNESS as f64);
+                    let g = [got.x as f64, got.y as f64, got.z as f64];
+                    if (0..3).all(|k| (g[k] - w[k]).abs() <= 1e-4 * w[k].max(1.0)) {
+                        drawn += 1;
+                    } else {
+                        // An f32 direction on a texel border may fall in the next texel.
+                        edge += 1;
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "sun texture: {drawn} drawn texels agree, {edge} on texel or square borders differ, of {checked} directions"
+        );
+        assert_eq!(checked, 4 * 121 * 121);
+        assert!(drawn > 4 * 90 * 90, "{drawn}");
+        assert!(edge * 100 < checked, "{edge}");
     }
 
     #[test]
