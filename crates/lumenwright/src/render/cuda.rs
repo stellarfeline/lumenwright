@@ -14,10 +14,8 @@ use cudarc::nvrtc::Ptx;
 
 use super::{Backend, HqFrame, QuickFrame};
 
-const PTX: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../target/ptx/lumenwright.ptx"
-));
+// The path is resolved by build.rs (`LUMENWRIGHT_PTX`, or the clone's target/ptx).
+const PTX: &str = include_str!(env!("LUMENWRIGHT_PTX_FILE"));
 const TARGET_LAUNCH: Duration = Duration::from_millis(150);
 
 /// The CUDA backend: HQ mode runs the Rust kernel compiled to PTX through the

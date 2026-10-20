@@ -21,7 +21,7 @@ flate2 = "1.1.10"
 glam = "0.34.1"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 log = "0.4.34"
-lumenwright-kernel = { version = "0.1.0", path = "../lumenwright-kernel", default-features = false, features = ["std"] }
+lumenwright-kernel = { version = "=0.1.0", path = "../lumenwright-kernel", default-features = false, features = ["std"] }
 lz4_flex = "0.14.0"
 pollster = { version = "1.0.1", optional = true }
 rayon = "1.12.0"
