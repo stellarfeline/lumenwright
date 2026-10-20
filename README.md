@@ -49,7 +49,7 @@ which light little more than the block they stand on, where the game's block lig
 Each image's command, run from the repository root with the save from
 [Get the camp](#get-the-camp) in `the-treehouse-camp`. The HQ commands need the CUDA build
 (see [Backends](#backends)); on another backend the same flags give the same image within the
-parity stated under [Measured](#measured-on-an-m2-pro-10-cpu-cores-16-gpu-cores).
+parity the tests hold (`gpu_matches_cpu_in_hq_mode`, `cuda_matches_cpu_in_hq_mode`).
 
 ```sh
 # The whole camp
@@ -488,57 +488,10 @@ cargo test --workspace --release
   mipmaps. Tests that need the
   client jar or a GPU skip with a message when it is missing. `LUMENWRIGHT_MC_JAR` points the tests at a jar.
 
-## Measured on an M2 Pro (10 CPU cores, 16 GPU cores)
+## Benchmark
 
-| scene | mode / backend | time |
-|---|---|---|
-| The Treehouse Camp, whole-camp view at `--time 4000`, 625 chunks loaded, 1920×1080 | quick / metal | 0.28 s end to end (48 ms raster, 982k triangles) |
-| same | quick / cpu | 0.36 s end to end (139 ms raster) |
-| same, 1280×720, 32 spp, 4 bounces | hq / metal | 4.1 s end to end (3.9 s path tracing) |
-| same, 1280×720, 16 spp, 4 bounces | hq / cpu | 6.1 s end to end (5.9 s path tracing) |
-| showcase (`demo-world`, its default camera), 1280×720, 256 spp | hq / metal | 14.7 s |
-
-Parity on the whole-camp view at `--time 4000`, CPU vs Metal: in quick mode at 1920×1080, 0.22%
-of pixels differ by more than 8/255; in HQ mode at 1280×720 and 32 spp, 0.001% do (12 pixels).
-
-## HQ mode and Chunky on one frame
-
-The whole-camp view of The Treehouse Camp at 1280×720, 250 samples per pixel, four bounces, with Chunky's default sky,
-sun, emitters and tone map (the full method: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
-Against Chunky's frame converged at 4000 samples, Lumenwright's 250-sample frame differs by a
-mean of 1.66/255 (SSIM 0.959), Chunky's own 250-sample frame by 1.99/255 (SSIM 0.958). At
-dusk (`--time 12800`, the sun just below the horizon) the same view differs by 1.21/255
-(SSIM 0.955), Chunky's own 250-sample frame by 1.28/255 (SSIM 0.954).
-
-| renderer | machine | path tracing, median of 3 | whole command, median of 3 | vs Chunky |
-|---|---|---|---|---|
-| Chunky 2.5.0-SNAPSHOT.474 (CPU) | M2 Pro | 116.71 s | 122.29 s | 1× |
-| Lumenwright, Metal | M2 Pro | 31.98 s | 32.32 s | 3.6× / 3.8× |
-| Lumenwright, CUDA | RTX 4070 Ti SUPER | 6.14 s | 6.70 s | different machine |
-
-```sh
-# Lumenwright (--backend metal on the M2 Pro, cuda on the 4070)
-target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
-    --time 4000 --sun-altitude 45 --sun-azimuth 135 --mode hq --spp 250 --max-bounces 4 --backend metal -o lw.png
-# Chunky: the pinned core on its own classpath, as Delvewright's validation/chunky.sh runs it, without its denoise step
-mkdir -p scenes && cp docs/bench/treehouse-camp-bench.json scenes/
-java -Djava.awt.headless=true -Dchunky.home=$HOME/.chunky -cp "<the pinned core and its libraries>" se.llbit.chunky.main.Chunky \
-    -scene-dir scenes -render treehouse-camp-bench -f
-```
-
-The Chunky scene ([`docs/bench/treehouse-camp-bench.json`](docs/bench/treehouse-camp-bench.json); its world path is read from the working directory) states the same 625 chunks, the camera
-at 140, 118, 14 with Chunky's yaw 0.483 rad and pitch −1.208 rad (looking at 56, 82, 58), a 60°
-vertical field of view, `sppTarget` 250, `rayDepth` 5 (four bounces after the first hit,
-read off the pinned core's `PathTracer`), `emittersEnabled`, `emitterSamplingStrategy` `ONE`,
-and the sun at altitude π/4 and Chunky azimuth π/4 (towards +X +Z).
-
-## Measured on an RTX 4070 Ti SUPER (driver 616.92, WSL2)
-
-| scene | mode / backend | time |
-|---|---|---|
-| showcase, 1280×720, 64 spp, 4 bounces | hq / cuda | 0.85 s in the kernel (CUDA events), 1.43 s end to end |
-
-The same frame on CUDA and on the CPU: no pixel differs by more than 0.05 in linear radiance.
+Lumenwright against Chunky on the same machine, its backends against each other, and the cost
+of samples, each with its design and instruments: [docs/benchmark.md](docs/benchmark.md).
 
 ## Known limitations (v0.1)
 
