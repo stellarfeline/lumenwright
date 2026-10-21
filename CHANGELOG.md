@@ -4,7 +4,7 @@ All notable changes to Lumenwright are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0] - Unreleased
 
 ### Added
 
@@ -33,6 +33,9 @@ All notable changes to Lumenwright are recorded here. The format follows
 - `Tonemap::Filmic` is evaluated as Chunky's `processPixel` evaluates it (the parameter
   products in float, the rest in double) through the one `HableCurve`.
 - The HQ timing stage `sky cache` is `sky`.
+- `lumenwright-cli` is published to crates.io with the other two crates (`cargo install
+  lumenwright-cli`); the release workflow publishes `lumenwright-kernel`, `lumenwright` and
+  `lumenwright-cli` in that order and refuses unless all three are absent at the version.
 - `lumenwright-kernel` declares `rust-version` 1.88, the first release it builds on (its `if let`
   chains); 0.1.0 declared 1.85, on which it does not compile.
 

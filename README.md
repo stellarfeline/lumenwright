@@ -52,15 +52,15 @@ The requirements, design decisions and what is in or out of scope are in
 
 ## Install
 
-The command, from this repository (it is not on crates.io):
+The command, from crates.io (from 0.2.0):
 
 ```sh
-cargo install --locked --git https://github.com/stellarfeline/lumenwright --tag v0.1.0 lumenwright-cli
+cargo install lumenwright-cli
 lumenwright backends             # the backends this machine can draw with
 ```
 
-Rust versions, each checked with `cargo +<version> check`: the command (`lumenwright-cli`, at
-`v0.1.0` and on `main`) and the library (`lumenwright`) build on Rust 1.90 and not on 1.89;
+Rust versions, each checked with `cargo +<version> check`: the command (`lumenwright-cli`) and
+the library (`lumenwright`) build on Rust 1.90 and not on 1.89;
 the kernel (`lumenwright-kernel`) builds on 1.88 and not on 1.87. Installing the command also
 compiles a little C (`ring`, for the TLS its jar downloader uses), so it needs a C compiler; the
 library, with or without its default features, compiles none.
@@ -87,7 +87,7 @@ Render a save from an explicit camera, path traced under the game's sky at dusk:
 lumenwright render -w path/to/save --camera 140,118,14 --look-at 56,82,58 --time 12800 --mode hq --spp 256 -o hq.png
 ```
 
-From Rust, with `lumenwright = "0.1.0"` in `[dependencies]`:
+From Rust, with `lumenwright = "0.2.0"` in `[dependencies]`:
 
 ```rust
 use std::path::Path;

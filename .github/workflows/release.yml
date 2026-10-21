@@ -1,18 +1,22 @@
-# Lumenwright release: publishes lumenwright-kernel, then lumenwright, to crates.io, then tags
-# v<version> and creates the GitHub Release. lumenwright-cli is not published.
+# Lumenwright release: publishes lumenwright-kernel, then lumenwright, then lumenwright-cli
+# (each after the one it depends on is in the crates.io index), then tags v<version> and
+# creates the GitHub Release.
 #
 # Run it from the Actions tab (or `gh workflow run release.yml -f version=X.Y.Z`) on main.
 # Nothing is published, tagged or released until every refusal below has passed:
 #   * the run is not on main;
-#   * the input is not a version, or differs from the version of either published crate;
+#   * the input is not a version, or differs from the version of any of the three crates, or
+#     a crate is marked publish = false;
 #   * main's CI (ci.yml, on push) did not succeed at this commit;
-#   * the version of either crate is already on crates.io, or the tag v<version> exists;
+#   * any of the three crates already has the version on crates.io, or the tag v<version>
+#     exists;
 #   * CHANGELOG.md has no dated section for the version (a section still marked Unreleased
 #     is refused);
 #   * the test suite (ci.yml, run again here) fails.
 #
-# Secret: CARGO_REGISTRY_TOKEN, a crates.io API token with the publish-update scope for both
-# crates (publish-new for a first release), stored as a repository secret.
+# Secret: CARGO_REGISTRY_TOKEN, a crates.io API token with the publish-update scope for the
+# three crates (publish-new for a crate's first release, lumenwright-cli's at 0.2.0), stored
+# as a repository secret.
 name: release
 
 on:
@@ -59,18 +63,18 @@ jobs:
             exit 1
           fi
           meta=$(cargo metadata --no-deps --format-version 1)
-          for crate in lumenwright-kernel lumenwright; do
+          for crate in lumenwright-kernel lumenwright lumenwright-cli; do
             have=$(jq -r --arg n "$crate" '.packages[] | select(.name==$n) | .version' <<<"$meta")
             if [ "$have" != "$VERSION" ]; then
               echo "::error::refused: $crate is at '$have' in the workspace, the input is $VERSION"
               exit 1
             fi
+            publish=$(jq -r --arg n "$crate" '.packages[] | select(.name==$n) | .publish | tostring' <<<"$meta")
+            if [ "$publish" != "null" ]; then
+              echo "::error::refused: $crate may not be published (its publish field reads $publish)"
+              exit 1
+            fi
           done
-          cli=$(jq -r '.packages[] | select(.name=="lumenwright-cli") | .publish | tostring' <<<"$meta")
-          if [ "$cli" != "[]" ]; then
-            echo "::error::refused: lumenwright-cli must carry publish = false (its publish field reads $cli)"
-            exit 1
-          fi
       - name: Refuse a commit whose CI on main did not succeed
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,7 +91,7 @@ jobs:
       - name: Refuse a version already on crates.io, or a tag that exists
         run: |
           set -euo pipefail
-          for crate in lumenwright-kernel lumenwright; do
+          for crate in lumenwright-kernel lumenwright lumenwright-cli; do
             # The sparse index: a 404 is the only answer read as "absent".
             path="$(cut -c1-2 <<<"$crate")/$(cut -c3-4 <<<"$crate")/$crate"
             code=$(curl -sS -o index.txt -w '%{http_code}' "https://index.crates.io/$path")
@@ -139,27 +143,30 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
-      - name: Publish lumenwright-kernel
+      - name: Publish lumenwright-kernel, lumenwright and lumenwright-cli, each once the index serves the one before
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --locked -p lumenwright-kernel
-      - name: Wait until the index serves lumenwright-kernel at the version
         run: |
           set -euo pipefail
-          for _ in $(seq 60); do
-            if curl -fsS https://index.crates.io/lu/me/lumenwright-kernel 2>/dev/null \
-                | jq -e --arg v "$VERSION" 'select(.vers==$v)' >/dev/null; then
-              echo "lumenwright-kernel $VERSION is in the index"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "::error::lumenwright-kernel $VERSION did not reach the index within 10 minutes"
-          exit 1
-      - name: Publish lumenwright
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --locked -p lumenwright
+          wait_for() {
+            path="$(cut -c1-2 <<<"$1")/$(cut -c3-4 <<<"$1")/$1"
+            for _ in $(seq 60); do
+              if curl -fsS "https://index.crates.io/$path" 2>/dev/null \
+                  | jq -e --arg v "$VERSION" 'select(.vers==$v)' >/dev/null; then
+                echo "$1 $VERSION is in the index"
+                return 0
+              fi
+              sleep 10
+            done
+            echo "::error::$1 $VERSION did not reach the index within 10 minutes"
+            return 1
+          }
+          cargo publish --locked -p lumenwright-kernel
+          wait_for lumenwright-kernel
+          cargo publish --locked -p lumenwright
+          wait_for lumenwright
+          cargo publish --locked -p lumenwright-cli
+          wait_for lumenwright-cli
 
   release:
     needs: publish
