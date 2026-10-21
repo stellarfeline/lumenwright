@@ -7,11 +7,11 @@ pixels to your program (see [Library](docs/library.md#library)). It has two look
 
 * **quick**: rasterized to look like the vanilla Java client, with no ray tracing.
 * **hq**: a path tracer ported from Chunky's, with its emitters, its display gamma and
-  refractive water. By default it lights the frame as the game lights the hour: the
-  client's own sky in view, the light of the client's lightmap, no sunlight
-  ([docs/research/game-sky.md](docs/research/game-sky.md)). Chunky's Preetham sky, with its
-  sun and soft shadows, is `--sky chunky` (what was ported and how the result compares with
-  Chunky: [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
+  refractive water. By default it goes by the time of day: by day Chunky's Preetham sky and
+  a sun that lights and shadows, at dusk and night the game's own sky, lit as the client
+  lights the hour ([docs/research/game-sky.md](docs/research/game-sky.md)); `--sky chunky`
+  and `--sky game` force either (what was ported and how the result compares with Chunky:
+  [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
 
 Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vulkan** and
 **DX12** (through wgpu), and **CUDA** (the Rust path-tracing kernel compiled to PTX).

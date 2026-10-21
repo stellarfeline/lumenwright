@@ -42,8 +42,10 @@ a cell that cannot be measured is marked n/a with its reason.
   `docs/bench/treehouse-camp-bench.json`. It is the one frame both renderers draw by the same
   algorithm (Chunky cannot draw the game's sky with two maps).
 - **F-game**: the same camera, resolution, chunks and bounces under Lumenwright's defaults
-  (the game's sky, the mid-grey tone curve, emitters 13 `ONE`), at tick 4000 (day) and
-  12800 (dusk).
+  at `f291590` (the game's sky, the mid-grey tone curve, emitters 13 `ONE`), at tick 4000
+  (day) and 12800 (dusk). From 0.2.0 that frame is `--sky game` (the default goes by the time
+  of day), and the game look's emitter intensity is 137.9628; an emitter's intensity scales
+  the light it adds and not the work, so the times stand.
 - **F-quick**: the same camera, resolution and chunks in quick mode at tick 4000.
 
 ### Questions

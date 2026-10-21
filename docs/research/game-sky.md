@@ -1,7 +1,9 @@
 # HQ mode's game sky: the light and the sky of the client at a tick
 
-HQ mode's default sky (`--sky game`, `HqSkyModel::Game`) lights a frame as the 1.21.11 client
-lights the same tick and shows the client's own sky. The method is the one Delvewright's
+HQ mode's game sky (`--sky game`, `SkyLook::Game`) lights a frame as the 1.21.11 client
+lights the same tick and shows the client's own sky. HQ mode's default (`--sky auto`,
+`SkyLook::ByTime`) draws it at dusk and night and Chunky's sky and sun by day
+([By the time of day](#by-the-time-of-day)). The method is the one Delvewright's
 engine lights its Chunky scenes with (stellarfeline/delvewright at `0fd300da7`:
 `crates/delvec/src/compiler/view/scene.rs`, `sky_image.rs`, and the record in its
 `docs/reference/compiler.md` §4). Lumenwright ports the method, not a tuned constant: every
@@ -50,10 +52,55 @@ modes feed one colour to the lens and to the light, scaled by `apparentSkyLight`
   or stars and draws Chunky's own sun texture (a smaller square at brightness 16.3).
 * **The lightmap is read at its 8-bit level** [cited]; the engine reads the shader's value.
   At tick 12800 the two differ by 0.6% in the light.
-* **Not ported: the lantern scale.** The engine writes `emitterIntensity` 159.003, Chunky's
-  13 times 12.2310, fitted so that the mean display luma of the Treehouse Camp's lantern-lit
-  pixels equals a game model's. It is a fit on one map, not a value the client states, so
-  Lumenwright keeps Chunky's 13 and `--emitter-intensity` takes the engine's value.
+* **The lantern scale is Lumenwright's own fit.** The engine writes `emitterIntensity`
+  159.003, Chunky's 13 times 12.2310, fitted so that the mean display luma of the Treehouse
+  Camp's lantern-lit pixels equals a game model's. Lumenwright fits its own against the
+  engine's render ([Lanterns](#lanterns)).
+
+## By the time of day
+
+The default look follows the client's day [cited for the quantity, authored for the mix]. On
+the 1.21.11 day timeline three tracks mark one day plateau, from tick 730 to tick 11270:
+`visual/sky_light_factor` and `visual/sky_light_color` hold their day values (1 and white)
+and `visual/sunrise_sunset_color` its zero alpha. Off the plateau the factor falls linearly
+to its night value 0.24 at 13140, holds it to 22860, and rises back by 730. The weight of
+Chunky's look is where the factor at the tick stands between those two values,
+`(factor − 0.24) / (1 − 0.24)` (`sky::day_weight`; the two values are read from the jar's
+timeline by `environment::sky_light_factor_range`): 1 on the day plateau, 0 on the night
+plateau, linear in ticks on the ramps, at most 1/1870 a tick. At the camp's dusk, tick
+12800, it is 0.181818.
+
+The two looks are mixed in one render: Chunky's sky, read through its cache, is weighted
+into the game's two maps, and Chunky's sun lights and is drawn at the same weight. Light
+transport is linear in the sky's and the sun's radiance, so the frame's radiance is the
+weighted mix of the two looks' radiances. Each look keeps its tone curve and emitter
+intensity unless the caller states one: the curves (gamma, filmic-mid-grey) are mixed in
+display values and the intensities (13, 137.9628) linearly. On the day plateau the frame is
+`--sky chunky`'s byte for byte; on the night plateau `--sky game`'s [measured, the test
+`the_default_sky_follows_the_day_without_a_jump`]. One tick across either edge of the ramp
+moves the camp frame by 0.067/255 (Metal, 64 spp, at `4d1f6bd`), as one tick inside Chunky's look does
+(0.059); a hard switch at the plateau's edge moves it by 28.7 [measured].
+
+## Lanterns
+
+The game look's emitter intensity is 137.9628, Chunky's 13 times 10.6125: **authored by
+Lumenwright**, neither a vanilla nor a Chunky value (`request::GAME_EMITTER_INTENSITY`).
+Chunky's emitters light little beyond their block where the game's block light reaches 14
+blocks; the scale stands in for that, as the engine's 12.2310 does. `--emitter-intensity`
+takes any value over it.
+
+The fit [measured]: the whole-camp view at tick 12800 under the default sky (day weight
+0.181818), CUDA, 16384 samples, four bounces, emitters sampled `ONE` (Lumenwright's
+default), rendered at intensities 13 and 26 with one seed, which draw the same random
+numbers, so the frame at any intensity `k` is `HDR(13) + (k − 13)/13 × (HDR(26) − HDR(13))`
+in radiance (a direct render at the fitted `k` agrees with that to 6.75e-7). Lantern-lit
+pixels are those where the emitters' light at the engine's intensity 159.003 outshines the
+sky's (Rec. 709 luminance): 128 564 of 921 600. The objective is that their mean display
+luma under the default tone mix equals the engine's Chunky render's, 41.993; bisection gives
+`k` = 115.2423 (Lumenwright reads 28.622 there at 13 and 45.956 at 159.003), so the game
+look's intensity is `(115.2423 − 0.181818 × 13) / 0.818182` = 137.9628. Per pixel the fitted
+frame is 7.33 luma from the reference on average (rms 9.29); fitting each quarter of the frame
+on its own gives 118.5, 114.6, 116.6 and 112.6.
 
 ## Measurements
 
@@ -102,6 +149,19 @@ Lumenwright's noise floor: the dusk frame against itself with another seed is di
 | main + the mid-grey tone curve | 33.17 | 68 | 75 | 0.7416 | 110.3 | (147, 159, 168) 206° | (135, 159, 174) 203° | (142, 161, 174) 204° |
 | the game's sky, `gamma` | 9.67 | 51 | 51 | 0.9348 | 102.4 | (182, 208, 255) 219° | (167, 196, 255) 220° | (176, 203, 255) 219° |
 | the game's sky and the mid-grey curve (`f291590`, the defaults) | 8.37 | 47 | 55 | 0.9321 | 98.3 | (166, 181, 204) 216° | (156, 175, 204) 216° | (162, 179, 204) 216° |
+
+**The defaults at `0cd2b54`** (by the time of day, the fitted lanterns, no emitter flags;
+CUDA, 16384 samples, four bounces), against the same references [measured]:
+
+| frame | display mean | p90 | p99 | SSIM | mean luma | band | upper | away |
+|---|---|---|---|---|---|---|---|---|
+| dusk (day weight 0.181818, emitter intensity 115.2423) | 8.06 | 33 | 86 | 0.8162 | 59.6 | (190, 127, 77) 27° | (178, 125, 90) 24° | (156, 105, 87) 16° |
+| day (Chunky's look, emitter intensity 13) | 31.46 | 65 | 79 | 0.7161 | 111.8 | (154, 172, 185) 205° | (139, 172, 196) 205° | (147, 175, 195) 205° |
+
+By day the default is Chunky's look by ruling, not the engine's, so the day reference is a
+record of the difference and not a target. At dusk the lantern-lit pixels read 41.993, as
+the reference's (the fit); the frame's mean luma is above the reference's because Chunky's
+sky enters at 0.18 and Lumenwright's lens shows the client's sky without the veil.
 
 At the `gamma` step the reference is the same Chunky render re-shown with `GAMMA`: dusk display
 mean 17.67 (main) and 7.78 (the game's sky), day 42.38 and 12.01.

@@ -4,17 +4,17 @@
 
 ## How they are drawn
 
-HQ mode runs with its defaults: the game's sky at the hour, lit as the 1.21.11 client lights
-it (the colour its lightmap gives a cell open to the sky, from the sky's directions, and no
-sunlight, so nothing casts a sun shadow), the client's sky, sun, moon and stars in view,
-lanterns and campfires as Chunky's emitters at intensity 13 with one emitter sampled per
-diffuse bounce, and the tone curve that shows mid-grey as the game does.
+HQ mode runs with its defaults, which go by the time of day. At `--time 4000` the day
+frames are Chunky's look: the Preetham sky, a sun of intensity 1.25 that lights and shadows,
+lanterns and campfires as emitters at intensity 13 with one emitter sampled per diffuse
+bounce, and the display gamma 2.2.
 
 At `--time 12800` the sun stands just below the horizon. Quick mode draws the client's sunset:
-the sun, the orange glow and the light the game stored in the save. HQ mode draws the same sky
-and lights the camp with the evening's dim blue light; its lanterns are Chunky's emitters,
-which light little more than the block they stand on, where the game's block light reaches
-14 blocks (see [docs/research/game-sky.md](research/game-sky.md)).
+the sun, the orange glow and the light the game stored in the save. HQ mode draws mostly the
+game's look (Chunky's at a weight of 0.18, by where the client's sky light factor stands):
+the client's sky and its evening light, no sunlight, the lanterns at the game look's
+intensity 137.96, fitted to Delvewright's engine's render of this frame, and the tone curve
+that shows mid-grey as the game does (see [docs/research/game-sky.md](research/game-sky.md)).
 
 Each image's command, run from the repository root with the save from
 [Get the camp](#get-the-camp) in `the-treehouse-camp`. The HQ commands need the CUDA build

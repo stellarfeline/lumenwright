@@ -17,17 +17,27 @@ All notable changes to Lumenwright are recorded here. The format follows
   sun, moon and stars. The host draws the sky into two equirectangular maps that every
   backend reads (`Params::sky_map`; `integrator::sky_lens`, `sky_light`). A jar without
   environment attributes is refused under it.
+- The game look's emitter intensity, `GAME_EMITTER_INTENSITY` = 137.9628 (13 × 10.6125),
+  authored by Lumenwright: fitted so that the Treehouse Camp's lantern-lit pixels at dusk
+  read as Delvewright's engine's Chunky render of the frame does. `--emitter-intensity`
+  takes any value over it.
 - `--tonemap filmic-mid-grey` (`Tonemap::FilmicMidGrey`, `post::game_tone_curve`): Chunky's
   Hable curve read 1.463761 times brighter, so linear 0.18 shows at 0.18^(1/2.2) as the
   game's transfer shows it.
 
 ### Changed
 
-- HQ mode's default sky is the game's, with the `filmic-mid-grey` tone curve; Chunky's
-  Preetham sky and sun are `--sky chunky` (`HqSkyModel::Chunky`), which keeps the `gamma` tone
-  curve by default. `--sun-intensity` and `--sky-intensity` scale Chunky's sky only and are
-  refused under the game's. `Sky::Vanilla` carries `hq: HqSkyModel` in place of
-  `sun_intensity` and `sky_intensity`; `HqOptions::default().tonemap` is `FilmicMidGrey`.
+- HQ mode's default sky goes by the time of day (`SkyLook::ByTime`, `--sky auto`): Chunky's
+  Preetham sky and sun on the client's day plateau (ticks 730 to 11270, where
+  `visual/sky_light_factor` is 1), the game's sky on the night plateau, and between them one
+  render mixing the two by where the factor stands between its night and day values, with no
+  jump from one tick to the next. `--sky chunky` and `--sky game` force either look.
+  `HqSkyModel` is a struct (`look`, `render_distance`, `sun_intensity`, `sky_intensity`);
+  `Sky::Vanilla` carries it in place of `sun_intensity` and `sky_intensity`.
+  `--sun-intensity` and `--sky-intensity` are refused only under `--sky game`.
+- `HqOptions::tonemap` and `emitter_intensity` are `Option`s: unstated, each look takes its
+  own (`gamma` and 13 for Chunky's, `filmic-mid-grey` and `GAME_EMITTER_INTENSITY` for the
+  game's), mixed by the day weight.
 - `Params` is 26 vec4s (416 bytes): `sky_map` gives the sizes of the sky's maps. A sun of
   colour 0 draws no next-event sample.
 - `Tonemap::Filmic` is evaluated as Chunky's `processPixel` evaluates it (the parameter
