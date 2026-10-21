@@ -187,6 +187,61 @@ pub fn sky_radiance(scene: &SceneView, d: V3) -> V3 {
     rgb_from_hsl(hsl[0], hsl[1], hsl[2]) * p.sky_sun[3]
 }
 
+/// A bilinear lookup in the equirectangular map of `w` × `h` linear RGB texels that
+/// starts at word `base` of [`SceneView::sky`]: texel `(i, j)` at `(j w + i) × 3`, its
+/// centre at azimuth `(i + ½) / w` turns from +x towards +z and at height
+/// `(j + ½) / h · π − π/2` (row 0 at the nadir). The azimuth wraps; the height is held
+/// at the first and last rows' centres.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
+fn map_lookup(scene: &SceneView, base: u32, w: f32, h: f32, d: V3) -> V3 {
+    let u = atan2(d.z, d.x) / (2.0 * PI);
+    let u = ((u % 1.0) + 1.0) % 1.0;
+    // (asin y + π/2) / π = 1 − acos(y) / π.
+    let v = 1.0 - acos(clamp(d.y, -1.0, 1.0)) / PI;
+    let x = u * w - 0.5;
+    let y = clamp(v * h - 0.5, 0.0, h - 1.0);
+    let fx = crate::math::floor(x);
+    let fy = crate::math::floor(y);
+    let (tx, ty) = (x - fx, y - fy);
+    let i0 = if fx < 0.0 { w - 1.0 } else { fx };
+    let i1 = if fx + 1.0 >= w { 0.0 } else { fx + 1.0 };
+    let j1 = crate::math::min(fy + 1.0, h - 1.0);
+    let sky = scene.sky;
+    let at = |i: f32, j: f32| -> V3 {
+        let k = (base + (j as u32 * w as u32 + i as u32) * 3) as usize;
+        v3(sky[k], sky[k + 1], sky[k + 2])
+    };
+    let top = at(i0, fy) * (1.0 - tx) + at(i1, fy) * tx;
+    let bottom = at(i0, j1) * (1.0 - tx) + at(i1, j1) * tx;
+    top * (1.0 - ty) + bottom * ty
+}
+
+/// The sky a path sees along `d` before its first diffuse bounce: the lens's map
+/// (`Params::sky_map`), or, with no maps, Chunky's sky ([`sky_radiance`]). Under the
+/// maps the lens and the light differ: what is drawn in the sky (the client's sun, moon
+/// and stars among it) is seen and casts no light, and the light carries the colour
+/// the host derived it to cast (`lumenwright::render::sky::GameSkyMaps`).
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
+pub fn sky_lens(scene: &SceneView, d: V3) -> V3 {
+    let m = scene.params.sky_map;
+    if m[0] < 1.0 {
+        return sky_radiance(scene, d);
+    }
+    map_lookup(scene, 0, m[0], m[1], d)
+}
+
+/// The light the sky casts along `d` on a path that has bounced diffusely: the
+/// light's map, which follows the lens's in [`SceneView::sky`], or, with no maps,
+/// Chunky's sky ([`sky_radiance`]), which is the same for the lens and the light.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
+pub fn sky_light(scene: &SceneView, d: V3) -> V3 {
+    let m = scene.params.sky_map;
+    if m[0] < 1.0 {
+        return sky_radiance(scene, d);
+    }
+    map_lookup(scene, (m[0] * m[1]) as u32 * 3, m[2], m[3], d)
+}
+
 /// The sun drawn in the sky: Chunky's `Sun.intersect` (GPL-3.0, chunky-dev/chunky
 /// 156e2bb). The client's sun texture covers a square around the sun whose half-width is
 /// four times the sun's radius, laid along the axes `su` and `sv` by the angles
@@ -472,7 +527,11 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
         let h = match hit {
             None => {
                 if !in_water {
-                    radiance = radiance + beta.mul(sky_radiance(scene, d));
+                    if bounces == 0 {
+                        radiance = radiance + beta.mul(sky_lens(scene, d));
+                    } else {
+                        radiance = radiance + beta.mul(sky_light(scene, d));
+                    }
                     // Only purely specular camera paths see the sun drawn (Chunky's
                     // direct and specular sky hits); diffuse paths already account for
                     // the sun through next-event estimation (Chunky's `FAST`).
@@ -547,11 +606,13 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
         // and, Lumenwright's own, when it is not below the horizon, where the ground
         // beyond the world hides the sun. Some direction in the cone passes both tests
         // only when the sun's centre is less than its radius below the surface's plane
-        // and below the horizon, so no sample is drawn otherwise.
+        // and below the horizon. So no sample is drawn otherwise, nor for a sun that
+        // casts no light.
         let origin = pos + n * eps;
         let sun = V3::from4(p.sun_dir);
         let sin_r = sqrt(max(1.0 - p.sun_dir[3] * p.sun_dir[3], 0.0));
-        if n.dot(sun) > -sin_r && p.sun_dir[1] > -sin_r {
+        let lit = p.sun_color[0] > 0.0 || p.sun_color[1] > 0.0 || p.sun_color[2] > 0.0;
+        if lit && n.dot(sun) > -sin_r && p.sun_dir[1] > -sin_r {
             let l = sample_sun(scene, &mut rng);
             let cos_l = n.dot(l);
             if cos_l > 0.0 && l.y >= 0.0 {

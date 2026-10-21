@@ -69,7 +69,24 @@ mirror! {
         Aces,
         /// Hable / Uncharted 2 filmic, then the display gamma.
         Filmic,
+        /// Hable read brighter so linear 0.18 shows as the game shows it (0.18^(1/2.2)),
+        /// then the display gamma.
+        FilmicMidGrey,
     }
+}
+
+/// `--sky`: the library's [`lumenwright::request::SkyLook`]; the looks' values
+/// come from their own flags.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SkyArg {
+    /// By the time of day: Chunky's sky and sun on the client's day plateau, the game's sky
+    /// at night, mixed between them by the client's `visual/sky_light_factor`.
+    Auto,
+    /// The game's own sky at the tick, lit as the client lights it: the lightmap's sky
+    /// light, no sunlight, the client's sky, sun, moon and stars drawn.
+    Game,
+    /// Chunky's simulated sky: the Preetham sky and a sun that lights and shadows.
+    Chunky,
 }
 
 mirror! {

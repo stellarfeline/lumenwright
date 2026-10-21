@@ -27,6 +27,7 @@ struct Params {
     sun_su: vec4<f32>,
     sun_sv: vec4<f32>,
     sun_sprite: vec4<f32>,
+    sky_map: vec4<f32>,
 }
 
 // Quads are read as raw words: the w lanes of p0/eu carry bit-cast integers
@@ -426,6 +427,50 @@ fn sky_radiance(d: vec3<f32>) -> vec3<f32> {
     return rgb_from_hsl(hsl.x, hsl.y, hsl.z) * P.sky_sun.w;
 }
 
+// integrator::map_lookup: bilinear in an equirectangular map of linear RGB in `sky`.
+fn map_lookup(base: u32, w: f32, h: f32, d: vec3<f32>) -> vec3<f32> {
+    let u0 = atan2_as(d.z, d.x) / (2.0 * PI);
+    let u = jmod(jmod(u0, 1.0) + 1.0, 1.0);
+    let v = 1.0 - acos_as(clamp(d.y, -1.0, 1.0)) / PI;
+    let x = u * w - 0.5;
+    let y = clamp(v * h - 0.5, 0.0, h - 1.0);
+    let fx = floor(x);
+    let fy = floor(y);
+    let tx = x - fx;
+    let ty = y - fy;
+    let i0 = select(fx, w - 1.0, fx < 0.0);
+    let i1 = select(fx + 1.0, 0.0, fx + 1.0 >= w);
+    let j1 = min(fy + 1.0, h - 1.0);
+    let wu = u32(w);
+    let k00 = base + (u32(fy) * wu + u32(i0)) * 3u;
+    let k10 = base + (u32(fy) * wu + u32(i1)) * 3u;
+    let k01 = base + (u32(j1) * wu + u32(i0)) * 3u;
+    let k11 = base + (u32(j1) * wu + u32(i1)) * 3u;
+    let c00 = vec3<f32>(sky[k00], sky[k00 + 1u], sky[k00 + 2u]);
+    let c10 = vec3<f32>(sky[k10], sky[k10 + 1u], sky[k10 + 2u]);
+    let c01 = vec3<f32>(sky[k01], sky[k01 + 1u], sky[k01 + 2u]);
+    let c11 = vec3<f32>(sky[k11], sky[k11 + 1u], sky[k11 + 2u]);
+    let top = c00 * (1.0 - tx) + c10 * tx;
+    let bottom = c01 * (1.0 - tx) + c11 * tx;
+    return top * (1.0 - ty) + bottom * ty;
+}
+
+// integrator::sky_lens: what a path sees before its first diffuse bounce.
+fn sky_lens(d: vec3<f32>) -> vec3<f32> {
+    if (P.sky_map.x < 1.0) {
+        return sky_radiance(d);
+    }
+    return map_lookup(0u, P.sky_map.x, P.sky_map.y, d);
+}
+
+// integrator::sky_light: the light the sky casts on a path that has bounced.
+fn sky_light(d: vec3<f32>) -> vec3<f32> {
+    if (P.sky_map.x < 1.0) {
+        return sky_radiance(d);
+    }
+    return map_lookup(u32(P.sky_map.x * P.sky_map.y) * 3u, P.sky_map.z, P.sky_map.w, d);
+}
+
 // integrator::sun_texture: Chunky's Sun.intersect.
 fn sun_texture(d: vec3<f32>) -> vec3<f32> {
     let sprite = P.sun_sprite;
@@ -620,7 +665,11 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
         }
         if (h.quad == NO_QUAD) {
             if (!in_water) {
-                radiance += beta * sky_radiance(d);
+                if (bounces == 0u) {
+                    radiance += beta * sky_lens(d);
+                } else {
+                    radiance += beta * sky_light(d);
+                }
                 if (specular && bounces == 0u) {
                     radiance += beta * sun_texture(d);
                 }
@@ -681,7 +730,8 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
         let origin = pos + n * eps;
         let sun = P.sun_dir.xyz;
         let sin_r = sqrt(max(1.0 - P.sun_dir.w * P.sun_dir.w, 0.0));
-        if (dot(n, sun) > -sin_r && P.sun_dir.y > -sin_r) {
+        let lit = P.sun_color.x > 0.0 || P.sun_color.y > 0.0 || P.sun_color.z > 0.0;
+        if (lit && dot(n, sun) > -sin_r && P.sun_dir.y > -sin_r) {
             let l = sample_sun();
             let cos_l = dot(n, l);
             if (cos_l > 0.0 && l.y >= 0.0) {

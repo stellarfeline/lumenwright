@@ -519,9 +519,22 @@ fn gpu_matches_cpu_in_quick_mode() {
 /// of its disc above it (the sky at full light and the sun's horizon test); and a low sun
 /// at the centre of a narrow view, exposed so the sun texture drawn in the sky does not
 /// clip.
-const DAY_SUN: &[&str] = &["--sun-altitude", "40"];
-const DUSK_SUN: &[&str] = &["--sun-altitude", "-0.5"];
-const SUN_IN_VIEW: &[&str] = &["--sun-altitude", "8", "--sun-azimuth", "330"];
+/// Chunky's sky with a sun at a stated altitude.
+const DAY_SUN: &[&str] = &["--sky", "chunky", "--sun-altitude", "40"];
+const DUSK_SUN: &[&str] = &["--sky", "chunky", "--sun-altitude", "-0.5"];
+const SUN_IN_VIEW: &[&str] = &[
+    "--sky",
+    "chunky",
+    "--sun-altitude",
+    "8",
+    "--sun-azimuth",
+    "330",
+];
+/// The game's sky in the morning and at the setting sun.
+const GAME_DAY: &[&str] = &["--sky", "game", "--time", "4000"];
+const GAME_DUSK: &[&str] = &["--sky", "game", "--time", "12800"];
+/// The default sky half way down the evening ramp (day weight 0.5): both looks mixed.
+const AUTO_MID: &[&str] = &["--time", "12205"];
 /// A camera on the showcase looking at the [`SUN_IN_VIEW`] sun with a 12 degree view.
 const SUN_VIEW: &[&str] = &[
     "--camera",
@@ -546,6 +559,9 @@ fn gpu_matches_cpu_in_hq_mode() {
         ("showcase", showcase(), &[][..], DAY_SUN),
         ("showcase-dusk", showcase(), &[][..], DUSK_SUN),
         ("showcase-sun", showcase(), SUN_VIEW, SUN_IN_VIEW),
+        ("showcase-game-day", showcase(), &[][..], GAME_DAY),
+        ("showcase-game-dusk", showcase(), &[][..], GAME_DUSK),
+        ("showcase-auto-mid", showcase(), &[][..], AUTO_MID),
         ("block-entities", gallery(), &GALLERY_VIEW[..], DAY_SUN),
         (
             "items",
@@ -638,6 +654,8 @@ fn gpu_draws_the_sky_as_the_cpu_does() {
             "18.5,200,40",
             "--fov",
             "150",
+            "--sky",
+            "chunky",
             "--sun-altitude",
             "5",
             "--sun-azimuth",
@@ -662,6 +680,173 @@ fn gpu_draws_the_sky_as_the_cpu_does() {
     assert!(worst <= 2, "{worst}/255");
 }
 
+/// The game's sky is two maps the host draws and every backend reads the same way: a
+/// frame that looks at the setting sun, its glow and the dusk sky (the lens's map) agrees
+/// between the CPU and the GPU within 2/255 everywhere.
+#[test]
+fn gpu_draws_the_game_sky_as_the_cpu_does() {
+    let jar = require_jar!();
+    if !gpu_available() {
+        eprintln!("skipping: no GPU adapter");
+        return;
+    }
+    let dir = tmp("parity-game-sky");
+    let args = |b: &'static str| {
+        vec![
+            "--mode",
+            "hq",
+            "--backend",
+            b,
+            "--spp",
+            "4",
+            "--width",
+            "160",
+            "--height",
+            "90",
+            "--camera",
+            "18.5,120,22.5",
+            "--look-at",
+            "-80,125,22.5",
+            "--fov",
+            "90",
+            "--sky",
+            "game",
+            "--time",
+            "12800",
+        ]
+    };
+    let (cpu, gpu) = (dir.join("sky-cpu.png"), dir.join("sky-gpu.png"));
+    render(showcase(), &jar, &cpu, &args("cpu")).unwrap();
+    render(showcase(), &jar, &gpu, &args("gpu")).unwrap();
+    let (a, b) = (load(&cpu), load(&gpu));
+    let worst = a
+        .pixels()
+        .zip(b.pixels())
+        .flat_map(|(p, q)| (0..3).map(move |i| (p.0[i] as i32 - q.0[i] as i32).abs()))
+        .max()
+        .unwrap();
+    let mean_red = a.pixels().map(|p| p.0[0] as f64).sum::<f64>() / (a.width() * a.height()) as f64;
+    eprintln!(
+        "hq game sky: largest channel difference {worst}/255 between CPU and GPU (mean red {mean_red:.1})"
+    );
+    assert!(
+        mean_red > 60.0,
+        "the frame shows the dusk sky: mean red {mean_red:.1}"
+    );
+    assert!(worst <= 2, "{worst}/255");
+}
+
+/// Chunky's sun and sky scales mean nothing under the game's sky (the default): either
+/// flag is refused by name before anything is drawn, and is taken under `--sky chunky`.
+#[test]
+fn chunky_scales_are_refused_under_the_game_sky() {
+    let jar = require_jar!();
+    let dir = tmp("game-sky-flags");
+    for flag in ["--sun-intensity", "--sky-intensity"] {
+        let small = [
+            "--mode",
+            "hq",
+            "--backend",
+            "cpu",
+            "--spp",
+            "1",
+            "--width",
+            "16",
+            "--height",
+            "9",
+        ];
+        let mut args = small.to_vec();
+        args.extend([flag, "2", "--sky", "game"]);
+        let err = render(showcase(), &jar, &dir.join("refused.png"), &args)
+            .err()
+            .unwrap_or_else(|| panic!("{flag} was taken under the game's sky"));
+        let msg = format!("{err:#}");
+        assert!(msg.contains(flag) && msg.contains("--sky chunky"), "{msg}");
+        let mut taken = small.to_vec();
+        taken.extend([flag, "2", "--sky", "chunky"]);
+        render(showcase(), &jar, &dir.join("taken.png"), &taken).unwrap();
+        // The default mixes Chunky's sky in by day, so it takes them.
+        let mut auto = small.to_vec();
+        auto.extend([flag, "2"]);
+        render(showcase(), &jar, &dir.join("auto.png"), &auto).unwrap();
+    }
+}
+
+/// The default sky goes by the time of day: on the client's day plateau it is Chunky's look
+/// byte for byte, on the night plateau the game's, and across the evening ramp of
+/// `visual/sky_light_factor` a frame one tick later differs by as little as one tick
+/// within either look does.
+#[test]
+fn the_default_sky_follows_the_day_without_a_jump() {
+    let jar = require_jar!();
+    let dir = tmp("sky-by-time");
+    let frame = |name: &str, tick: &str, extra: &[&str]| {
+        let mut args = vec![
+            "--mode",
+            "hq",
+            "--backend",
+            "cpu",
+            "--spp",
+            "8",
+            "--width",
+            "96",
+            "--height",
+            "54",
+            "--time",
+            tick,
+        ];
+        args.extend_from_slice(extra);
+        let out = dir.join(format!("{name}.png"));
+        render(showcase(), &jar, &out, &args).unwrap();
+        load(&out)
+    };
+    let mean = |a: &image::RgbaImage, b: &image::RgbaImage| {
+        a.pixels()
+            .zip(b.pixels())
+            .map(|(p, q)| {
+                (0..3)
+                    .map(|i| (p.0[i] as f64 - q.0[i] as f64).abs())
+                    .sum::<f64>()
+            })
+            .sum::<f64>()
+            / (a.width() * a.height() * 3) as f64
+    };
+    // The plateaus are the two looks.
+    assert_eq!(
+        frame("day", "6000", &[]).into_raw(),
+        frame("day-chunky", "6000", &["--sky", "chunky"]).into_raw()
+    );
+    assert_eq!(
+        frame("night", "18000", &[]).into_raw(),
+        frame("night-game", "18000", &["--sky", "game"]).into_raw()
+    );
+    // Across the edges of the ramp (11270 and 13140), one tick moves a frame no more than
+    // one tick does inside a look.
+    let inside = mean(&frame("a", "11269", &[]), &frame("b", "11270", &[]));
+    let (e0, e1) = (frame("c", "11270", &[]), frame("d", "11271", &[]));
+    let (n0, n1) = (frame("e", "13139", &[]), frame("f", "13140", &[]));
+    let (day_edge, night_edge) = (mean(&e0, &e1), mean(&n0, &n1));
+    eprintln!(
+        "sky by time: one tick moves a frame by {inside:.3}/255 inside Chunky's look, \
+         {day_edge:.3} at the day plateau's edge and {night_edge:.3} at the night's"
+    );
+    assert!(day_edge <= 2.0 * inside.max(0.05), "{day_edge} vs {inside}");
+    assert!(
+        night_edge <= 2.0 * inside.max(0.05),
+        "{night_edge} vs {inside}"
+    );
+    // Half way down the ramp it is neither look.
+    let mid = frame("mid", "12205", &[]);
+    assert_ne!(
+        mid.as_raw(),
+        frame("mid-c", "12205", &["--sky", "chunky"]).as_raw()
+    );
+    assert_ne!(
+        mid.as_raw(),
+        frame("mid-g", "12205", &["--sky", "game"]).as_raw()
+    );
+}
+
 /// The CUDA kernel is the CPU kernel compiled to PTX: an HQ frame agrees with
 /// the CPU's within the GPU bounds above. Quick mode on CUDA is the CPU rasterizer.
 #[cfg(feature = "cuda")]
@@ -677,6 +862,9 @@ fn cuda_matches_cpu_in_hq_mode() {
         ("showcase", showcase(), &[][..], DAY_SUN),
         ("showcase-dusk", showcase(), &[][..], DUSK_SUN),
         ("showcase-sun", showcase(), SUN_VIEW, SUN_IN_VIEW),
+        ("showcase-game-day", showcase(), &[][..], GAME_DAY),
+        ("showcase-game-dusk", showcase(), &[][..], GAME_DUSK),
+        ("showcase-auto-mid", showcase(), &[][..], AUTO_MID),
         ("block-entities", gallery(), &GALLERY_VIEW[..], DAY_SUN),
         (
             "items",

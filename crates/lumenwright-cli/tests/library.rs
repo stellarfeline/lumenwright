@@ -12,8 +12,8 @@ use lumenwright::render::{BackendKind, Mode};
 use lumenwright::scene::camera::Camera;
 use lumenwright::world::Dimension;
 use lumenwright::{
-    ChunkRect, EntityPolicy, HqOptions, QuickOptions, Rendered, Request, RequestError, Sky,
-    WorldSource,
+    ChunkRect, EntityPolicy, HqOptions, HqSkyModel, QuickOptions, Rendered, Request, RequestError,
+    Sky, WorldSource,
 };
 use lumenwright_cli::fixture;
 use lumenwright_cli::jar;
@@ -115,8 +115,10 @@ fn request<'a>(world: &'a Path, jar: &'a Path, mode: Mode) -> Request<'a> {
         sky: Sky::Vanilla {
             time: None,
             sun_dir: Some(sky::sun_direction(40.0, 135.0)),
-            sun_intensity: sky::DEFAULT_SUN_INTENSITY,
-            sky_intensity: 1.0,
+            hq: HqSkyModel {
+                render_distance: (RADIUS * 16) as f32,
+                ..HqSkyModel::default()
+            },
         },
     }
 }
@@ -292,8 +294,10 @@ fn quick_sky_follows_the_vanilla_day() {
         req.sky = Sky::Vanilla {
             time: Some(ticks),
             sun_dir: None,
-            sun_intensity: 1.5,
-            sky_intensity: 1.0,
+            hq: HqSkyModel {
+                sun_intensity: 1.5,
+                ..HqSkyModel::CHUNKY
+            },
         };
         let out = lumenwright::render(&req).unwrap();
         // The median of the centre 5×5 pixels (a star may sit on one).

@@ -7,6 +7,11 @@ was made from: Chunky 2.5.0-SNAPSHOT.474 is `chunky-core-2.5.0-SNAPSHOT.474.g156
 chunky-dev/chunky at `156e2bba2526` (2026-07-26). Paths below are under
 `chunky/src/java/se/llbit/` at that revision.
 
+This page covers Chunky's sky and sun, which HQ mode draws under `--sky chunky`. Its
+default, the game's own sky lit as the client lights the tick, is
+[game-sky.md](game-sky.md); the rest of the path tracer (emitters, faces, water, the display
+gamma) is the same under both.
+
 Each statement is marked **[cited]** (the Chunky source or the paper it cites says it),
 **[measured]** (a render or a test shows it) or **[inferred]**.
 
@@ -157,11 +162,12 @@ machine's monotonic clock.
   block's own biome. Visible only at biome borders.
 * Candle and campfire flame particles, fancier translucency, Chunky's water shading and its
   metals: not ported, and not examined in the benchmark frames.
-* Twilight and night: Chunky has no time of day, and its Preetham sky keeps the sunset sky
-  at any sun below the horizon. Below the sun's disc, Lumenwright's sky falls to a night's 3%
-  at the end of civil twilight and its sun gives no light from below the horizon; frames with
-  the sun more than its radius below the horizon are Lumenwright's own. Chunky's Nishita sky,
-  which its documentation names for twilight, is not ported.
+* Twilight and night under `--sky chunky`: Chunky has no time of day, and its Preetham sky
+  keeps the sunset sky at any sun below the horizon. Below the sun's disc, Lumenwright's
+  Chunky sky falls to a night's 3% at the end of civil twilight and its sun gives no light from
+  below the horizon; frames with the sun more than its radius below the horizon are
+  Lumenwright's own. Chunky's Nishita sky, which its documentation names for twilight, is not
+  ported. The default sky has a time of day: the client's ([game-sky.md](game-sky.md)).
 * Where the converged dusk frames still differ most (40-pixel blocks, 0.67/255 overall): the
   tree at the frame's left edge (x 0–40, y 520–640, a mean of 3.1/255; its trunk darker and
   its leaves lighter in Lumenwright's frame) [measured]; the cause is not examined (the leaf
