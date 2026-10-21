@@ -126,13 +126,16 @@ impl Default for QuickOptions {
 /// chunky-dev/chunky 156e2bb): the emitter intensity of Chunky's look.
 pub const DEFAULT_EMITTER_INTENSITY: f32 = 13.0;
 
-/// The emitter intensity of the game's look: **authored by Lumenwright**, neither a
-/// vanilla nor a Chunky value. Fitted so that, at the Treehouse Camp's dusk (tick 12800,
-/// the default look), the mean display luma of the lantern-lit pixels equals that of
-/// Delvewright's engine's Chunky render of the same frame (`docs/research/game-sky.md`,
-/// *Lanterns*). Chunky's emitters light little beyond their block where the game's block
-/// light reaches 14; the scale stands in for that, as the engine's does.
-pub const GAME_EMITTER_INTENSITY: f32 = 13.0;
+/// The emitter intensity of the game's look, 137.9628 (Chunky's 13 times 10.6125):
+/// **authored by Lumenwright**, neither a vanilla nor a Chunky value. Chunky's emitters
+/// light little beyond their block where the game's block light reaches 14; this scale
+/// stands in for that, as Delvewright's engine's does. Fitted on the Treehouse Camp's
+/// whole-camp view at dusk (tick 12800, day weight 0.181818, four bounces, emitters sampled
+/// `ONE`): the default frame's emitter intensity there, `0.181818 × 13 + 0.818182 × this` =
+/// 115.2423, is the one at which the mean display luma of its lantern-lit pixels (where the
+/// emitters at the engine's intensity outshine the sky; 128 564 of 921 600) equals that of
+/// the engine's Chunky render of the frame, 41.993 (`docs/research/game-sky.md`, *Lanterns*).
+pub const GAME_EMITTER_INTENSITY: f32 = 137.9628;
 
 /// Chunky's emitter sampling strategies (`EmitterSamplingStrategy`): which emitters a
 /// diffuse surface samples, among those its emitter-grid cell lists.
@@ -1061,6 +1064,16 @@ pub fn hq_params(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The default emitter intensity at the camp's dusk is the fitted 115.2423, and each
+    /// plateau takes its look's own.
+    #[test]
+    fn the_lantern_default_is_the_fit_at_dusk() {
+        let at = |w: f32| w * DEFAULT_EMITTER_INTENSITY + (1.0 - w) * GAME_EMITTER_INTENSITY;
+        assert!((at(0.181818) - 115.2423).abs() < 1e-3, "{}", at(0.181818));
+        assert_eq!(at(1.0), 13.0);
+        assert_eq!(at(0.0), GAME_EMITTER_INTENSITY);
+    }
 
     /// `AtmosphericFogEnvironment.getBaseColor` in the 1.21.11 client lerps the clear colour
     /// towards the sky colour by `1 − Mth.clampedLerp(min(sky fog end / 16, render
