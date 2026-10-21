@@ -202,7 +202,7 @@ pub enum Sky {
         /// Ticks (0 = sunrise, 6000 = noon); `None` is the world's `DayTime`.
         time: Option<i64>,
         /// Unit vector towards the sun; `None` follows `time`. Under
-        /// [`HqSkyModel::Game`] it moves only the sun drawn in the sky.
+        /// [`SkyLook::Game`] it moves only the sun drawn in the sky.
         sun_dir: Option<Vec3>,
         /// What HQ mode lights the frame with and draws in its sky.
         hq: HqSkyModel,
