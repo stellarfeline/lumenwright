@@ -12,8 +12,8 @@ use lumenwright::render::{BackendKind, Mode};
 use lumenwright::scene::camera::Camera;
 use lumenwright::world::Dimension;
 use lumenwright::{
-    ChunkRect, EntityPolicy, HqOptions, HqSkyModel, QuickOptions, Rendered, Request, RequestError,
-    Sky, WorldSource,
+    ChunkRect, EntityPolicy, HqOptions, HqSkyModel, QuickOptions, QuickSkyColours, Rendered,
+    Request, RequestError, Sky, SkyLook, StatedSky, StatedTick, WorldSource,
 };
 use lumenwright_cli::fixture;
 use lumenwright_cli::jar;
@@ -199,15 +199,15 @@ fn a_stated_sky_is_drawn_as_given() {
     let mut req = request(&world, &jar, Mode::Quick);
     // Look straight up: the frame is all sky.
     req.camera.pitch = -90.0;
-    req.sky = Sky::Stated(lumenwright::StatedSky {
-        quick: lumenwright::QuickSkyColours {
+    req.sky = Sky::Stated(lumenwright::StatedSky::new(
+        lumenwright::QuickSkyColours {
             sky: Vec3::new(1.0, 0.0, 0.0),
             fog: Vec3::new(1.0, 0.0, 0.0),
             sun_dir: Vec3::new(0.0, -1.0, 0.0),
             sky_factor: 1.0,
         },
-        hq: sky::hq_sky(Vec3::Y, 1.5, 1.0),
-    });
+        sky::hq_sky(Vec3::Y, 1.5, 1.0),
+    ));
     let out = lumenwright::render(&req).unwrap();
     let red = out
         .rgba
@@ -215,6 +215,163 @@ fn a_stated_sky_is_drawn_as_given() {
         .filter(|p| p[0] == 255 && p[1] == 0 && p[2] == 0)
         .count();
     assert_eq!(red, 192 * 108, "the stated sky colour fills the frame");
+}
+
+/// A stated sky standing at a tick is drawn as `Sky::Vanilla` at that `time` is, when the
+/// caller states the colours and suns Lumenwright derives there
+/// (`QuickSkyColours::vanilla`, `sky::hq_sky`): byte for byte on the CPU, in quick mode
+/// (the sunrise glow, the moon and the stars of the tick) and in HQ mode under the game's
+/// look and under the look by time of day (its weight, the sky light and the lens's sky).
+/// The tick moves the frame: without it the same stated sky draws something else.
+#[test]
+fn a_stated_sky_at_a_tick_is_the_vanilla_sky_at_it() {
+    let jar = require_jar!();
+    let dir = tmp("stated-tick");
+    let world = dir.join("world");
+    fixture::block_entity_gallery().write(&world).unwrap();
+    let store = lumenwright::assets::load_resources(&jar, None, &[]).unwrap();
+    let distance = (RADIUS * 16) as f32;
+    let forward = camera().basis().0;
+    // 12800: the sun just set, the glow up; 18000: midnight, the moon and the stars out.
+    for (time, mode, look) in [
+        (12800, Mode::Quick, SkyLook::ByTime),
+        (18000, Mode::Quick, SkyLook::ByTime),
+        (12800, Mode::Hq, SkyLook::Game),
+        (12800, Mode::Hq, SkyLook::ByTime),
+        (18000, Mode::Hq, SkyLook::Game),
+    ] {
+        let env = lumenwright::assets::environment::sample(
+            &store,
+            "minecraft:overworld",
+            "minecraft:plains",
+            time,
+        )
+        .expect("a 1.21.11 jar carries environment attributes");
+        let sun = sky::celestial_direction(env.sun_angle);
+        let mut vanilla = request(&world, &jar, mode);
+        vanilla.sky = Sky::Vanilla {
+            time: Some(time),
+            sun_dir: Some(sun),
+            hq: HqSkyModel {
+                look,
+                render_distance: distance,
+                ..HqSkyModel::default()
+            },
+        };
+        let colours = QuickSkyColours::vanilla(
+            Some(&env),
+            "minecraft:plains",
+            time,
+            Some(sun),
+            forward,
+            distance,
+        );
+        let untimed = StatedSky::new(colours, sky::hq_sky(sun, sky::DEFAULT_SUN_INTENSITY, 1.0));
+        let mut tick = StatedTick::new(time, look);
+        tick.render_distance = distance;
+        let mut stated = vanilla;
+        stated.sky = Sky::Stated(untimed.at(tick));
+        let mut bare = vanilla;
+        bare.sky = Sky::Stated(untimed);
+        let name = format!("{mode:?} {look:?} at {time}");
+        let want = lumenwright::render(&vanilla).unwrap().rgba;
+        let got = lumenwright::render(&stated).unwrap().rgba;
+        let differing = want
+            .chunks(4)
+            .zip(got.chunks(4))
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differing, 0, "{name}: pixels differ from Sky::Vanilla's");
+        assert_ne!(
+            lumenwright::render(&bare).unwrap().rgba,
+            want,
+            "{name}: the tick moved nothing"
+        );
+    }
+}
+
+/// A stated sky at no stated tick (`StatedSky::new`) draws what 0.2.0, which had no tick to
+/// state, draws for the same request: byte for byte on the CPU in both modes, under a world
+/// whose `DayTime` is midnight, where a tick's moon, stars or game look would show.
+#[test]
+fn a_stated_sky_at_no_tick_draws_as_0_2_0_did() {
+    let jar = require_jar!();
+    let dir = tmp("stated-0-2-0");
+    let world = dir.join("world");
+    let mut fx = fixture::block_entity_gallery();
+    fx.day_time = 18000;
+    fx.write(&world).unwrap();
+    let quick = lumenwright::QuickSkyColours {
+        sky: Vec3::new(0.2, 0.3, 0.6),
+        fog: Vec3::new(0.7, 0.5, 0.4),
+        sun_dir: sky::sun_direction(10.0, 120.0),
+        sky_factor: 0.6,
+    };
+    let hq = sky::hq_sky(quick.sun_dir, 1.4, 0.9);
+    let old_quick = lumenwright_020::QuickSkyColours {
+        sky: quick.sky,
+        fog: quick.fog,
+        sun_dir: quick.sun_dir,
+        sky_factor: quick.sky_factor,
+    };
+    let old_hq = lumenwright_020::render::sky::HqSky {
+        sun_dir: hq.sun_dir,
+        sun_color: hq.sun_color,
+        sky_light: hq.sky_light,
+    };
+    for mode in [Mode::Quick, Mode::Hq] {
+        let mut req = request(&world, &jar, mode);
+        req.sky = Sky::Stated(StatedSky::new(quick, hq));
+        let cam = req.camera;
+        let old = lumenwright_020::Request {
+            world: lumenwright_020::WorldSource::Dir {
+                path: &world,
+                dimension: lumenwright_020::world::Dimension::Overworld,
+            },
+            chunks: lumenwright_020::ChunkRect {
+                min: req.chunks.min,
+                max: req.chunks.max,
+            },
+            jar: &jar,
+            unifont: req.unifont,
+            resource_packs: &[],
+            camera: lumenwright_020::scene::camera::Camera {
+                pos: cam.pos,
+                yaw: cam.yaw,
+                pitch: cam.pitch,
+                fov_y: cam.fov_y,
+            },
+            mode: match mode {
+                Mode::Quick => lumenwright_020::render::Mode::Quick,
+                Mode::Hq => lumenwright_020::render::Mode::Hq,
+            },
+            backend: lumenwright_020::render::BackendKind::Cpu,
+            width: req.width,
+            height: req.height,
+            entities: lumenwright_020::EntityPolicy::default(),
+            quick: lumenwright_020::QuickOptions {
+                ssaa: req.quick.ssaa,
+                draw_distance: req.quick.draw_distance,
+                ..lumenwright_020::QuickOptions::default()
+            },
+            hq: lumenwright_020::HqOptions {
+                spp: req.hq.spp,
+                ..lumenwright_020::HqOptions::default()
+            },
+            sky: lumenwright_020::Sky::Stated(lumenwright_020::StatedSky {
+                quick: old_quick,
+                hq: old_hq,
+            }),
+        };
+        let want = lumenwright_020::render(&old).unwrap().rgba;
+        let got = lumenwright::render(&req).unwrap().rgba;
+        let differing = want
+            .chunks(4)
+            .zip(got.chunks(4))
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differing, 0, "{mode:?}: pixels differ from 0.2.0's");
+    }
 }
 
 /// A JSON file from the client jar.

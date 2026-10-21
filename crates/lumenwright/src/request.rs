@@ -286,13 +286,66 @@ impl HqSkyModel {
     };
 }
 
-/// A caller-stated sky for both modes.
+/// A caller-stated sky for both modes. Build it with [`StatedSky::new`]; the struct is
+/// `#[non_exhaustive]`, so a field added later is not a breaking change.
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct StatedSky {
     /// The sky quick mode draws.
     pub quick: QuickSkyColours,
-    /// The sun and sky HQ mode traces.
+    /// The sun and sky HQ mode traces: Chunky's part of the frame.
     pub hq: HqSky,
+    /// The tick the sky stands at and the look HQ mode draws. `None` (the default): the
+    /// environment is sampled at the world's `DayTime`, quick mode draws the stated colours
+    /// and sun alone, and HQ mode traces [`StatedSky::hq`] alone, as Chunky's look.
+    pub tick: Option<StatedTick>,
+}
+
+impl StatedSky {
+    /// The stated colours and sun, at no stated tick ([`StatedSky::tick`] `None`).
+    pub fn new(quick: QuickSkyColours, hq: HqSky) -> StatedSky {
+        StatedSky {
+            quick,
+            hq,
+            tick: None,
+        }
+    }
+
+    /// The same sky standing at `tick`.
+    pub fn at(self, tick: StatedTick) -> StatedSky {
+        StatedSky {
+            tick: Some(tick),
+            ..self
+        }
+    }
+}
+
+/// The tick a [`StatedSky`] stands at, and the look HQ mode draws there. The stated colours
+/// and suns stay the caller's; what the client derives from the tick alone is drawn from the
+/// environment at it, exactly as under [`Sky::Vanilla`] at that `time`: the sunrise glow,
+/// the moon and the stars in both modes, and under the game's look its sky light.
+/// `#[non_exhaustive]`: build it with [`StatedTick::new`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct StatedTick {
+    /// Ticks (0 = sunrise, 6000 = noon), not reduced to one day: the moon's phase spans eight.
+    pub time: i64,
+    /// Which look HQ mode draws, weighted as under [`Sky::Vanilla`] ([`SkyLook::ByTime`]
+    /// by [`sky::day_weight`] at `time`). [`StatedSky::hq`] is Chunky's part.
+    pub look: SkyLook,
+    /// The client's render distance in blocks, which the game's sky fog depends on.
+    pub render_distance: f32,
+}
+
+impl StatedTick {
+    /// `look` at `time`, at the client's default render distance.
+    pub fn new(time: i64, look: SkyLook) -> StatedTick {
+        StatedTick {
+            time,
+            look,
+            render_distance: DEFAULT_RENDER_DISTANCE,
+        }
+    }
 }
 
 /// Quick mode's sky: the colours [`QuickSky`] draws and the lightmap's daylight.
@@ -571,7 +624,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
     };
     let day_time = match req.sky {
         Sky::Vanilla { time, .. } => time.unwrap_or(world.level.day_time),
-        Sky::Stated(_) => world.level.day_time,
+        Sky::Stated(s) => s.tick.map_or(world.level.day_time, |t| t.time),
     };
     let env = assets::environment::sample(&store, dimension, &biome, day_time);
     // The night and day values of `visual/sky_light_factor` over the day timeline.
@@ -656,30 +709,17 @@ pub fn render(req: &Request) -> Result<Rendered> {
         Mode::Hq => {
             let hq = voxel::build_hq(&scene)?;
             lap("build voxel scene", &mut t);
-            // How much of the frame is Chunky's look: 1 for `Chunky` and a stated sky, 0 for
-            // `Game`, and by the time of day for `ByTime` (`sky::day_weight`).
-            let (model, weight) = match req.sky {
-                Sky::Stated(_) => (None, 1.0),
-                Sky::Vanilla { hq: m, .. } => {
-                    let w = match m.look {
-                        SkyLook::Chunky => 1.0,
-                        SkyLook::Game => 0.0,
-                        SkyLook::ByTime => match (&env, day_range) {
-                            (Some(e), Some((night, day))) => {
-                                sky::day_weight(e.sky_light_factor, night, day)
-                            }
-                            _ => {
-                                log::warn!(
-                                    "no day timeline for `visual/sky_light_factor` in this jar: \
-                                     drawing Chunky's sky"
-                                );
-                                1.0
-                            }
-                        },
-                    };
-                    (Some(m), w)
-                }
+            // The look and the render distance its fog stands at: a stated sky at no stated
+            // tick is Chunky's.
+            let (look, render_distance) = match req.sky {
+                Sky::Vanilla { hq: m, .. } => (m.look, m.render_distance),
+                Sky::Stated(s) => s
+                    .tick
+                    .map_or((SkyLook::Chunky, DEFAULT_RENDER_DISTANCE), |t| {
+                        (t.look, t.render_distance)
+                    }),
             };
+            let weight = look_weight(look, env.as_ref(), day_range);
             if weight < 1.0 && env.is_none() {
                 anyhow::bail!(
                     "the game's sky needs the environment attributes of a 1.21.11 or later client \
@@ -691,12 +731,13 @@ pub fn render(req: &Request) -> Result<Rendered> {
                 weight * DEFAULT_EMITTER_INTENSITY + (1.0 - weight) * GAME_EMITTER_INTENSITY,
             );
             // Chunky's sun and sky, for the Chunky part of the frame.
-            let chunky_sky = match (req.sky, model) {
-                (Sky::Stated(s), _) => s.hq,
-                (Sky::Vanilla { time, sun_dir, .. }, Some(m)) => {
-                    sky::hq_sky(vanilla_sun(time, sun_dir), m.sun_intensity, m.sky_intensity)
-                }
-                (Sky::Vanilla { .. }, None) => unreachable!("a vanilla sky has a model"),
+            let chunky_sky = match req.sky {
+                Sky::Stated(s) => s.hq,
+                Sky::Vanilla {
+                    time,
+                    sun_dir,
+                    hq: m,
+                } => sky::hq_sky(vanilla_sun(time, sun_dir), m.sun_intensity, m.sky_intensity),
             };
             let mut params = hq_params(
                 &req.hq,
@@ -723,7 +764,6 @@ pub fn render(req: &Request) -> Result<Rendered> {
                 sky::sky_cache(&params)
             } else {
                 let e = env.as_ref().expect("checked above");
-                let render_distance = model.map_or(DEFAULT_RENDER_DISTANCE, |m| m.render_distance);
                 let rect = |loc: &str| {
                     scene.atlas.id(loc).map(|id| {
                         let s = scene.atlas.sprites[id as usize];
@@ -874,13 +914,37 @@ fn rgb(c: u32) -> Vec3 {
     Vec3::new(channel(c, 16), channel(c, 8), channel(c, 0))
 }
 
+/// How much of an HQ frame is Chunky's look: 1 for [`SkyLook::Chunky`], 0 for
+/// [`SkyLook::Game`], and for [`SkyLook::ByTime`] where the environment's
+/// `visual/sky_light_factor` stands between its night and day values ([`sky::day_weight`]),
+/// or 1 for a jar with no day timeline.
+fn look_weight(
+    look: SkyLook,
+    env: Option<&assets::environment::EnvironmentState>,
+    day_range: Option<(f32, f32)>,
+) -> f32 {
+    match look {
+        SkyLook::Chunky => 1.0,
+        SkyLook::Game => 0.0,
+        SkyLook::ByTime => match (env, day_range) {
+            (Some(e), Some((night, day))) => sky::day_weight(e.sky_light_factor, night, day),
+            _ => {
+                log::warn!(
+                    "no day timeline for `visual/sky_light_factor` in this jar: drawing Chunky's sky"
+                );
+                1.0
+            }
+        },
+    }
+}
+
 /// The quick sky for a frame: the lightmap's colours and what the sky passes draw.
 ///
-/// For [`Sky::Vanilla`] with the jar's environment attributes, the fog colour is
-/// `AtmosphericFogEnvironment.getBaseColor`: the fog attribute, blended towards
-/// the sunrise colour by how directly the camera faces the sun's side of the sky
-/// (render distance 4 chunks or more), then towards the sky colour by
-/// `1 - lerp(min(sky fog end / 16, render distance) / 32, 0.25, 1)^0.25`.
+/// Under [`Sky::Vanilla`] the colours are [`QuickSkyColours::vanilla`]'s; under
+/// [`Sky::Stated`] the caller's. What the environment at the tick draws (the sunrise glow,
+/// the moon and the stars, [`tick_celestials`]) is drawn under a vanilla sky whenever the
+/// jar has environment attributes, and under a stated sky when it stands at a
+/// [`StatedTick`].
 #[allow(clippy::too_many_arguments)]
 fn quick_sky(
     req_sky: &Sky,
@@ -893,94 +957,132 @@ fn quick_sky(
     sun_rect: Option<[f32; 4]>,
     rect: &dyn Fn(&str) -> Option<[f32; 4]>,
 ) -> (QuickSkyColours, sky::SkyDescription) {
-    use assets::environment::{Skybox, srgb_lerp};
+    use assets::environment::Skybox;
     let env_fog = env.map_or((0.0, 1024.0), |e| (e.fog_start, e.fog_end));
     let sky_fog_end = draw_distance.min(env.map_or(512.0, |e| e.sky_fog_end));
+    // The colours, whether the caller placed the sun, and whether the tick's sky is drawn.
+    let (colours, sun_placed, at_tick) = match *req_sky {
+        Sky::Stated(s) => (s.quick, true, s.tick.is_some()),
+        Sky::Vanilla { time, sun_dir, .. } => (
+            QuickSkyColours::vanilla(
+                env,
+                biome,
+                time.unwrap_or(world_day_time),
+                sun_dir,
+                forward,
+                draw_distance,
+            ),
+            sun_dir.is_some(),
+            true,
+        ),
+    };
     let mut desc = sky::SkyDescription {
-        sky: Vec3::ZERO,
-        fog: Vec3::ZERO,
+        sky: colours.sky,
+        fog: colours.fog,
         sky_fog_end,
         render_fog,
         env_fog,
         sky_disc: env.is_none_or(|e| e.skybox == Skybox::Overworld),
         sunrise: [0.0; 4],
         sun_angle: 0.0,
-        sun: None,
+        sun: sun_rect.map(|r| (colours.sun_dir, r)),
         moon: None,
         star_angle: 0.0,
         star_brightness: 0.0,
     };
-    match *req_sky {
-        Sky::Stated(s) => {
-            desc.sky = s.quick.sky;
-            desc.fog = s.quick.fog;
-            desc.sun = sun_rect.map(|r| (s.quick.sun_dir, r));
-            (s.quick, desc)
-        }
-        Sky::Vanilla { time, sun_dir, .. } => {
-            let ticks = time.unwrap_or(world_day_time);
-            // The lightmap keeps its daylight factor on the pre-1.21.11 day curve.
-            let angle = sky::celestial_angle(ticks);
-            let day = sky::daylight(angle);
-            let Some(e) = env else {
-                let temp = assets::biome::biome_info(biome).temperature;
-                let sun = sun_dir.unwrap_or_else(|| sky::sun_direction_from_angle(angle));
-                let colours = QuickSkyColours {
-                    sky: Vec3::from(assets::biome::sky_color(temp)) * day,
-                    fog: Vec3::new(0.753, 0.847, 1.0) * (day * 0.94 + 0.06),
-                    sun_dir: sun,
-                    sky_factor: day,
-                };
-                desc.sky = colours.sky;
-                desc.fog = colours.fog;
-                desc.sun = sun_rect.map(|r| (sun, r));
-                return (colours, desc);
-            };
-            let render_chunks = (draw_distance / 16.0).floor();
-            let mut fog = e.fog_color;
-            if render_chunks >= 4.0 {
-                let side = if e.sun_angle.to_radians().sin() > 0.0 {
-                    -1.0
-                } else {
-                    1.0
-                };
-                let facing = forward.x * side;
-                let glow = e.sunrise_sunset_color >> 24;
-                if facing > 0.0 && glow > 0 {
-                    let a = glow as f32 / 255.0;
-                    fog = srgb_lerp(facing * a, fog, e.sunrise_sunset_color | 0xFF00_0000);
-                }
-            }
-            let reach = (e.sky_fog_end / 16.0).min(render_chunks);
-            let lerp = (reach / 32.0).clamp(0.0, 1.0) * 0.75 + 0.25;
-            fog = srgb_lerp(1.0 - lerp.powf(0.25), fog, e.sky_color);
-            let sun = sun_dir.unwrap_or_else(|| sky::celestial_direction(e.sun_angle));
-            let moon = if sun_dir.is_some() {
-                -sun
-            } else {
-                sky::celestial_direction(e.moon_angle)
-            };
-            let sr = e.sunrise_sunset_color;
-            desc.sky = rgb(e.sky_color);
-            desc.fog = rgb(fog);
-            desc.sunrise = [
-                channel(sr, 16),
-                channel(sr, 8),
-                channel(sr, 0),
-                channel(sr, 24),
-            ];
-            desc.sun_angle = e.sun_angle;
-            desc.sun = sun_rect.map(|r| (sun, r));
-            desc.moon = rect(&crate::scene::moon_texture(&e.moon_phase)).map(|r| (moon, r));
-            desc.star_angle = e.star_angle;
-            desc.star_brightness = e.star_brightness;
-            let colours = QuickSkyColours {
-                sky: desc.sky,
-                fog: desc.fog,
-                sun_dir: sun,
+    if at_tick && let Some(e) = env {
+        tick_celestials(&mut desc, e, colours.sun_dir, sun_placed, rect);
+    }
+    (colours, desc)
+}
+
+/// What the environment at a tick draws in the sky besides its colours and the sun: the
+/// sunrise glow (`visual/sunrise_sunset_color`, on the side `visual/sun_angle` puts it), the
+/// moon of `visual/moon_phase` and the stars at `visual/star_angle` and
+/// `visual/star_brightness`. The moon stands opposite `sun` when the caller placed the sun,
+/// else at `visual/moon_angle`.
+fn tick_celestials(
+    desc: &mut sky::SkyDescription,
+    e: &assets::environment::EnvironmentState,
+    sun: Vec3,
+    sun_placed: bool,
+    rect: &dyn Fn(&str) -> Option<[f32; 4]>,
+) {
+    let moon = if sun_placed {
+        -sun
+    } else {
+        sky::celestial_direction(e.moon_angle)
+    };
+    let sr = e.sunrise_sunset_color;
+    desc.sunrise = [
+        channel(sr, 16),
+        channel(sr, 8),
+        channel(sr, 0),
+        channel(sr, 24),
+    ];
+    desc.sun_angle = e.sun_angle;
+    desc.moon = rect(&crate::scene::moon_texture(&e.moon_phase)).map(|r| (moon, r));
+    desc.star_angle = e.star_angle;
+    desc.star_brightness = e.star_brightness;
+}
+
+impl QuickSkyColours {
+    /// The colours [`Sky::Vanilla`] derives at `time` for a camera looking along `forward`
+    /// at a render distance of `draw_distance` blocks, from the environment attributes
+    /// sampled at the camera ([`assets::environment::sample`]): what a caller states to
+    /// draw Lumenwright's own reading of the client's sky through a [`StatedSky`].
+    ///
+    /// With the jar's environment attributes, the fog colour is
+    /// `AtmosphericFogEnvironment.getBaseColor`: the fog attribute, blended towards
+    /// the sunrise colour by how directly the camera faces the sun's side of the sky
+    /// (render distance 4 chunks or more), then towards the sky colour by
+    /// `1 - lerp(min(sky fog end / 16, render distance) / 32, 0.25, 1)^0.25`. Without them
+    /// (`env` `None`, a jar before 1.21.11), the sky comes from the biome's temperature
+    /// and the old day curve. The lightmap keeps its daylight factor on the pre-1.21.11
+    /// day curve either way. `sun_dir` `None` follows `time`.
+    pub fn vanilla(
+        env: Option<&assets::environment::EnvironmentState>,
+        biome: &str,
+        time: i64,
+        sun_dir: Option<Vec3>,
+        forward: Vec3,
+        draw_distance: f32,
+    ) -> QuickSkyColours {
+        use assets::environment::srgb_lerp;
+        let angle = sky::celestial_angle(time);
+        let day = sky::daylight(angle);
+        let Some(e) = env else {
+            let temp = assets::biome::biome_info(biome).temperature;
+            return QuickSkyColours {
+                sky: Vec3::from(assets::biome::sky_color(temp)) * day,
+                fog: Vec3::new(0.753, 0.847, 1.0) * (day * 0.94 + 0.06),
+                sun_dir: sun_dir.unwrap_or_else(|| sky::sun_direction_from_angle(angle)),
                 sky_factor: day,
             };
-            (colours, desc)
+        };
+        let render_chunks = (draw_distance / 16.0).floor();
+        let mut fog = e.fog_color;
+        if render_chunks >= 4.0 {
+            let side = if e.sun_angle.to_radians().sin() > 0.0 {
+                -1.0
+            } else {
+                1.0
+            };
+            let facing = forward.x * side;
+            let glow = e.sunrise_sunset_color >> 24;
+            if facing > 0.0 && glow > 0 {
+                let a = glow as f32 / 255.0;
+                fog = srgb_lerp(facing * a, fog, e.sunrise_sunset_color | 0xFF00_0000);
+            }
+        }
+        let reach = (e.sky_fog_end / 16.0).min(render_chunks);
+        let lerp = (reach / 32.0).clamp(0.0, 1.0) * 0.75 + 0.25;
+        fog = srgb_lerp(1.0 - lerp.powf(0.25), fog, e.sky_color);
+        QuickSkyColours {
+            sky: rgb(e.sky_color),
+            fog: rgb(fog),
+            sun_dir: sun_dir.unwrap_or_else(|| sky::celestial_direction(e.sun_angle)),
+            sky_factor: day,
         }
     }
 }
