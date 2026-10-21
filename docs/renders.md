@@ -46,9 +46,9 @@ target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look
 | image | Apple M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end / in the kernel) |
 |---|---|---|
 | camp, quick, day / dusk | 0.27 s / 0.27 s | |
-| camp, hq, day (4096 spp) / dusk (16384 spp) | | 66 s / 262 s (65 s / 262 s) |
+| camp, hq, day (4096 spp) / dusk (16384 spp) | | 91 s / 333 s (90 s / 332 s) |
 | bridge, quick, day / dusk | 0.23 s / 0.23 s | |
-| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 91 s / 361 s (90 s / 360 s) |
+| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 122 s / 447 s (121 s / 445 s) |
 
 These are the renders' own times at their quality budgets, not a speed comparison (that is
 [benchmark.md](benchmark.md)). The quick times are the second of two runs, measured at `v0.1.0`;
