@@ -87,7 +87,7 @@ Render a save from an explicit camera, path traced under the game's sky at dusk:
 lumenwright render -w path/to/save --camera 140,118,14 --look-at 56,82,58 --time 12800 --mode hq --spp 256 -o hq.png
 ```
 
-From Rust, with `lumenwright = "0.2.0"` in `[dependencies]`:
+From Rust, with `lumenwright = "0.3.0"` in `[dependencies]`:
 
 ```rust
 use std::path::Path;
