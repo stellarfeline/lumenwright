@@ -801,13 +801,34 @@ dependencies = [
  "glam",
  "image",
  "log",
- "lumenwright-kernel",
+ "lumenwright-kernel 0.2.0",
  "lz4_flex",
  "pollster",
  "rayon",
  "serde",
  "serde_json",
  "wgpu",
+ "zip",
+]
+
+[[package]]
+name = "lumenwright"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb592d531200ef20675b4f31bbd23d1cfd1d75641a18d3bde96e6ca816bcd985"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "fastnbt",
+ "flate2",
+ "glam",
+ "image",
+ "log",
+ "lumenwright-kernel 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lz4_flex",
+ "rayon",
+ "serde",
+ "serde_json",
  "zip",
 ]
 
@@ -822,7 +843,7 @@ dependencies = [
  "flate2",
  "image",
  "log",
- "lumenwright",
+ "lumenwright 0.2.0",
  "rayon",
  "serde",
  "serde_json",
@@ -832,11 +853,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumenwright-compat"
+version = "0.2.0"
+dependencies = [
+ "lumenwright 0.2.0",
+ "lumenwright 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lumenwright-cli",
+]
+
+[[package]]
 name = "lumenwright-kernel"
 version = "0.2.0"
 dependencies = [
  "bytemuck",
  "libm",
+]
+
+[[package]]
+name = "lumenwright-kernel"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20bdeedc07a4ab436fb79f9efcc8bf023c3db92c8cd7871c2874c5c615b5fd11"
+dependencies = [
+ "bytemuck",
 ]
 
 [[package]]
