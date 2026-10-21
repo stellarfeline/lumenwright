@@ -28,6 +28,16 @@ backend, the size, the quick and HQ options, which entities to draw, and the sky
 either vanilla's at a time of day (`Sky::Vanilla`) or the colours and sun you state
 (`Sky::Stated`).
 
+A stated sky (`StatedSky::new(quick, hq)`) is drawn as given: quick mode draws your colours
+and sun, HQ mode traces your Chunky sun and sky, and the environment is sampled at the
+world's `DayTime`. Stand it at a tick (`.at(StatedTick::new(time, look))`) and what the
+client derives from the tick alone is drawn from the environment there, as `Sky::Vanilla`
+at that `time` draws it: the sunrise glow, the moon and the stars in both modes, and in HQ
+mode the look you ask for (`SkyLook::Game`, `ByTime` or `Chunky`), with your `hq` as its
+Chunky part. `QuickSkyColours::vanilla` gives the colours `Sky::Vanilla` derives, so a
+stated sky built from them and `sky::hq_sky` at the same sun draws the vanilla frame byte
+for byte. Weather is not expressed: the game's look draws a clear sky.
+
 ```rust
 use std::path::Path;
 use lumenwright::glam::DVec3;

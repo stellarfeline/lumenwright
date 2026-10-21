@@ -4,6 +4,32 @@ All notable changes to Lumenwright are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- A stated sky can stand at a tick and ask for the game's look: `StatedSky::tick` takes a
+  `StatedTick` (`time`, `look`, `render_distance`), set by `StatedSky::at`. At it the
+  environment is sampled at the tick, not at the world's `DayTime`; quick mode and the
+  game's look draw the tick's sunrise glow, moon and stars through the same code as
+  `Sky::Vanilla`; and HQ mode draws the stated look, weighted for `SkyLook::ByTime` by the
+  one `sky::day_weight`, with `StatedSky::hq` as Chunky's part. A stated sky at
+  `Sky::Vanilla`'s colours and sun draws its frame byte for byte.
+- `QuickSkyColours::vanilla`: the colours `Sky::Vanilla` derives at a tick, for a caller to
+  state.
+
+### Changed
+
+- `StatedSky` and the new `StatedTick` are `#[non_exhaustive]`: build them with
+  `StatedSky::new(quick, hq)` and `StatedTick::new(time, look)`. A struct literal of
+  `StatedSky` no longer compiles, so this is a breaking change for 0.2.x. A stated sky at
+  no tick (`StatedSky::new`) draws what 0.2.0 drew, byte for byte.
+
+### Not expressed
+
+- Weather: the game's look, under `Sky::Vanilla` and at a stated tick, draws a clear sky; it
+  applies no rain or thunder.
+
 ## [0.2.0] - 2026-10-21
 
 ### Added

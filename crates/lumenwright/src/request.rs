@@ -207,7 +207,9 @@ pub enum Sky {
         /// What HQ mode lights the frame with and draws in its sky.
         hq: HqSkyModel,
     },
-    /// The caller's sky, used as given; nothing is derived from the world's time.
+    /// The caller's colours and suns, used as given. At a stated tick
+    /// ([`StatedSky::tick`]) what the client derives from the tick alone is drawn from it;
+    /// otherwise nothing is derived from the world's time.
     Stated(StatedSky),
 }
 

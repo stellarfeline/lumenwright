@@ -26,7 +26,7 @@ cargo test --workspace --release
   parity in both modes (showcase, block-entity gallery and item gallery) and CPU-vs-CUDA
   parity in HQ mode, determinism, and the CLI. The library tests check that the CLI's PNG
   and the library's pixels are byte-equal in both modes, that a missing jar is refused by
-  name, that a stated sky is drawn as given, that the vanilla sky's colour at noon, dusk and
+  name, that a stated sky is drawn as given, that a stated sky at a tick draws `Sky::Vanilla`'s frame at it byte for byte (quick, and HQ under the game's look and by time), that a stated sky at no tick draws 0.2.0's frame byte for byte (0.2.0 as published is a dev-dependency), that the vanilla sky's colour at noon, dusk and
   midnight matches the jar's day timeline within 2/255, and that CPU pixels are
   bit-identical on 1, 3 and 8 threads (showcase and item gallery). A far-plane test measures
   the high-frequency energy and the change under a sub-pixel camera move with and without
