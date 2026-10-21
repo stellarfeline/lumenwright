@@ -844,13 +844,21 @@ dependencies = [
  "image",
  "log",
  "lumenwright 0.2.0",
- "lumenwright 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon",
  "serde",
  "serde_json",
  "sha1_smol",
  "ureq",
  "zip",
+]
+
+[[package]]
+name = "lumenwright-compat"
+version = "0.2.0"
+dependencies = [
+ "lumenwright 0.2.0",
+ "lumenwright 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lumenwright-cli",
 ]
 
 [[package]]

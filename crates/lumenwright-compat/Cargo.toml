@@ -1,0 +1,18 @@
+[package]
+name = "lumenwright-compat"
+description = "Tests that hold the library to a published release's frames; never published"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version = "1.90"
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+lumenwright = { path = "../lumenwright", default-features = false }
+lumenwright-cli = { path = "../lumenwright-cli", default-features = false }
+# 0.2.0 as published: the oracle a stated sky at no stated tick is held to. A published
+# crate cannot depend on one crate version under two names, so the oracle lives here.
+lumenwright_020 = { package = "lumenwright", version = "=0.2.0", default-features = false }

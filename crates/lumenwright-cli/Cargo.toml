@@ -44,7 +44,3 @@ default = ["gpu"]
 gpu = ["lumenwright/gpu"]
 # CUDA backend: needs the PTX from scripts/build-ptx.sh.
 cuda = ["lumenwright/cuda"]
-
-[dev-dependencies]
-# 0.2.0 as published: the oracle a stated sky at no stated tick is held to.
-lumenwright_020 = { package = "lumenwright", version = "=0.2.0", default-features = false }
