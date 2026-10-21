@@ -753,15 +753,95 @@ fn chunky_scales_are_refused_under_the_game_sky() {
             "9",
         ];
         let mut args = small.to_vec();
-        args.extend([flag, "2"]);
+        args.extend([flag, "2", "--sky", "game"]);
         let err = render(showcase(), &jar, &dir.join("refused.png"), &args)
             .err()
             .unwrap_or_else(|| panic!("{flag} was taken under the game's sky"));
         let msg = format!("{err:#}");
         assert!(msg.contains(flag) && msg.contains("--sky chunky"), "{msg}");
-        args.extend(["--sky", "chunky"]);
-        render(showcase(), &jar, &dir.join("taken.png"), &args).unwrap();
+        let mut taken = small.to_vec();
+        taken.extend([flag, "2", "--sky", "chunky"]);
+        render(showcase(), &jar, &dir.join("taken.png"), &taken).unwrap();
+        // The default mixes Chunky's sky in by day, so it takes them.
+        let mut auto = small.to_vec();
+        auto.extend([flag, "2"]);
+        render(showcase(), &jar, &dir.join("auto.png"), &auto).unwrap();
     }
+}
+
+/// The default sky goes by the time of day: on the client's day plateau it is Chunky's look
+/// byte for byte, on the night plateau the game's, and across the evening ramp of
+/// `visual/sky_light_factor` a frame one tick later differs by as little as one tick
+/// within either look does.
+#[test]
+fn the_default_sky_follows_the_day_without_a_jump() {
+    let jar = require_jar!();
+    let dir = tmp("sky-by-time");
+    let frame = |name: &str, tick: &str, extra: &[&str]| {
+        let mut args = vec![
+            "--mode",
+            "hq",
+            "--backend",
+            "cpu",
+            "--spp",
+            "8",
+            "--width",
+            "96",
+            "--height",
+            "54",
+            "--time",
+            tick,
+        ];
+        args.extend_from_slice(extra);
+        let out = dir.join(format!("{name}.png"));
+        render(showcase(), &jar, &out, &args).unwrap();
+        load(&out)
+    };
+    let mean = |a: &image::RgbaImage, b: &image::RgbaImage| {
+        a.pixels()
+            .zip(b.pixels())
+            .map(|(p, q)| {
+                (0..3)
+                    .map(|i| (p.0[i] as f64 - q.0[i] as f64).abs())
+                    .sum::<f64>()
+            })
+            .sum::<f64>()
+            / (a.width() * a.height() * 3) as f64
+    };
+    // The plateaus are the two looks.
+    assert_eq!(
+        frame("day", "6000", &[]).into_raw(),
+        frame("day-chunky", "6000", &["--sky", "chunky"]).into_raw()
+    );
+    assert_eq!(
+        frame("night", "18000", &[]).into_raw(),
+        frame("night-game", "18000", &["--sky", "game"]).into_raw()
+    );
+    // Across the edges of the ramp (11270 and 13140), one tick moves a frame no more than
+    // one tick does inside a look.
+    let inside = mean(&frame("a", "11269", &[]), &frame("b", "11270", &[]));
+    let (e0, e1) = (frame("c", "11270", &[]), frame("d", "11271", &[]));
+    let (n0, n1) = (frame("e", "13139", &[]), frame("f", "13140", &[]));
+    let (day_edge, night_edge) = (mean(&e0, &e1), mean(&n0, &n1));
+    eprintln!(
+        "sky by time: one tick moves a frame by {inside:.3}/255 inside Chunky's look, \
+         {day_edge:.3} at the day plateau's edge and {night_edge:.3} at the night's"
+    );
+    assert!(day_edge <= 2.0 * inside.max(0.05), "{day_edge} vs {inside}");
+    assert!(
+        night_edge <= 2.0 * inside.max(0.05),
+        "{night_edge} vs {inside}"
+    );
+    // Half way down the ramp it is neither look.
+    let mid = frame("mid", "12205", &[]);
+    assert_ne!(
+        mid.as_raw(),
+        frame("mid-c", "12205", &["--sky", "chunky"]).as_raw()
+    );
+    assert_ne!(
+        mid.as_raw(),
+        frame("mid-g", "12205", &["--sky", "game"]).as_raw()
+    );
 }
 
 /// The CUDA kernel is the CPU kernel compiled to PTX: an HQ frame agrees with

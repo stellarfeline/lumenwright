@@ -75,10 +75,13 @@ mirror! {
     }
 }
 
-/// `--sky`: the library's [`lumenwright::request::HqSkyModel`] without its values, which
+/// `--sky`: the library's [`lumenwright::request::SkyLook`]; the looks' values
 /// come from their own flags.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum SkyArg {
+    /// By the time of day: Chunky's sky and sun on the client's day plateau, the game's sky
+    /// at night, mixed between them by the client's `visual/sky_light_factor`.
+    Auto,
     /// The game's own sky at the tick, lit as the client lights it: the lightmap's sky
     /// light, no sunlight, the client's sky, sun, moon and stars drawn.
     Game,

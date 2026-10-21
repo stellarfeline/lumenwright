@@ -173,6 +173,49 @@ pub fn tonemap(hdr: &[[f32; 3]], exposure: f32, op: Tonemap) -> Vec<u32> {
         .collect()
 }
 
+/// Two tone curves mixed in display values: each channel shows `weight × a + (1 − weight)
+/// × b`, the two curves' display values before the 8-bit rounding. `weight` 1 gives `a`'s
+/// bytes and 0 `b`'s. The mix of the two looks' curves by the day weight
+/// ([`crate::render::sky::day_weight`]).
+pub fn tonemap_mix(
+    hdr: &[[f32; 3]],
+    exposure: f32,
+    a: Tonemap,
+    b: Tonemap,
+    weight: f32,
+) -> Vec<u32> {
+    if weight >= 1.0 {
+        return tonemap(hdr, exposure, a);
+    }
+    if weight <= 0.0 {
+        return tonemap(hdr, exposure, b);
+    }
+    let shown = |op: Tonemap, v: f32| -> f32 {
+        let curve = match op {
+            Tonemap::FilmicMidGrey => game_tone_curve(),
+            _ => HABLE_FILMIC_WORLDS,
+        };
+        let v = (v * exposure).max(0.0);
+        let v = match op {
+            Tonemap::Gamma => v,
+            Tonemap::Aces => aces(v),
+            Tonemap::Filmic | Tonemap::FilmicMidGrey => {
+                (curve.h(2.0 * f64::from(v)) * f64::from(curve.white_scale())) as f32
+            }
+        };
+        encode(v)
+    };
+    hdr.iter()
+        .map(|p| {
+            let m = |v: f32| {
+                let d = weight * shown(a, v) + (1.0 - weight) * shown(b, v);
+                (d * 255.0 + 0.5) as u32
+            };
+            m(p[0]) | (m(p[1]) << 8) | (m(p[2]) << 16) | 0xFF00_0000
+        })
+        .collect()
+}
+
 /// Box-filters an RGBA8 image down by an integer factor.
 pub fn downsample(px: &[u32], w: u32, h: u32, k: u32) -> Vec<u32> {
     if k <= 1 {
@@ -253,6 +296,24 @@ mod tests {
             tonemap(&[[w; 3]], 1.0, Tonemap::FilmicMidGrey)[0],
             0xFFFF_FFFF
         );
+    }
+
+    /// The mix gives each curve's bytes at its ends and lies between them inside.
+    #[test]
+    fn the_tone_mix_is_each_curve_at_its_ends() {
+        let hdr: Vec<[f32; 3]> = (0..64).map(|i| [i as f32 * 0.05; 3]).collect();
+        let (g, h) = (Tonemap::Gamma, Tonemap::FilmicMidGrey);
+        assert_eq!(tonemap_mix(&hdr, 1.0, g, h, 1.0), tonemap(&hdr, 1.0, g));
+        assert_eq!(tonemap_mix(&hdr, 1.0, g, h, 0.0), tonemap(&hdr, 1.0, h));
+        let (a, b, m) = (
+            tonemap(&hdr, 1.0, g),
+            tonemap(&hdr, 1.0, h),
+            tonemap_mix(&hdr, 1.0, g, h, 0.5),
+        );
+        for i in 0..hdr.len() {
+            let (x, y, z) = (a[i] & 0xFF, b[i] & 0xFF, m[i] & 0xFF);
+            assert!(z + 1 >= x.min(y) && z <= x.max(y) + 1, "{i}: {x} {y} {z}");
+        }
     }
 
     #[test]

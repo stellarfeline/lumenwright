@@ -123,8 +123,16 @@ impl Default for QuickOptions {
 }
 
 /// Chunky's default emitter intensity (`Scene.DEFAULT_EMITTER_INTENSITY`,
-/// chunky-dev/chunky 156e2bb).
+/// chunky-dev/chunky 156e2bb): the emitter intensity of Chunky's look.
 pub const DEFAULT_EMITTER_INTENSITY: f32 = 13.0;
+
+/// The emitter intensity of the game's look: **authored by Lumenwright**, neither a
+/// vanilla nor a Chunky value. Fitted so that, at the Treehouse Camp's dusk (tick 12800,
+/// the default look), the mean display luma of the lantern-lit pixels equals that of
+/// Delvewright's engine's Chunky render of the same frame (`docs/research/game-sky.md`,
+/// *Lanterns*). Chunky's emitters light little beyond their block where the game's block
+/// light reaches 14; the scale stands in for that, as the engine's does.
+pub const GAME_EMITTER_INTENSITY: f32 = 13.0;
 
 /// Chunky's emitter sampling strategies (`EmitterSamplingStrategy`): which emitters a
 /// diffuse surface samples, among those its emitter-grid cell lists.
@@ -150,8 +158,10 @@ pub struct HqOptions {
     /// Random seed; the same seed gives the same image.
     pub seed: u32,
     /// Chunky's emitter intensity: an emitting surface emits its texel colour squared
-    /// times its block's emittance times this. 0 turns emitters off.
-    pub emitter_intensity: f32,
+    /// times its block's emittance times this. 0 turns emitters off. `None` takes each
+    /// look's own, mixed by the day weight: Chunky's [`DEFAULT_EMITTER_INTENSITY`] and,
+    /// under the game's sky, [`GAME_EMITTER_INTENSITY`].
+    pub emitter_intensity: Option<f32>,
     /// How emitters are sampled at a diffuse surface (Chunky's emitter sampling
     /// strategy).
     pub emitter_sampling: EmitterSampling,
@@ -160,10 +170,10 @@ pub struct HqOptions {
     pub prevent_normal_emitter: bool,
     /// Linear multiplier applied to the radiance before tonemapping.
     pub exposure: f32,
-    /// The tonemapping operator from linear radiance to display values. The default
-    /// shows mid-grey as the game does ([`Tonemap::FilmicMidGrey`]), for the default
-    /// game sky; Chunky's own default is [`Tonemap::Gamma`].
-    pub tonemap: Tonemap,
+    /// The tonemapping operator from linear radiance to display values. `None` takes each
+    /// look's own, mixed in display values by the day weight: Chunky's [`Tonemap::Gamma`]
+    /// and, under the game's sky, [`Tonemap::FilmicMidGrey`].
+    pub tonemap: Option<Tonemap>,
 }
 
 impl Default for HqOptions {
@@ -172,11 +182,11 @@ impl Default for HqOptions {
             spp: 64,
             max_bounces: 4,
             seed: 0,
-            emitter_intensity: DEFAULT_EMITTER_INTENSITY,
+            emitter_intensity: None,
             emitter_sampling: EmitterSampling::One,
             prevent_normal_emitter: false,
             exposure: 1.0,
-            tonemap: Tonemap::FilmicMidGrey,
+            tonemap: None,
         }
     }
 }
@@ -211,40 +221,63 @@ impl Default for Sky {
 /// The client's default render distance, 12 chunks (`options.renderDistance`), in blocks.
 pub const DEFAULT_RENDER_DISTANCE: f32 = 192.0;
 
-/// The sky HQ mode traces under [`Sky::Vanilla`].
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum HqSkyModel {
+/// Which look HQ mode draws under [`Sky::Vanilla`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SkyLook {
+    /// By the time of day: Chunky's look on the client's day plateau, the game's at night,
+    /// and between them a mix weighted by where the client's `visual/sky_light_factor`
+    /// stands between its night and day values ([`sky::day_weight`]).
+    ByTime,
     /// The game's own sky at the tick, lit as the 1.21.11 client lights it
     /// ([`sky::game_sky_maps`]): the lens sees the client's sky (its disc, fog, sunrise
     /// glow, sun, moon and stars); the sun casts no light; the sky casts the lightmap's
     /// colour for a cell open to it. Needs a client jar with environment attributes
     /// (1.21.11 or later).
-    Game {
-        /// The client's render distance in blocks, which the sky's fog and the
-        /// horizon's colour depend on: quick mode's draw distance.
-        render_distance: f32,
-    },
-    /// Chunky's simulated sky: the Preetham sky and a sun at the time's angle, as
-    /// Chunky lights a scene ([`sky::hq_sky`]).
-    Chunky {
-        /// The sun's intensity, Chunky's: its irradiance is `intensity^2.2`.
-        sun_intensity: f32,
-        /// The Preetham sky's radiance scale.
-        sky_intensity: f32,
-    },
+    Game,
+    /// Chunky's simulated sky: the Preetham sky and a sun at the time's angle that lights
+    /// and shadows, as Chunky lights a scene ([`sky::hq_sky`]).
+    Chunky,
+}
+
+/// The sky HQ mode traces under [`Sky::Vanilla`]: the look and each look's settings.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HqSkyModel {
+    /// Which look, or a mix of the two by the time of day.
+    pub look: SkyLook,
+    /// The client's render distance in blocks, which the game's sky fog and its
+    /// horizon colour depend on.
+    pub render_distance: f32,
+    /// Chunky's sun intensity: its irradiance is `intensity^2.2`.
+    pub sun_intensity: f32,
+    /// Chunky's Preetham sky radiance scale.
+    pub sky_intensity: f32,
 }
 
 impl Default for HqSkyModel {
     fn default() -> Self {
-        HqSkyModel::Game {
+        HqSkyModel {
+            look: SkyLook::ByTime,
             render_distance: DEFAULT_RENDER_DISTANCE,
+            sun_intensity: sky::DEFAULT_SUN_INTENSITY,
+            sky_intensity: 1.0,
         }
     }
 }
 
 impl HqSkyModel {
-    /// Chunky's defaults: a sun of intensity 1.25 and the sky at its own scale.
-    pub const CHUNKY: HqSkyModel = HqSkyModel::Chunky {
+    /// Chunky's look with Chunky's defaults: a sun of intensity 1.25 and the sky at its own
+    /// scale.
+    pub const CHUNKY: HqSkyModel = HqSkyModel {
+        look: SkyLook::Chunky,
+        render_distance: DEFAULT_RENDER_DISTANCE,
+        sun_intensity: sky::DEFAULT_SUN_INTENSITY,
+        sky_intensity: 1.0,
+    };
+
+    /// The game's look at the client's default render distance.
+    pub const GAME: HqSkyModel = HqSkyModel {
+        look: SkyLook::Game,
+        render_distance: DEFAULT_RENDER_DISTANCE,
         sun_intensity: sky::DEFAULT_SUN_INTENSITY,
         sky_intensity: 1.0,
     };
@@ -538,6 +571,8 @@ pub fn render(req: &Request) -> Result<Rendered> {
         Sky::Stated(_) => world.level.day_time,
     };
     let env = assets::environment::sample(&store, dimension, &biome, day_time);
+    // The night and day values of `visual/sky_light_factor` over the day timeline.
+    let day_range = assets::environment::sky_light_factor_range(&store, dimension, &biome);
     if env.is_none() {
         log::warn!(
             "the client jar carries no environment attributes (before 1.21.11): \
@@ -618,135 +653,177 @@ pub fn render(req: &Request) -> Result<Rendered> {
         Mode::Hq => {
             let hq = voxel::build_hq(&scene)?;
             lap("build voxel scene", &mut t);
-            let frame = match req.sky {
-                Sky::Vanilla {
-                    hq: HqSkyModel::Game { render_distance },
-                    ..
-                } => {
-                    let Some(e) = env.as_ref() else {
-                        anyhow::bail!(
-                            "the game's sky needs the environment attributes of a 1.21.11 or \
-                             later client jar, and this jar has none; draw Chunky's sky instead \
-                             (HqSkyModel::Chunky, `--sky chunky`)"
+            // How much of the frame is Chunky's look: 1 for `Chunky` and a stated sky, 0 for
+            // `Game`, and by the time of day for `ByTime` (`sky::day_weight`).
+            let (model, weight) = match req.sky {
+                Sky::Stated(_) => (None, 1.0),
+                Sky::Vanilla { hq: m, .. } => {
+                    let w = match m.look {
+                        SkyLook::Chunky => 1.0,
+                        SkyLook::Game => 0.0,
+                        SkyLook::ByTime => match (&env, day_range) {
+                            (Some(e), Some((night, day))) => {
+                                sky::day_weight(e.sky_light_factor, night, day)
+                            }
+                            _ => {
+                                log::warn!(
+                                    "no day timeline for `visual/sky_light_factor` in this jar: \
+                                     drawing Chunky's sky"
+                                );
+                                1.0
+                            }
+                        },
+                    };
+                    (Some(m), w)
+                }
+            };
+            if weight < 1.0 && env.is_none() {
+                anyhow::bail!(
+                    "the game's sky needs the environment attributes of a 1.21.11 or later client \
+                     jar, and this jar has none; draw Chunky's sky instead (SkyLook::Chunky, \
+                     `--sky chunky`)"
+                );
+            }
+            let emitter_intensity = req.hq.emitter_intensity.unwrap_or(
+                weight * DEFAULT_EMITTER_INTENSITY + (1.0 - weight) * GAME_EMITTER_INTENSITY,
+            );
+            // Chunky's sun and sky, for the Chunky part of the frame.
+            let chunky_sky = match (req.sky, model) {
+                (Sky::Stated(s), _) => s.hq,
+                (Sky::Vanilla { time, sun_dir, .. }, Some(m)) => {
+                    sky::hq_sky(vanilla_sun(time, sun_dir), m.sun_intensity, m.sky_intensity)
+                }
+                (Sky::Vanilla { .. }, None) => unreachable!("a vanilla sky has a model"),
+            };
+            let mut params = hq_params(
+                &req.hq,
+                emitter_intensity,
+                req.width,
+                req.height,
+                &hq,
+                eye,
+                &rays,
+                &chunky_sky,
+            );
+            let sky_buffer = if weight >= 1.0 {
+                let d = chunky_sky.sun_dir;
+                log::info!(
+                    "hq sky: Chunky's (day weight 1); sun direction {:.6} {:.6} {:.6}, altitude \
+                     {:.6} rad, azimuth from +x towards +z {:.6} rad (Chunky's sun angles); \
+                     emitter intensity {emitter_intensity}",
+                    d.x,
+                    d.y,
+                    d.z,
+                    d.y.clamp(-1.0, 1.0).asin(),
+                    d.z.atan2(d.x)
+                );
+                sky::sky_cache(&params)
+            } else {
+                let e = env.as_ref().expect("checked above");
+                let render_distance = model.map_or(DEFAULT_RENDER_DISTANCE, |m| m.render_distance);
+                let rect = |loc: &str| {
+                    scene.atlas.id(loc).map(|id| {
+                        let s = scene.atlas.sprites[id as usize];
+                        [s.x as f32, s.y as f32, s.w as f32, s.h as f32]
+                    })
+                };
+                let sun_rect = crate::scene::SUN_TEXTURES.iter().find_map(|t| rect(t));
+                let render_fog = (
+                    render_distance - (render_distance / 10.0).clamp(4.0, 64.0),
+                    render_distance,
+                );
+                let (_, desc) = quick_sky(
+                    &req.sky,
+                    Some(e),
+                    &biome,
+                    world.level.day_time,
+                    f,
+                    render_distance,
+                    render_fog,
+                    sun_rect,
+                    &rect,
+                );
+                // What is drawn in the sky casts no light in the game.
+                let bare = sky::SkyDescription {
+                    sun: None,
+                    moon: None,
+                    star_brightness: 0.0,
+                    ..desc
+                };
+                let mut maps = sky::game_sky_maps(
+                    &QuickSky::new(&rays, req.width, req.height, &desc),
+                    &QuickSky::new(&rays, req.width, req.height, &bare),
+                    e.sky_light_factor,
+                    rgb(e.sky_light_color),
+                    &scene.atlas.pixels,
+                    scene.atlas.width,
+                    sky::star_table(),
+                );
+                log::info!(
+                    "hq sky: day weight {weight:.6} (sky light factor {:.6} between the \
+                     timeline's night {:.6} and day {:.6}); the game's at day time {day_time}: \
+                     sky light colour #{:06x}, light {:.6} {:.6} {:.6} (the lightmap's, linear) \
+                     = {:.6} x (the sky's mean {:.6} {:.6} {:.6} + veil {:.6} {:.6} {:.6}); \
+                     sun {}; emitter intensity {emitter_intensity}",
+                    e.sky_light_factor,
+                    day_range.map_or(f32::NAN, |r| r.0),
+                    day_range.map_or(f32::NAN, |r| r.1),
+                    e.sky_light_color & 0xFF_FFFF,
+                    maps.light.x,
+                    maps.light.y,
+                    maps.light.z,
+                    maps.scale,
+                    maps.mean.x,
+                    maps.mean.y,
+                    maps.mean.z,
+                    maps.veil.x,
+                    maps.veil.y,
+                    maps.veil.z,
+                    match desc.sun {
+                        Some((d, _)) =>
+                            format!("drawn at altitude {:.6} rad", d.y.clamp(-1.0, 1.0).asin()),
+                        None => "not drawn".to_string(),
+                    }
+                );
+                if weight > 0.0 {
+                    // Chunky's sky, as the kernel reads it through its cache, weighted into
+                    // both maps; Chunky's sun lights and is drawn at the same weight.
+                    let cache = sky::sky_cache(&params);
+                    let view = lumenwright_kernel::SceneView {
+                        params: &params,
+                        grid: &[],
+                        models: &[],
+                        quads: &[],
+                        atlas: &[],
+                        emitters: &[],
+                        emitter_grid: &[],
+                        sky: &cache,
+                    };
+                    sky::blend_chunky_sky(&mut maps, weight, |d| {
+                        let c = lumenwright_kernel::integrator::sky_radiance(
+                            &view,
+                            lumenwright_kernel::math::v3(d.x, d.y, d.z),
                         );
-                    };
-                    let rect = |loc: &str| {
-                        scene.atlas.id(loc).map(|id| {
-                            let s = scene.atlas.sprites[id as usize];
-                            [s.x as f32, s.y as f32, s.w as f32, s.h as f32]
-                        })
-                    };
-                    let sun_rect = crate::scene::SUN_TEXTURES.iter().find_map(|t| rect(t));
-                    let render_fog = (
-                        render_distance - (render_distance / 10.0).clamp(4.0, 64.0),
-                        render_distance,
-                    );
-                    let (_, desc) = quick_sky(
-                        &req.sky,
-                        Some(e),
-                        &biome,
-                        world.level.day_time,
-                        f,
-                        render_distance,
-                        render_fog,
-                        sun_rect,
-                        &rect,
-                    );
-                    // What is drawn in the sky casts no light in the game.
-                    let bare = sky::SkyDescription {
-                        sun: None,
-                        moon: None,
-                        star_brightness: 0.0,
-                        ..desc
-                    };
-                    let maps = sky::game_sky_maps(
-                        &QuickSky::new(&rays, req.width, req.height, &desc),
-                        &QuickSky::new(&rays, req.width, req.height, &bare),
-                        e.sky_light_factor,
-                        rgb(e.sky_light_color),
-                        &scene.atlas.pixels,
-                        scene.atlas.width,
-                        sky::star_table(),
-                    );
-                    log::info!(
-                        "hq sky: the game's at day time {day_time}; sky light factor {:.6}, \
-                         colour #{:06x}; light {:.6} {:.6} {:.6} (the lightmap's, linear) = \
-                         {:.6} x (the sky's mean {:.6} {:.6} {:.6} + veil {:.6} {:.6} {:.6}); \
-                         sun {}",
-                        e.sky_light_factor,
-                        e.sky_light_color & 0xFF_FFFF,
-                        maps.light.x,
-                        maps.light.y,
-                        maps.light.z,
-                        maps.scale,
-                        maps.mean.x,
-                        maps.mean.y,
-                        maps.mean.z,
-                        maps.veil.x,
-                        maps.veil.y,
-                        maps.veil.z,
-                        match desc.sun {
-                            Some((d, _)) => format!(
-                                "drawn at altitude {:.6} rad, casting no light",
-                                d.y.clamp(-1.0, 1.0).asin()
-                            ),
-                            None => "not drawn".to_string(),
-                        }
-                    );
-                    let none = HqSky {
-                        sun_dir: desc.sun.map_or(Vec3::Y, |s| s.0),
-                        sun_color: Vec3::ZERO,
-                        sky_light: 0.0,
-                    };
-                    let mut params =
-                        hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &none);
-                    params.sky_map = maps.sizes;
-                    params.misc_f[2] = 0.0;
+                        Vec3::new(c.x, c.y, c.z)
+                    });
+                    for c in &mut params.sun_color[..3] {
+                        *c *= weight;
+                    }
+                    params.sun_su[3] *= weight;
+                } else {
+                    params.sun_color = [0.0, 0.0, 0.0, params.sun_color[3]];
                     // The lens's map draws the client's sun; Chunky's is not drawn.
                     params.sun_sprite = [0.0; 4];
-                    HqFrame {
-                        scene: &hq,
-                        params,
-                        spp: req.hq.spp,
-                        sky: maps.buffer,
-                    }
                 }
-                _ => {
-                    let hq_sky = match req.sky {
-                        Sky::Stated(s) => s.hq,
-                        Sky::Vanilla {
-                            time,
-                            sun_dir,
-                            hq:
-                                HqSkyModel::Chunky {
-                                    sun_intensity,
-                                    sky_intensity,
-                                },
-                        } => sky::hq_sky(vanilla_sun(time, sun_dir), sun_intensity, sky_intensity),
-                        Sky::Vanilla {
-                            hq: HqSkyModel::Game { .. },
-                            ..
-                        } => unreachable!("the game's sky is drawn above"),
-                    };
-                    let d = hq_sky.sun_dir;
-                    log::info!(
-                        "hq sun: direction {:.6} {:.6} {:.6}, altitude {:.6} rad, azimuth \
-                         from +x towards +z {:.6} rad (Chunky's sun angles)",
-                        d.x,
-                        d.y,
-                        d.z,
-                        d.y.clamp(-1.0, 1.0).asin(),
-                        d.z.atan2(d.x)
-                    );
-                    let params =
-                        hq_params(&req.hq, req.width, req.height, &hq, eye, &rays, &hq_sky);
-                    HqFrame {
-                        scene: &hq,
-                        params,
-                        spp: req.hq.spp,
-                        sky: sky::sky_cache(&params),
-                    }
-                }
+                params.sky_map = maps.sizes;
+                params.misc_f[2] = 0.0;
+                maps.buffer
+            };
+            let frame = HqFrame {
+                scene: &hq,
+                params,
+                spp: req.hq.spp,
+                sky: sky_buffer,
             };
             lap("sky", &mut t);
             let started = Instant::now();
@@ -755,7 +832,17 @@ pub fn render(req: &Request) -> Result<Rendered> {
             };
             let hdr = be.render_hq(&frame, &progress)?;
             lap("render", &mut t);
-            let px = post::tonemap(&hdr, req.hq.exposure, req.hq.tonemap);
+            let px = match req.hq.tonemap {
+                Some(op) => post::tonemap(&hdr, req.hq.exposure, op),
+                // Each look's own curve, mixed in display values by the day weight.
+                None => post::tonemap_mix(
+                    &hdr,
+                    req.hq.exposure,
+                    Tonemap::Gamma,
+                    Tonemap::FilmicMidGrey,
+                    weight,
+                ),
+            };
             (px, Some(hdr))
         }
     };
@@ -895,9 +982,12 @@ fn quick_sky(
     }
 }
 
-/// The path tracer's parameters for a camera and a sky.
+/// The path tracer's parameters for a camera and a sky, with the emitter intensity the
+/// frame is drawn at.
+#[allow(clippy::too_many_arguments)]
 pub fn hq_params(
     o: &HqOptions,
+    emitter_intensity: f32,
     width: u32,
     height: u32,
     hq: &voxel::HqScene,
@@ -925,7 +1015,7 @@ pub fn hq_params(
         perez_e: f4(Vec3::from(sky.perez[4]), 0.0),
         water_color: f4(Vec3::new(0.42, 0.16, 0.10), 1.333),
         misc_f: [
-            o.emitter_intensity,
+            emitter_intensity,
             1e-3,
             sky::SKY_CACHE_RESOLUTION as f32,
             0.0,
@@ -947,7 +1037,7 @@ pub fn hq_params(
         misc_u: [o.seed, 1, hq.models.len() as u32, hq.emitter_count],
         see_through: [hq.see_through[0], hq.see_through[1], 0, 0],
         emitter: [
-            if o.emitter_intensity > 0.0 {
+            if emitter_intensity > 0.0 {
                 match o.emitter_sampling {
                     EmitterSampling::None => EMITTER_SAMPLING_NONE,
                     EmitterSampling::One => EMITTER_SAMPLING_ONE,

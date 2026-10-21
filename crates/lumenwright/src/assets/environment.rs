@@ -458,6 +458,45 @@ pub fn sample(
     })
 }
 
+/// The night and day values of `visual/sky_light_factor` over a dimension's timelines:
+/// its least and greatest value at the biome, sampled at every keyframe tick of every
+/// timeline's track of it (the track is piecewise linear, so its extremes are at
+/// keyframes). `None` without environment attributes or without such a track.
+pub fn sky_light_factor_range(
+    store: &ResourceStore,
+    dimension: &str,
+    biome: &str,
+) -> Option<(f32, f32)> {
+    let dim = read_json(store, &data_path("dimension_type", dimension))?;
+    let mut timelines = Vec::new();
+    resolve_timelines(store, &dim["timelines"], &mut timelines, 0);
+    let mut ticks = Vec::new();
+    for id in &timelines {
+        let Some(tl) = read_json(store, &data_path("timeline", id)) else {
+            continue;
+        };
+        for k in tl["tracks"]["minecraft:visual/sky_light_factor"]["keyframes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            if let Some(t) = k["ticks"].as_i64() {
+                ticks.push(t);
+            }
+        }
+    }
+    if ticks.is_empty() {
+        return None;
+    }
+    let values: Vec<f32> = ticks
+        .iter()
+        .filter_map(|&t| sample(store, dimension, biome, t).map(|e| e.sky_light_factor))
+        .collect();
+    let lo = values.iter().copied().fold(f32::INFINITY, f32::min);
+    let hi = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    (lo <= hi).then_some((lo, hi))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -512,6 +551,10 @@ mod tests {
         let dusk = sample(&s, "minecraft:overworld", "minecraft:plains", 12205).unwrap();
         assert_eq!(dusk.sky_light_color, 0xFFBC_BCFF);
         assert!((dusk.sky_light_factor - 0.62).abs() < 1e-5);
+        // Its night and day values over the timeline.
+        let (lo, hi) =
+            sky_light_factor_range(&s, "minecraft:overworld", "minecraft:plains").unwrap();
+        assert!((lo - 0.24).abs() < 1e-6 && hi == 1.0, "{lo} {hi}");
         // Day 3 at noon: the same as day 0.
         let later = sample(
             &s,

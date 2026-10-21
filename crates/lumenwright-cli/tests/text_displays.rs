@@ -145,9 +145,9 @@ fn request<'a>(world: &'a Path, jar: &'a Path, mode: Mode, cam: Camera) -> Reque
         sky: Sky::Vanilla {
             time: None,
             sun_dir: Some(sky::sun_direction(45.0, 160.0)),
-            hq: HqSkyModel::Chunky {
+            hq: HqSkyModel {
                 sun_intensity: 1.5,
-                sky_intensity: 1.0,
+                ..HqSkyModel::CHUNKY
             },
         },
     }

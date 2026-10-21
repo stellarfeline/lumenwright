@@ -809,6 +809,44 @@ pub fn lightmap_sky(factor: f32, colour: Vec3, brightness: f32) -> Vec3 {
     (c * 255.0).round() / 255.0
 }
 
+/// **How much of a frame is Chunky's look** under [`crate::request::SkyLook::ByTime`]:
+/// where the client's `visual/sky_light_factor` at the tick stands between its night and
+/// day values over the day timeline, `(factor − night) / (day − night)`, held to 0..1.
+///
+/// The client's own timeline marks the day: on the 1.21.11 day timeline
+/// `visual/sky_light_factor` and `visual/sky_light_color` hold their day values, and
+/// `visual/sunrise_sunset_color` its zero alpha, from tick 730 to tick 11270, and the
+/// factor falls linearly to its night value 0.24 at 13140, holds it to 22860, and rises
+/// back by 730. So the weight is 1 (Chunky's look) on that plateau, 0 (the game's) on the
+/// night plateau, and linear in ticks between them, the factor's own ramp: a frame one tick
+/// later moves the weight by at most 1/1870. A timeline with no day cycle (the factor
+/// constant) gives 1. The mix is Lumenwright's; its source quantity is the client's.
+pub fn day_weight(factor: f32, night: f32, day: f32) -> f32 {
+    if day - night <= f32::EPSILON {
+        return 1.0;
+    }
+    ((factor - night) / (day - night)).clamp(0.0, 1.0)
+}
+
+/// Mixes Chunky's sky into both of the game's maps by `weight`: each texel becomes
+/// `weight × chunky(d) + (1 − weight) × texel` for the texel's direction `d`, where
+/// `chunky` is Chunky's sky as the kernel reads it. Light transport is linear in the
+/// sky's radiance, so with Chunky's sun lighting at the same weight the frame is the
+/// weighted mix of the two looks' radiances.
+pub fn blend_chunky_sky(maps: &mut GameSkyMaps, weight: f32, chunky: impl Fn(Vec3) -> Vec3 + Sync) {
+    use rayon::prelude::*;
+    let [lw, lh, gw, gh] = maps.sizes.map(|v| v as u32);
+    let (lens, light) = maps.buffer.split_at_mut((lw * lh * 3) as usize);
+    for (buf, w, h) in [(lens, lw, lh), (light, gw, gh)] {
+        buf.par_chunks_mut(3).enumerate().for_each(|(k, t)| {
+            let c = chunky(map_direction(k as u32 % w, k as u32 / w, w, h));
+            for (i, v) in t.iter_mut().enumerate() {
+                *v = weight * c[i] + (1.0 - weight) * *v;
+            }
+        });
+    }
+}
+
 /// The direction of texel `(i, j)` of a `w` × `h` equirectangular map, as the kernel's
 /// `map_lookup` reads it: its centre at azimuth `(i + ½) / w` turns from +x towards +z
 /// and height `(j + ½) / h · π − π/2`, row 0 at the nadir.
@@ -1522,6 +1560,19 @@ mod tests {
         let seen = lumenwright_kernel::integrator::sky_lens(&view, d);
         let lit = lumenwright_kernel::integrator::sky_light(&view, d) / maps.scale;
         assert!(seen.z > 0.9 && seen.z > lit.z + 0.3, "{seen:?} {lit:?}");
+    }
+
+    /// The weight is 1 on the day plateau, 0 on the night plateau, linear in the factor
+    /// between, held at the ends, and 1 for a timeline with no day cycle.
+    #[test]
+    fn the_day_weight_follows_the_sky_light_factor() {
+        assert_eq!(day_weight(1.0, 0.24, 1.0), 1.0);
+        assert_eq!(day_weight(0.24, 0.24, 1.0), 0.0);
+        assert!((day_weight(0.62, 0.24, 1.0) - 0.5).abs() < 1e-6);
+        assert!((day_weight(0.378182, 0.24, 1.0) - 0.181818).abs() < 1e-5);
+        assert_eq!(day_weight(1.2, 0.24, 1.0), 1.0);
+        assert_eq!(day_weight(0.1, 0.24, 1.0), 0.0);
+        assert_eq!(day_weight(0.5, 0.5, 0.5), 1.0);
     }
 
     #[test]

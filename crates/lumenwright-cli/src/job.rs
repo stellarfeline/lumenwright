@@ -6,7 +6,7 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 use lumenwright::glam::DVec3;
 use lumenwright::render::sky;
-use lumenwright::request::HqSkyModel;
+use lumenwright::request::{HqSkyModel, SkyLook};
 use lumenwright::scene::block_entities::BlockEntityStats;
 use lumenwright::scene::camera::Camera;
 use lumenwright::scene::entities::EntityStats;
@@ -79,20 +79,24 @@ pub struct RenderArgs {
     /// Sun azimuth in degrees (0 = north, 90 = east).
     #[arg(long, default_value_t = 135.0, allow_hyphen_values = true)]
     pub sun_azimuth: f32,
-    /// HQ: the sky the frame is lit by and drawn under.
-    #[arg(long, value_enum, default_value_t = SkyArg::Game)]
+    /// HQ: the sky the frame is lit by and drawn under: by the time of day (Chunky's by day,
+    /// the game's at dusk and night, mixed between by the client's sky light factor), or
+    /// either one at every hour.
+    #[arg(long, value_enum, default_value_t = SkyArg::Auto)]
     pub sky: SkyArg,
-    /// HQ, `--sky chunky`: sun intensity, as Chunky's (the sun's irradiance is
-    /// intensity^2.2). Default 1.25.
+    /// HQ, Chunky's sky (`--sky chunky` or `auto`): sun intensity, as Chunky's (the sun's
+    /// irradiance is intensity^2.2). Default 1.25.
     #[arg(long)]
     pub sun_intensity: Option<f32>,
-    /// HQ, `--sky chunky`: the Preetham sky's radiance scale. Default 1.
+    /// HQ, Chunky's sky (`--sky chunky` or `auto`): the Preetham sky's radiance scale.
+    /// Default 1.
     #[arg(long)]
     pub sky_intensity: Option<f32>,
-    /// HQ: Chunky's emitter intensity (an emitting surface emits its texel colour squared
-    /// times its block's emittance times this; 0 turns emitters off).
-    #[arg(long, default_value_t = lumenwright::request::DEFAULT_EMITTER_INTENSITY)]
-    pub emitter_intensity: f32,
+    /// HQ: the emitter intensity (an emitting surface emits its texel colour squared times
+    /// its block's emittance times this; 0 turns emitters off). Default: each look's own,
+    /// mixed as the sky is: Chunky's 13, and the game's look's, authored by Lumenwright.
+    #[arg(long)]
+    pub emitter_intensity: Option<f32>,
     /// HQ: how a diffuse surface samples the emitters near it (Chunky's strategies).
     #[arg(long, value_enum, default_value_t = EmitterSamplingArg::One)]
     pub emitter_sampling: EmitterSamplingArg,
@@ -102,8 +106,8 @@ pub struct RenderArgs {
     pub prevent_normal_emitter: bool,
     #[arg(long, default_value_t = 1.0)]
     pub exposure: f32,
-    /// HQ: the tone curve. Default: `filmic-mid-grey` under `--sky game` (mid-grey shown
-    /// as the game shows it), `gamma` under `--sky chunky` (Chunky's default).
+    /// HQ: the tone curve. Default: each look's own, mixed as the sky is: `gamma` (Chunky's)
+    /// and `filmic-mid-grey` (mid-grey shown as the game shows it).
     #[arg(long, value_enum)]
     pub tonemap: Option<TonemapArg>,
     /// Quick: vanilla brightness option (0 = moody, 0.5 = default, 1 = bright).
@@ -237,28 +241,30 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
     })?;
     let opening = t.elapsed().as_secs_f64();
     let r = a.render_distance.max(1);
-    let hq_sky = match a.sky {
-        SkyArg::Game => {
-            for (flag, given) in [
-                ("--sun-intensity", a.sun_intensity.is_some()),
-                ("--sky-intensity", a.sky_intensity.is_some()),
-            ] {
-                if given {
-                    bail!(
-                        "{flag} scales Chunky's sun and sky, which `--sky game` does not draw: \
+    let look = match a.sky {
+        SkyArg::Auto => SkyLook::ByTime,
+        SkyArg::Game => SkyLook::Game,
+        SkyArg::Chunky => SkyLook::Chunky,
+    };
+    if look == SkyLook::Game {
+        for (flag, given) in [
+            ("--sun-intensity", a.sun_intensity.is_some()),
+            ("--sky-intensity", a.sky_intensity.is_some()),
+        ] {
+            if given {
+                bail!(
+                    "{flag} scales Chunky's sun and sky, which `--sky game` does not draw: \
                          the game's sky casts the lightmap's light and its sun casts none. \
                          Remove {flag}, or pass `--sky chunky`"
-                    );
-                }
-            }
-            HqSkyModel::Game {
-                render_distance: (r * 16) as f32,
+                );
             }
         }
-        SkyArg::Chunky => HqSkyModel::Chunky {
-            sun_intensity: a.sun_intensity.unwrap_or(sky::DEFAULT_SUN_INTENSITY),
-            sky_intensity: a.sky_intensity.unwrap_or(1.0),
-        },
+    }
+    let hq_sky = HqSkyModel {
+        look,
+        render_distance: (r * 16) as f32,
+        sun_intensity: a.sun_intensity.unwrap_or(sky::DEFAULT_SUN_INTENSITY),
+        sky_intensity: a.sky_intensity.unwrap_or(1.0),
     };
     let req = Request {
         world: WorldSource::Opened(&world),
@@ -292,13 +298,7 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             emitter_sampling: a.emitter_sampling.into(),
             prevent_normal_emitter: a.prevent_normal_emitter,
             exposure: a.exposure,
-            tonemap: a
-                .tonemap
-                .unwrap_or(match a.sky {
-                    SkyArg::Game => TonemapArg::FilmicMidGrey,
-                    SkyArg::Chunky => TonemapArg::Gamma,
-                })
-                .into(),
+            tonemap: a.tonemap.map(Into::into),
         },
         sky: Sky::Vanilla {
             time: a.time,
