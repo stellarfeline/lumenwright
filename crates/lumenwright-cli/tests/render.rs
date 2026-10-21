@@ -533,6 +533,8 @@ const SUN_IN_VIEW: &[&str] = &[
 /// The game's sky in the morning and at the setting sun.
 const GAME_DAY: &[&str] = &["--sky", "game", "--time", "4000"];
 const GAME_DUSK: &[&str] = &["--sky", "game", "--time", "12800"];
+/// The default sky half way down the evening ramp (day weight 0.5): both looks mixed.
+const AUTO_MID: &[&str] = &["--time", "12205"];
 /// A camera on the showcase looking at the [`SUN_IN_VIEW`] sun with a 12 degree view.
 const SUN_VIEW: &[&str] = &[
     "--camera",
@@ -559,6 +561,7 @@ fn gpu_matches_cpu_in_hq_mode() {
         ("showcase-sun", showcase(), SUN_VIEW, SUN_IN_VIEW),
         ("showcase-game-day", showcase(), &[][..], GAME_DAY),
         ("showcase-game-dusk", showcase(), &[][..], GAME_DUSK),
+        ("showcase-auto-mid", showcase(), &[][..], AUTO_MID),
         ("block-entities", gallery(), &GALLERY_VIEW[..], DAY_SUN),
         (
             "items",
@@ -861,6 +864,7 @@ fn cuda_matches_cpu_in_hq_mode() {
         ("showcase-sun", showcase(), SUN_VIEW, SUN_IN_VIEW),
         ("showcase-game-day", showcase(), &[][..], GAME_DAY),
         ("showcase-game-dusk", showcase(), &[][..], GAME_DUSK),
+        ("showcase-auto-mid", showcase(), &[][..], AUTO_MID),
         ("block-entities", gallery(), &GALLERY_VIEW[..], DAY_SUN),
         (
             "items",
