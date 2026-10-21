@@ -9,9 +9,9 @@ The library is on crates.io as `lumenwright`, with its kernel `lumenwright-kerne
 
 ```toml
 [dependencies]
-lumenwright = "0.2.0"                                                         # CPU, Metal, Vulkan, DX12
-# lumenwright = { version = "0.2.0", default-features = false }              # CPU only
-# lumenwright = { version = "0.2.0", default-features = false, features = ["gpu"] }
+lumenwright = "0.3.0"                                                         # CPU, Metal, Vulkan, DX12
+# lumenwright = { version = "0.3.0", default-features = false }              # CPU only
+# lumenwright = { version = "0.3.0", default-features = false, features = ["gpu"] }
 ```
 
 The `cuda` feature embeds the kernel's PTX, which `scripts/build-ptx.sh` builds in a clone of
