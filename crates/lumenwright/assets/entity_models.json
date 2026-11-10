@@ -743,6 +743,228 @@
      ],
      "children": []
     }
+   ],
+   "layers": [
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.SheepWoolUndercoatLayer, net.minecraft.client.model.animal.sheep.SheepModel#createBodyLayer()",
+     "kind": "sheep_undercoat",
+     "texture": "entity/sheep/sheep_wool_undercoat"
+    },
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.SheepWoolLayer, net.minecraft.client.model.animal.sheep.SheepFurModel#createFurLayer()",
+     "kind": "sheep_wool",
+     "texture": "entity/sheep/sheep_wool",
+     "texture_size": [
+      64,
+      32
+     ],
+     "parts": [
+      {
+       "name": "head",
+       "pivot": [
+        0,
+        6,
+        -8
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -3,
+          -4,
+          -4
+         ],
+         "size": [
+          6,
+          6,
+          6
+         ],
+         "inflate": 0.6,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "body",
+       "pivot": [
+        0,
+        5,
+        2
+       ],
+       "rotation": [
+        1.5707964,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          28,
+          8
+         ],
+         "origin": [
+          -4,
+          -10,
+          -7
+         ],
+         "size": [
+          8,
+          16,
+          6
+         ],
+         "inflate": 1.75,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "right_hind_leg",
+       "pivot": [
+        -3,
+        12,
+        7
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -2,
+          0,
+          -2
+         ],
+         "size": [
+          4,
+          6,
+          4
+         ],
+         "inflate": 0.5,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_hind_leg",
+       "pivot": [
+        3,
+        12,
+        7
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -2,
+          0,
+          -2
+         ],
+         "size": [
+          4,
+          6,
+          4
+         ],
+         "inflate": 0.5,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "right_front_leg",
+       "pivot": [
+        -3,
+        12,
+        -5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -2,
+          0,
+          -2
+         ],
+         "size": [
+          4,
+          6,
+          4
+         ],
+         "inflate": 0.5,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_front_leg",
+       "pivot": [
+        3,
+        12,
+        -5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -2,
+          0,
+          -2
+         ],
+         "size": [
+          4,
+          6,
+          4
+         ],
+         "inflate": 0.5,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
    ]
   },
   "minecraft:chicken": {
@@ -4117,6 +4339,13 @@
      ],
      "children": []
     }
+   ],
+   "layers": [
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.SpiderEyesLayer",
+     "kind": "eyes",
+     "texture": "entity/spider_eyes"
+    }
    ]
   },
   "minecraft:enderman": {
@@ -4369,6 +4598,13 @@
       }
      ],
      "children": []
+    }
+   ],
+   "layers": [
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.EnderEyesLayer",
+     "kind": "eyes",
+     "texture": "entity/enderman/enderman_eyes"
     }
    ]
   },
@@ -10672,6 +10908,13 @@
       }
      ],
      "children": []
+    }
+   ],
+   "layers": [
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.SpiderEyesLayer",
+     "kind": "eyes",
+     "texture": "entity/spider_eyes"
     }
    ]
   },
@@ -19206,6 +19449,834 @@
      "children": []
     }
    ]
+  },
+  "minecraft:happy_ghast": {
+   "source": "net.minecraft.client.model.animal.ghast.HappyGhastModel#createBodyLayer(false, CubeDeformation.NONE)",
+   "texture": "entity/ghast/happy_ghast",
+   "texture_size": [
+    64,
+    64
+   ],
+   "scale": 4,
+   "hitbox": [
+    4.0,
+    4.0
+   ],
+   "parts": [
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      16,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -8,
+        -8,
+        -8
+       ],
+       "size": [
+        16,
+        16,
+        16
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": [
+      {
+       "name": "tentacle0",
+       "pivot": [
+        -3.75,
+        7,
+        -5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          5,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle1",
+       "pivot": [
+        1.25,
+        7,
+        -5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          7,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle2",
+       "pivot": [
+        6.25,
+        7,
+        -5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          4,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle3",
+       "pivot": [
+        -6.25,
+        7,
+        0
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          5,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle4",
+       "pivot": [
+        -1.25,
+        7,
+        0
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          5,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle5",
+       "pivot": [
+        3.75,
+        7,
+        0
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          7,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle6",
+       "pivot": [
+        -3.75,
+        7,
+        5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          8,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle7",
+       "pivot": [
+        1.25,
+        7,
+        5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          8,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle8",
+       "pivot": [
+        6.25,
+        7,
+        5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          5,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
+   ],
+   "layers": [
+    {
+     "source": "SimpleEquipmentLayer(HAPPY_GHAST_BODY), net.minecraft.client.model.animal.ghast.HappyGhastHarnessModel#createHarnessLayer(false)",
+     "kind": "equipment",
+     "equipment": "happy_ghast_body",
+     "texture_size": [
+      64,
+      64
+     ],
+     "parts": [
+      {
+       "name": "harness",
+       "pivot": [
+        0,
+        24,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -8,
+          -16,
+          -8
+         ],
+         "size": [
+          16,
+          16,
+          16
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "goggles",
+       "pivot": [
+        0,
+        14,
+        -5.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          32
+         ],
+         "origin": [
+          -8,
+          -2.5,
+          -2.5
+         ],
+         "size": [
+          16,
+          5,
+          5
+         ],
+         "inflate": 0.15,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
+   ],
+   "baby": {
+    "source": "net.minecraft.client.model.animal.ghast.HappyGhastModel#createBodyLayer(true, CubeDeformation.NONE) with BABY_TRANSFORMER",
+    "texture": "entity/ghast/happy_ghast_baby",
+    "texture_size": [
+     64,
+     64
+    ],
+    "scale": 0.95,
+    "hitbox": [
+     0.95,
+     0.95
+    ],
+    "parts": [
+     {
+      "name": "body",
+      "pivot": [
+       0,
+       16,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "cubes": [
+       {
+        "uv": [
+         0,
+         0
+        ],
+        "origin": [
+         -8,
+         -8,
+         -8
+        ],
+        "size": [
+         16,
+         16,
+         16
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": [
+       {
+        "name": "inner_body",
+        "pivot": [
+         0,
+         8,
+         0
+        ],
+        "rotation": [
+         0,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           32
+          ],
+          "origin": [
+           -8,
+           -16,
+           -8
+          ],
+          "size": [
+           16,
+           16,
+           16
+          ],
+          "inflate": -0.5,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle0",
+        "pivot": [
+         -3.75,
+         7,
+         -5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           5,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle1",
+        "pivot": [
+         1.25,
+         7,
+         -5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           7,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle2",
+        "pivot": [
+         6.25,
+         7,
+         -5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           4,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle3",
+        "pivot": [
+         -6.25,
+         7,
+         0
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           5,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle4",
+        "pivot": [
+         -1.25,
+         7,
+         0
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           5,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle5",
+        "pivot": [
+         3.75,
+         7,
+         0
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           7,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle6",
+        "pivot": [
+         -3.75,
+         7,
+         5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           8,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle7",
+        "pivot": [
+         1.25,
+         7,
+         5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           8,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle8",
+        "pivot": [
+         6.25,
+         7,
+         5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           5,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       }
+      ]
+     }
+    ],
+    "layers": []
+   }
   }
  }
 }

@@ -62,6 +62,9 @@ enum Cmd {
         /// Instead of the showcase, a closed room lit by candles.
         #[arg(long, conflicts_with_all = ["lineup", "block_entities", "items", "torch_room"])]
         candle_room: bool,
+        /// Instead of the showcase, the entity gallery: variants, layers and vehicles.
+        #[arg(long, conflicts_with_all = ["lineup", "block_entities", "items", "torch_room", "candle_room"])]
+        entity_gallery: bool,
     },
 }
 
@@ -146,8 +149,14 @@ fn main() -> Result<()> {
             items,
             torch_room,
             candle_room,
+            entity_gallery,
         } => {
-            let (what, world) = if torch_room {
+            let (what, world) = if entity_gallery {
+                (
+                    "entity gallery",
+                    lumenwright_cli::fixture::entity_gallery(true),
+                )
+            } else if torch_room {
                 ("torch room", lumenwright_cli::fixture::torch_room())
             } else if candle_room {
                 ("candle room", lumenwright_cli::fixture::candle_room())

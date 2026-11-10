@@ -343,6 +343,7 @@ impl Scene {
         }
         let models_json = entities::EntityModels::load_builtin();
         entities::register_textures(&models_json, entity_list, &mut ab);
+        entities::register_layer_textures(&models_json, entity_list, store, &mut ab);
         let mut item_bakery = items::ItemBakery::new(store);
         if opts.entities {
             entities::register_item_textures(&mut item_bakery, entity_list, &mut ab);

@@ -621,6 +621,51 @@ fn plan_chest(state: &BlockState, t: Mat4, draws: &mut Vec<Draw>) -> Option<&'st
     })
 }
 
+/// The chest model textures a chest block state draws with, for the atlas.
+pub(crate) fn chest_textures(state: &BlockState) -> Vec<String> {
+    let mut draws = Vec::new();
+    plan_chest(state, Mat4::IDENTITY, &mut draws);
+    draws
+        .into_iter()
+        .filter_map(|d| match d {
+            Draw::Model { texture, .. } => Some(texture),
+            Draw::Glyph { .. } => None,
+        })
+        .collect()
+}
+
+/// Draws a chest block state through the chest model, `t` taking the block's
+/// 0..1 space into the scene, as `ChestRenderer` draws it closed; false for any
+/// other state.
+pub(crate) fn draw_chest(scene: &Scene, state: &BlockState, t: &Mat4, out: &mut Vec<Quad>) -> bool {
+    static MODELS: std::sync::OnceLock<BlockEntityModels> = std::sync::OnceLock::new();
+    let mut draws = Vec::new();
+    if plan_chest(state, *t, &mut draws).is_none() {
+        return false;
+    }
+    let models = MODELS.get_or_init(BlockEntityModels::load_builtin);
+    for d in draws {
+        if let Draw::Model {
+            model, texture, m, ..
+        } = d
+            && let Some(def) = models.models.get(model)
+        {
+            let sprite = scene.atlas.sprite(&texture);
+            for part in &def.parts {
+                part_quads(
+                    part,
+                    &m,
+                    &sprite,
+                    def.texture_size,
+                    &super::entities::rest_pose,
+                    out,
+                );
+            }
+        }
+    }
+    true
+}
+
 /// BookModel.setupAnim for (animation 0, page flips, openness).
 fn book_poses(flip1: f32, flip2: f32, open: f32) -> Vec<(&'static str, PoseEdit)> {
     let f = (0f32.sin() * 0.1 + 1.25) * open;

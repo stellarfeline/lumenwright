@@ -93,7 +93,74 @@ pub struct ModelDef {
     /// the height.
     pub hitbox: [f32; 2],
     /// The root parts.
+    #[serde(default)]
     pub parts: Vec<PartDef>,
+    /// Another model of the same file whose `parts` and `texture_size` this one draws
+    /// with its own texture (the boats of every wood share one geometry).
+    #[serde(default)]
+    pub parts_from: Option<String>,
+    /// The model a baby draws in place of this one, as vanilla bakes a separate baby
+    /// layer; without it a baby draws this model at half scale.
+    #[serde(default)]
+    pub baby: Option<Box<ModelDef>>,
+    /// The layers vanilla's renderer draws over the body (`RenderLayer`s), in order.
+    #[serde(default)]
+    pub layers: Vec<LayerDef>,
+    /// How the entity's renderer places the model.
+    #[serde(default)]
+    pub placement: Placement,
+}
+
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+/// How an entity's renderer places its model in the world; each is code that names
+/// the vanilla renderer it follows.
+pub enum Placement {
+    /// `LivingEntityRenderer`: turned by the body's yaw, flipped and lifted 1.501.
+    #[default]
+    Living,
+    /// `AbstractBoatRenderer`: lifted 0.375, turned by the yaw and a quarter turn.
+    Boat,
+    /// `AbstractMinecartRenderer`: lifted 0.375, turned by the yaw and pitch, with its
+    /// display block.
+    Minecart,
+}
+
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+/// What a layer draws and when; each kind is code that names its vanilla layer.
+pub enum LayerKind {
+    /// `SheepWoolLayer`: the fleece, dyed the sheep's `Color`, gone when `Sheared`.
+    SheepWool,
+    /// `SheepWoolUndercoatLayer`: the body's dyed undercoat, drawn for a coloured sheep.
+    SheepUndercoat,
+    /// `EyesLayer`: the body again in a texture drawn at full brightness.
+    Eyes,
+    /// `SimpleEquipmentLayer`: the item in the body slot through its equipment asset's
+    /// layers of `equipment` type.
+    Equipment,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+/// One layer drawn over an entity's body (a vanilla `RenderLayer`).
+pub struct LayerDef {
+    /// Vanilla class and method the layer and its geometry are transcribed from.
+    #[serde(default)]
+    pub source: Option<String>,
+    /// What the layer draws and when.
+    pub kind: LayerKind,
+    /// The layer's texture; an equipment layer takes the item's instead.
+    #[serde(default)]
+    pub texture: String,
+    /// The equipment layer type (`EquipmentClientInfo.LayerType`) of an equipment layer.
+    #[serde(default)]
+    pub equipment: Option<String>,
+    /// Texture size of the layer's own parts; the model's when absent.
+    #[serde(default)]
+    pub texture_size: Option<[f32; 2]>,
+    /// The layer's own geometry; the body's parts, posed as the body is, when absent.
+    #[serde(default)]
+    pub parts: Option<Vec<PartDef>>,
 }
 
 fn one() -> f32 {
@@ -118,7 +185,30 @@ pub struct EntityModels {
 impl EntityModels {
     /// Parses the bundled model file.
     pub fn load_builtin() -> EntityModels {
-        serde_json::from_str(BUILTIN_MODELS).expect("bundled entity_models.json is valid")
+        let mut m: EntityModels =
+            serde_json::from_str(BUILTIN_MODELS).expect("bundled entity_models.json is valid");
+        m.resolve_shared_parts();
+        m
+    }
+
+    /// Gives every model with `parts_from` the parts and texture size it names.
+    fn resolve_shared_parts(&mut self) {
+        let shared: Vec<(String, String)> = self
+            .models
+            .iter()
+            .filter_map(|(k, d)| Some((k.clone(), d.parts_from.clone()?)))
+            .collect();
+        for (id, from) in shared {
+            let src = &self.models[&from];
+            assert!(
+                src.parts_from.is_none(),
+                "{id}: parts_from {from} shares parts itself"
+            );
+            let (parts, size) = (src.parts.clone(), src.texture_size);
+            let d = self.models.get_mut(&id).expect("listed");
+            d.parts = parts;
+            d.texture_size = size;
+        }
     }
 }
 
@@ -223,6 +313,8 @@ pub fn display_states(entities: &[Entity]) -> Vec<BlockState> {
         .filter_map(|e| {
             if e.short_id() == "block_display" {
                 block_state_from_nbt(nbt::get(&e.nbt, "block_state").and_then(nbt::compound)?)
+            } else if e.short_id().ends_with("minecart") {
+                minecart_display(e).map(|(s, _)| s)
             } else {
                 item_frame_state(e)
             }
@@ -318,6 +410,38 @@ pub fn register_textures(models: &EntityModels, entities: &[Entity], ab: &mut At
             && let Some(v) = painting_variant(e)
         {
             ab.add(&v);
+        }
+    }
+}
+
+/// Adds the textures of the models' babies and layers and of minecart chests: the
+/// layer textures of each entity's kind, the equipment layers of its body item.
+pub fn register_layer_textures(
+    models: &EntityModels,
+    entities: &[Entity],
+    store: &ResourceStore,
+    ab: &mut AtlasBuilder,
+) {
+    for e in entities {
+        let Some(adult) = models.models.get(&e.id) else {
+            continue;
+        };
+        let def = match (&adult.baby, is_baby(e)) {
+            (Some(baby), true) => baby.as_ref(),
+            _ => adult,
+        };
+        ab.add(&norm_loc(&def.texture));
+        for layer in &def.layers {
+            for (tex, _, _) in layer_draws(layer, e, store) {
+                ab.add(&tex);
+            }
+        }
+        if def.placement == Placement::Minecart
+            && let Some((state, _)) = minecart_display(e)
+        {
+            for t in super::block_entities::chest_textures(&state) {
+                ab.add(&t);
+            }
         }
     }
 }
@@ -439,6 +563,8 @@ pub struct PartPose {
     pub pivot: [f32; 3],
     /// Rotation about the pivot in radians, x, y, z.
     pub rotation: [f32; 3],
+    /// Scale along x, y and z, applied after the rotation.
+    pub scale: [f32; 3],
     /// Whether the part and its children are drawn.
     pub visible: bool,
 }
@@ -474,13 +600,14 @@ pub(crate) fn part_quads(
     let mut p = PartPose {
         pivot: part.pivot,
         rotation: part.rotation,
+        scale: part.scale,
         visible: true,
     };
     pose(&part.name, &mut p);
     if !p.visible {
         return;
     }
-    let m = *parent * part_matrix(&p, part.scale);
+    let m = *parent * part_matrix(&p, p.scale);
     let to_px = m * Mat4::from_scale(Vec3::splat(1.0 / 16.0));
     for c in &part.cubes {
         cube_quads(c, &to_px, sprite, tex_size, out);
@@ -717,25 +844,22 @@ pub fn build_entity_quads(
             continue;
         }
 
-        if let Some(def) = models.models.get(&e.id) {
+        if let Some(adult) = models.models.get(&e.id) {
+            let (def, mut scale) = match (&adult.baby, is_baby(e)) {
+                (Some(baby), true) => (baby.as_ref(), baby.scale),
+                (None, true) => (adult, adult.scale * 0.5),
+                _ => (adult, adult.scale),
+            };
             let tex = entity_texture(def, e, store);
             let sprite = scene.atlas.sprite(&tex);
-            let mut scale = def.scale;
-            if e.num_field("Age").unwrap_or(0.0) < 0.0 || e.flag("IsBaby") {
-                scale *= 0.5;
-            }
             if id == "armor_stand" && e.flag("Small") {
                 scale *= 0.5;
             }
             if id == "slime" || id == "magma_cube" {
                 scale *= e.num_field("Size").unwrap_or(0.0) as f32 + 1.0;
             }
-            // LivingEntityRenderer: translate(pos) rotY(180 - yaw) scale(-1,-1,1) scale(s) translate(0,-1.501,0)
-            let root = Mat4::from_translation(rel)
-                * Mat4::from_rotation_y((180.0 - e.yaw).to_radians())
-                * Mat4::from_scale(Vec3::new(-1.0, -1.0, 1.0))
-                * Mat4::from_scale(Vec3::splat(scale))
-                * Mat4::from_translation(Vec3::new(0.0, -1.501, 0.0));
+            let root = placement_root(def.placement, e, rel, scale);
+            let kind_pose = kind_pose(&id, e);
             let stand = (id == "armor_stand").then(|| armor_stand_pose(e));
             let no_plate = e.flag("NoBasePlate");
             let show_arms = e.flag("ShowArms");
@@ -743,6 +867,7 @@ pub fn build_entity_quads(
             // ArmorStandModel.setupAnim: the parts take the stand's `Pose`, the body
             // sticks follow the body, the arms show with `ShowArms`.
             let pose = |name: &str, p: &mut PartPose| {
+                kind_pose(name, p);
                 let Some(sp) = &stand else { return };
                 let of = |n: &str| sp.iter().find(|(k, _)| *k == n).map(|(_, r)| *r);
                 match name {
@@ -766,13 +891,25 @@ pub fn build_entity_quads(
                 }
             };
             let mut drew = false;
+            let light = light_at(rel + Vec3::new(0.0, def.hitbox[1] * scale * 0.5, 0.0));
             if !invisible {
                 for part in &def.parts {
                     part_quads(part, &root, &sprite, def.texture_size, &pose, &mut quads);
                 }
                 drew = true;
+                fill_lights(&quads, &mut lights, light);
+                draw_layers(scene, def, e, store, &root, &pose, &mut quads);
+                // A layer drawn at full brightness lights itself.
+                for q in &quads[lights.len()..] {
+                    let mut l = light;
+                    l.full_bright = q.emission > 0.0;
+                    lights.push(l);
+                }
             }
-            let light = light_at(rel + Vec3::new(0.0, def.hitbox[1] * scale * 0.5, 0.0));
+            if def.placement == Placement::Minecart {
+                let frame = minecart_frame(e, rel);
+                drew |= draw_minecart_contents(scene, e, &frame, &mut scratch, &mut quads);
+            }
             fill_lights(&quads, &mut lights, light);
             if let Some((family, shift)) = holder_kind(&id) {
                 // A top-level part as posed for this frame.
@@ -781,10 +918,11 @@ pub fn build_entity_quads(
                     let mut pp = PartPose {
                         pivot: part.pivot,
                         rotation: part.rotation,
+                        scale: part.scale,
                         visible: true,
                     };
                     pose(name, &mut pp);
-                    Some((pp, part.scale))
+                    Some((pp, pp.scale))
                 };
                 // The armour mesh copies the rotations of the body parts it covers.
                 let armor_pose = |name: &str, p: &mut PartPose| {
@@ -1276,6 +1414,302 @@ fn fill_lights(quads: &[Quad], lights: &mut Vec<EntityLight>, light: EntityLight
 fn light_at(p: Vec3) -> EntityLight {
     let p = p.floor();
     EntityLight::shaded([p.x as i32, p.y as i32, p.z as i32])
+}
+
+/// Whether an entity is a baby (`Age` below zero, or `IsBaby`).
+fn is_baby(e: &Entity) -> bool {
+    e.num_field("Age").unwrap_or(0.0) < 0.0 || e.flag("IsBaby")
+}
+
+/// Where an entity's renderer puts its model's origin, scaled by `scale`.
+fn placement_root(p: Placement, e: &Entity, rel: Vec3, scale: f32) -> Mat4 {
+    let flip = Mat4::from_scale(Vec3::new(-1.0, -1.0, 1.0));
+    match p {
+        // LivingEntityRenderer: translate(pos) rotY(180 - yaw) scale(-1,-1,1) scale(s)
+        // translate(0,-1.501,0).
+        Placement::Living => {
+            Mat4::from_translation(rel)
+                * Mat4::from_rotation_y((180.0 - e.yaw).to_radians())
+                * flip
+                * Mat4::from_scale(Vec3::splat(scale))
+                * Mat4::from_translation(Vec3::new(0.0, -1.501, 0.0))
+        }
+        // AbstractBoatRenderer.submit, at rest (no hurt wobble, no bubble column):
+        // translate(0,0.375,0) rotY(180 - yaw) scale(-1,-1,1) rotY(90).
+        Placement::Boat => {
+            Mat4::from_translation(rel + Vec3::new(0.0, 0.375, 0.0))
+                * Mat4::from_rotation_y((180.0 - e.yaw).to_radians())
+                * flip
+                * Mat4::from_rotation_y(90f32.to_radians())
+                * Mat4::from_scale(Vec3::splat(scale))
+        }
+        // AbstractMinecartRenderer.submit: the cart's frame, then scale(-1,-1,1).
+        Placement::Minecart => minecart_frame(e, rel) * flip * Mat4::from_scale(Vec3::splat(scale)),
+    }
+}
+
+/// `AbstractMinecartRenderer.oldRender` off a rail: translate(0,0.375,0)
+/// rotY(180 - yaw) rotZ(-pitch). The few-thousandths offset vanilla seeds from the
+/// entity id is left out; on a rail vanilla turns the cart along the rail, which a
+/// cart's stored yaw and pitch already follow.
+fn minecart_frame(e: &Entity, rel: Vec3) -> Mat4 {
+    Mat4::from_translation(rel + Vec3::new(0.0, 0.375, 0.0))
+        * Mat4::from_rotation_y((180.0 - e.yaw).to_radians())
+        * Mat4::from_rotation_z((-e.pitch).to_radians())
+}
+
+/// The block a minecart carries and how high it sits (`DisplayState` and
+/// `DisplayOffset`, else the kind's `getDefaultDisplayBlockState` and
+/// `getDefaultDisplayOffset`, 1.21.11).
+fn minecart_display(e: &Entity) -> Option<(BlockState, f32)> {
+    let p = |name: &str, kv: &[(&str, &str)]| {
+        kv.iter()
+            .fold(BlockState::new(name), |s, (k, v)| s.with(k, v))
+    };
+    let (default, offset) = match e.short_id() {
+        "chest_minecart" => (
+            Some(p(
+                "minecraft:chest",
+                &[
+                    ("facing", "north"),
+                    ("type", "single"),
+                    ("waterlogged", "false"),
+                ],
+            )),
+            8,
+        ),
+        "furnace_minecart" => {
+            let lit = e.num_field("Fuel").unwrap_or(0.0) > 0.0;
+            (
+                Some(p(
+                    "minecraft:furnace",
+                    &[
+                        ("facing", "north"),
+                        ("lit", if lit { "true" } else { "false" }),
+                    ],
+                )),
+                6,
+            )
+        }
+        "hopper_minecart" => (
+            Some(p(
+                "minecraft:hopper",
+                &[("enabled", "true"), ("facing", "down")],
+            )),
+            1,
+        ),
+        "tnt_minecart" => (Some(p("minecraft:tnt", &[("unstable", "false")])), 6),
+        "spawner_minecart" => (Some(p("minecraft:spawner", &[])), 6),
+        "command_block_minecart" => (
+            Some(p(
+                "minecraft:command_block",
+                &[("conditional", "false"), ("facing", "north")],
+            )),
+            6,
+        ),
+        _ => (None, 6),
+    };
+    let state = nbt::get(&e.nbt, "DisplayState")
+        .and_then(nbt::compound)
+        .and_then(block_state_from_nbt)
+        .or(default)?;
+    if state.name == "minecraft:air" {
+        return None;
+    }
+    let offset = e.num_field("DisplayOffset").map_or(offset, |v| v as i32);
+    Some((state, offset as f32))
+}
+
+/// The display block of a minecart, placed in the cart's frame as
+/// `AbstractMinecartRenderer.submit` places it: scale(0.75)
+/// translate(-0.5, (offset - 8) / 16, 0.5) rotY(90). A chest is drawn through the
+/// chest model, as vanilla's block renderer draws it.
+fn draw_minecart_contents(
+    scene: &mut Scene,
+    e: &Entity,
+    frame: &Mat4,
+    scratch: &mut Vec<u32>,
+    quads: &mut Vec<Quad>,
+) -> bool {
+    let Some((state, offset)) = minecart_display(e) else {
+        return false;
+    };
+    let m = *frame
+        * Mat4::from_scale(Vec3::splat(0.75))
+        * Mat4::from_translation(Vec3::new(-0.5, (offset - 8.0) / 16.0, 0.5))
+        * Mat4::from_rotation_y(90f32.to_radians());
+    let before = quads.len();
+    if !super::block_entities::draw_chest(scene, &state, &m, quads) {
+        let rel = m.transform_point3(Vec3::splat(0.5));
+        push_block_model(scene, &state, &m, rel, scratch, quads);
+    }
+    quads.len() > before
+}
+
+/// A pose that owns what it reads from the entity.
+type KindPose = Box<dyn Fn(&str, &mut PartPose)>;
+
+/// The goggles' pitch while a happy ghast is not ridden: vanilla's literal, not π/4.
+#[allow(clippy::approx_constant)]
+const GOGGLES_UP: f32 = -0.7854;
+
+/// The pose a kind's model takes from the entity's data, as its `setupAnim` sets it.
+fn kind_pose(id: &str, e: &Entity) -> KindPose {
+    match id {
+        // HappyGhastModel.setupAnim: the body shrinks to 0.9375 under a harness.
+        // HappyGhastHarnessModel.setupAnim: the goggles are down over the eyes while it
+        // is ridden, pushed up otherwise.
+        "happy_ghast" => {
+            let harnessed = body_item(e).is_some();
+            let ridden = matches!(nbt::get(&e.nbt, "Passengers"), Some(fastnbt::Value::List(l)) if !l.is_empty());
+            Box::new(move |name: &str, p: &mut PartPose| match name {
+                "body" if harnessed => p.scale = [0.9375; 3],
+                "goggles" if ridden => {
+                    p.rotation[0] = 0.0;
+                    p.pivot[1] = 14.0;
+                }
+                "goggles" => {
+                    p.rotation[0] = GOGGLES_UP;
+                    p.pivot[1] = 9.0;
+                }
+                _ => {}
+            })
+        }
+        _ => Box::new(rest_pose),
+    }
+}
+
+/// The stack in an entity's body slot (`equipment.body`, or the older `body_armor_item`).
+fn body_item(e: &Entity) -> Option<ItemStack> {
+    nbt::get(&e.nbt, "equipment.body")
+        .or_else(|| nbt::get(&e.nbt, "body_armor_item"))
+        .and_then(ItemStack::from_nbt)
+}
+
+/// The sheep's wool colour (`ColorLerper.Type.SHEEP.getColor`): white is 0xE6E6E6,
+/// any other dye its texture diffuse colour times 0.75. A `jeb_` sheep is drawn at
+/// the first frame of its cycle, which is white.
+fn sheep_wool_color(e: &Entity) -> (u32, bool) {
+    let jeb = e
+        .str_field("CustomName")
+        .is_some_and(|n| n == "jeb_" || n.contains("\"text\":\"jeb_\""))
+        || matches!(nbt::get(&e.nbt, "CustomName"), Some(fastnbt::Value::Compound(c)) if nbt::get_str(c, "text") == Some("jeb_"));
+    let id = e.num_field("Color").unwrap_or(0.0) as usize;
+    let name = DYES.get(id).copied().unwrap_or("white");
+    if jeb || name == "white" {
+        return (0xE6E6E6, jeb);
+    }
+    let c = super::block_entities::dye_diffuse_color(name).unwrap_or(0xF9FFFE);
+    let f = |s: u32| ((((c >> s) & 0xFF) as f32 * 0.75).floor() as u32) << s;
+    (f(16) | f(8) | f(0), false)
+}
+
+/// Dye colours by their id (`DyeColor`).
+const DYES: [&str; 16] = [
+    "white",
+    "orange",
+    "magenta",
+    "light_blue",
+    "yellow",
+    "lime",
+    "pink",
+    "gray",
+    "light_gray",
+    "cyan",
+    "purple",
+    "blue",
+    "brown",
+    "green",
+    "red",
+    "black",
+];
+
+/// What one layer draws for an entity: each texture with its tint, and whether it is
+/// drawn at full brightness.
+fn layer_draws(layer: &LayerDef, e: &Entity, store: &ResourceStore) -> Vec<(String, u32, bool)> {
+    match layer.kind {
+        LayerKind::SheepWool => {
+            if e.flag("Sheared") {
+                return Vec::new();
+            }
+            vec![(norm_loc(&layer.texture), sheep_wool_color(e).0, false)]
+        }
+        LayerKind::SheepUndercoat => {
+            let (color, jeb) = sheep_wool_color(e);
+            let white = e.num_field("Color").unwrap_or(0.0) == 0.0;
+            if white && !jeb {
+                return Vec::new();
+            }
+            vec![(norm_loc(&layer.texture), color, false)]
+        }
+        LayerKind::Eyes => vec![(norm_loc(&layer.texture), 0xFFFFFF, true)],
+        LayerKind::Equipment => {
+            let (Some(stack), Some(ty)) = (body_item(e), &layer.equipment) else {
+                return Vec::new();
+            };
+            let asset = stack
+                .component("equippable")
+                .and_then(nbt::compound)
+                .and_then(|c| nbt::get_str(c, "asset_id"))
+                .map(norm_loc)
+                .unwrap_or_else(|| stack.id.clone());
+            super::items::equipment_layers(store, &asset, ty, &stack)
+                .into_iter()
+                .map(|l| (l.texture, l.dye.unwrap_or(0xFFFFFF), false))
+                .collect()
+        }
+    }
+}
+
+/// Draws a model's layers over its body. A layer on the body's own parts sits a hair
+/// outside the body, so it is drawn over it as vanilla's draw order draws it.
+fn draw_layers(
+    scene: &Scene,
+    def: &ModelDef,
+    e: &Entity,
+    store: &ResourceStore,
+    root: &Mat4,
+    pose: PoseFn,
+    out: &mut Vec<Quad>,
+) {
+    let mut over_body = 0;
+    for layer in &def.layers {
+        for (tex, tint, bright) in layer_draws(layer, e, store) {
+            let sprite = scene.atlas.sprite(&tex);
+            let size = layer.texture_size.unwrap_or(def.texture_size);
+            let before = out.len();
+            match &layer.parts {
+                Some(parts) => {
+                    for part in parts {
+                        part_quads(part, root, &sprite, size, pose, out);
+                    }
+                }
+                None => {
+                    over_body += 1;
+                    for part in &def.parts {
+                        let mut p = part.clone();
+                        grow(&mut p, over_body as f32 * 0.01);
+                        part_quads(&p, root, &sprite, size, pose, out);
+                    }
+                }
+            }
+            for q in &mut out[before..] {
+                q.tint = [(tint >> 16) as u8, (tint >> 8) as u8, tint as u8, 255];
+                if bright {
+                    q.emission = 1.0;
+                }
+            }
+        }
+    }
+}
+
+fn grow(p: &mut PartDef, by: f32) {
+    for c in &mut p.cubes {
+        c.inflate += by;
+    }
+    for ch in &mut p.children {
+        grow(ch, by);
+    }
 }
 
 #[cfg(test)]
