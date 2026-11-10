@@ -1133,6 +1133,7 @@ pub fn build_quads(scene: &mut Scene, models: &BlockEntityModels, plan: &BlockEn
                         pos: p.rel,
                         shade: false,
                         full_bright: *full_bright,
+                        block_light: 0,
                     };
                 }
             }

@@ -177,6 +177,20 @@ pub struct HqOptions {
     /// look's own, mixed in display values by the day weight: Chunky's [`Tonemap::Gamma`]
     /// and, under the game's sky, [`Tonemap::FilmicMidGrey`].
     pub tonemap: Option<Tonemap>,
+    /// Chunky's water plane (its *water world*): an unbounded water surface for this sea
+    /// level, outside the loaded chunks, level with the surface of the source blocks
+    /// below the sea level (see [`water_plane_height`]). A far frame over an ocean then
+    /// shows the sea to the horizon. `None` draws none.
+    pub water_plane: Option<f64>,
+}
+
+/// The height of the water plane for a sea level: the surface of a source block in the
+/// layer below it. Chunky lowers its plane by `Water.TOP_BLOCK_GAP` (0.125, with
+/// `waterPlaneOffsetEnabled`, its default), the gap above its own source block's
+/// surface; Lumenwright's source block is the client's, 8/9 high, so the plane lies 1/9
+/// below the sea level and meets the loaded sea without a step.
+pub fn water_plane_height(sea_level: f64) -> f64 {
+    sea_level - 1.0 + crate::assets::blockinfo::fluid_height(0, false) as f64
 }
 
 impl Default for HqOptions {
@@ -190,6 +204,7 @@ impl Default for HqOptions {
             prevent_normal_emitter: false,
             exposure: 1.0,
             tonemap: None,
+            water_plane: None,
         }
     }
 }
@@ -751,6 +766,10 @@ pub fn render(req: &Request) -> Result<Rendered> {
                 &rays,
                 &chunky_sky,
             );
+            if let Some(level) = req.hq.water_plane {
+                let y = water_plane_height(level) - scene.origin[1] as f64;
+                params.water_plane = [y as f32, 1.0, 0.0, 0.0];
+            }
             let sky_buffer = if weight >= 1.0 {
                 let d = chunky_sky.sun_dir;
                 log::info!(
@@ -1162,6 +1181,7 @@ pub fn hq_params(
         sun_sv: f4(sv, 4.0 * sun_radius),
         sun_sprite: hq.sun_sprite.map_or([0.0; 4], |r| r.map(|v| v as f32)),
         sky_map: [0.0; 4],
+        water_plane: [0.0; 4],
     }
 }
 

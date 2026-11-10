@@ -65,6 +65,9 @@ enum Cmd {
         /// Instead of the showcase, the entity gallery: variants, layers and vehicles.
         #[arg(long, conflicts_with_all = ["lineup", "block_entities", "items", "torch_room", "candle_room"])]
         entity_gallery: bool,
+        /// Instead of the showcase, an ocean to the edge of 17 × 17 chunks with an island.
+        #[arg(long, conflicts_with_all = ["lineup", "block_entities", "items", "torch_room", "candle_room", "entity_gallery"])]
+        ocean: bool,
     },
 }
 
@@ -150,8 +153,11 @@ fn main() -> Result<()> {
             torch_room,
             candle_room,
             entity_gallery,
+            ocean,
         } => {
-            let (what, world) = if entity_gallery {
+            let (what, world) = if ocean {
+                ("ocean", lumenwright_cli::fixture::ocean())
+            } else if entity_gallery {
                 (
                     "entity gallery",
                     lumenwright_cli::fixture::entity_gallery(true),

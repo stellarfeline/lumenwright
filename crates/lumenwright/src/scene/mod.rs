@@ -183,6 +183,9 @@ pub struct EntityLight {
     pub shade: bool,
     /// Lit at full block and sky light whatever the cell holds (glowing sign text).
     pub full_bright: bool,
+    /// The least block light the quad is lit at, whatever the cell holds: what a
+    /// renderer's `getBlockLightLevel` gives a body that glows (the glow squid's 15).
+    pub block_light: u8,
 }
 
 impl EntityLight {
@@ -192,6 +195,7 @@ impl EntityLight {
             pos,
             shade: true,
             full_bright: false,
+            block_light: 0,
         }
     }
 }

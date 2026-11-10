@@ -154,7 +154,7 @@ pub const EMITTER_SAMPLING_ALL: u32 = 3;
 /// offset x, offset y, offset z, 0]` (offsets in cells, `i32` bit cast).
 pub const EMITTER_GRID_HEADER: u32 = 8;
 
-/// Per-frame parameters (uniform buffer), 26 × vec4.
+/// Per-frame parameters (uniform buffer), 27 × vec4.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 pub struct Params {
@@ -222,6 +222,9 @@ pub struct Params {
     /// sees, z, w = those of the map of the light the sky casts, which follows it. A width
     /// of 0 reads the sky cache instead.
     pub sky_map: [f32; 4],
+    /// Chunky's water plane (see [`crate::integrator::water_plane`]): x = the height of
+    /// its surface relative to the grid origin, y = 1 when it is drawn; z, w unused.
+    pub water_plane: [f32; 4],
 }
 
 /// Borrowed view of all scene buffers.

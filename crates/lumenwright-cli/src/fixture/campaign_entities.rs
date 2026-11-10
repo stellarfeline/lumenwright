@@ -37,26 +37,50 @@ pub const ENTITY_CASES: &[EntityCase] = &[
     EntityCase {
         name: "happy_ghast",
         id: "happy_ghast",
-        pos: [4.0, 65.0, 2.0],
+        pos: [3.0, 65.0, 2.0],
         yaw: 0.0,
-        spot: [4.0, 67.0, 4.0],
+        spot: [3.0, 67.0, 4.0],
         extra: none,
     },
     EntityCase {
         name: "happy_ghast (harness)",
         id: "happy_ghast",
-        pos: [10.0, 65.0, 2.0],
+        pos: [9.0, 65.0, 2.0],
         yaw: 0.0,
-        spot: [10.0, 67.0, 4.0],
+        spot: [9.0, 67.0, 4.0],
         extra: || vec![("equipment", compound(vec![("body", item("red_harness"))]))],
     },
     EntityCase {
         name: "happy_ghast (baby)",
         id: "happy_ghast",
-        pos: [14.5, 65.0, 4.5],
+        pos: [13.5, 65.0, 3.5],
         yaw: 0.0,
-        spot: [14.5, 65.5, 4.5],
+        spot: [13.5, 65.5, 4.0],
         extra: || vec![("Age", Value::Int(-24000))],
+    },
+    EntityCase {
+        name: "wither",
+        id: "wither",
+        pos: [18.5, 65.0, 2.5],
+        yaw: 0.0,
+        spot: [18.5, 68.5, 2.5],
+        extra: none,
+    },
+    EntityCase {
+        name: "ravager",
+        id: "ravager",
+        pos: [22.5, 65.0, 2.5],
+        yaw: 0.0,
+        spot: [22.5, 66.5, 2.5],
+        extra: none,
+    },
+    EntityCase {
+        name: "camel (saddle)",
+        id: "camel",
+        pos: [27.5, 65.0, 2.5],
+        yaw: 0.0,
+        spot: [27.5, 66.8, 2.5],
+        extra: || vec![("equipment", compound(vec![("saddle", item("saddle"))]))],
     },
     EntityCase {
         name: "sheep (white)",
@@ -104,6 +128,54 @@ pub const ENTITY_CASES: &[EntityCase] = &[
         pos: [13.5, 65.0, 9.5],
         yaw: 0.0,
         spot: [13.5, 67.5, 9.5],
+        extra: none,
+    },
+    EntityCase {
+        name: "warden",
+        id: "warden",
+        pos: [15.5, 65.0, 9.5],
+        yaw: 0.0,
+        spot: [15.5, 67.0, 9.5],
+        extra: none,
+    },
+    EntityCase {
+        name: "firework_rocket",
+        id: "firework_rocket",
+        pos: [18.5, 66.5, 9.5],
+        yaw: 0.0,
+        spot: [18.5, 66.5, 9.5],
+        extra: none,
+    },
+    EntityCase {
+        name: "allay",
+        id: "allay",
+        pos: [20.5, 65.5, 9.5],
+        yaw: 0.0,
+        spot: [20.5, 65.8, 9.5],
+        extra: none,
+    },
+    EntityCase {
+        name: "parrot (green)",
+        id: "parrot",
+        pos: [22.5, 65.0, 9.5],
+        yaw: 0.0,
+        spot: [22.5, 65.4, 9.5],
+        extra: || vec![("Variant", Value::Int(2))],
+    },
+    EntityCase {
+        name: "axolotl (gold)",
+        id: "axolotl",
+        pos: [24.5, 65.0, 9.5],
+        yaw: 0.0,
+        spot: [24.5, 65.2, 9.5],
+        extra: || vec![("Variant", Value::Int(2))],
+    },
+    EntityCase {
+        name: "turtle",
+        id: "turtle",
+        pos: [27.5, 65.0, 9.5],
+        yaw: 0.0,
+        spot: [27.5, 65.25, 9.5],
         extra: none,
     },
     EntityCase {
@@ -162,14 +234,38 @@ pub const ENTITY_CASES: &[EntityCase] = &[
         spot: [15.5, 65.6, 14.5],
         extra: none,
     },
+    EntityCase {
+        name: "squid",
+        id: "squid",
+        pos: [18.5, 65.0, 14.5],
+        yaw: 0.0,
+        spot: [18.5, 65.6, 14.5],
+        extra: none,
+    },
+    EntityCase {
+        name: "glow_squid",
+        id: "glow_squid",
+        pos: [21.0, 65.0, 14.5],
+        yaw: 0.0,
+        spot: [21.0, 65.6, 14.5],
+        extra: none,
+    },
+    EntityCase {
+        name: "dolphin",
+        id: "dolphin",
+        pos: [24.5, 65.0, 14.5],
+        yaw: 0.0,
+        spot: [24.5, 65.3, 14.5],
+        extra: none,
+    },
 ];
 
 /// A south-facing view over [`entity_gallery`] that has every spot in frame.
 pub const ENTITY_GALLERY_VIEW: [&str; 6] = [
     "--camera",
-    "9.0,69.0,16.0",
+    "14.5,71.0,25.0",
     "--look-at",
-    "9.0,66.0,3.0",
+    "14.5,65.5,8.0",
     "--fov",
     "70",
 ];
@@ -179,8 +275,8 @@ pub const ENTITY_GALLERY_VIEW: [&str; 6] = [
 /// which is the same frame without its bodies.
 pub fn entity_gallery(with: bool) -> FixtureWorld {
     let mut w = FixtureWorld::new();
-    for x in -4..24 {
-        for z in -6..20 {
+    for x in -4..34 {
+        for z in -6..28 {
             w.set(x, 63, z, bs("stone"));
             w.set(x, 64, z, bs("smooth_stone"));
         }
@@ -190,7 +286,42 @@ pub fn entity_gallery(with: bool) -> FixtureWorld {
             w.entity(c.id, c.pos, c.yaw, (c.extra)());
         }
     }
-    w.player = Some(([9.0, 69.0, 16.0], 180.0, 15.0));
+    w.player = Some(([14.5, 71.0, 25.0], 180.0, 18.0));
+    w.day_time = 6000;
+    w
+}
+
+/// Where [`ocean`] is looked at from: on the island's tower, level, out to sea.
+pub const OCEAN_VIEW: [&str; 8] = [
+    "--camera",
+    "0.5,70,0.5",
+    "--yaw",
+    "0",
+    "--pitch",
+    "0",
+    "--fov",
+    "50",
+];
+
+/// An ocean filling the 17 × 17 chunks around chunk (0, 0), the area a render distance
+/// of 8 loads there: water from y 50 to the sea surface in the block at y 62 (sea level
+/// 63), over sand, with a stone island and tower at the centre to stand on.
+pub fn ocean() -> FixtureWorld {
+    let mut w = FixtureWorld::new();
+    w.biome = "minecraft:ocean".into();
+    for x in -128..144 {
+        for z in -128..144 {
+            w.set(x, 49, z, bs("sand"));
+            let island = x * x + z * z <= 25;
+            for y in 50..=62 {
+                w.set(x, y, z, bs(if island { "stone" } else { "water" }));
+            }
+        }
+    }
+    for y in 63..69 {
+        w.set(0, y, 0, bs("stone_bricks"));
+    }
+    w.player = Some(([0.5, 70.0, 0.5], 0.0, 0.0));
     w.day_time = 6000;
     w
 }

@@ -288,6 +288,7 @@ pub fn build_quads(scene: &mut Scene, plan: &TextDisplayPlan) {
             pos: p.light,
             shade: false,
             full_bright: false,
+            block_light: 0,
         };
         for q in &p.quads {
             let sprite = scene.atlas.sprite(&q.texture);

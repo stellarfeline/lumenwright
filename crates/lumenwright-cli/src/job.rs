@@ -110,6 +110,10 @@ pub struct RenderArgs {
     /// and `filmic-mid-grey` (mid-grey shown as the game shows it).
     #[arg(long, value_enum)]
     pub tonemap: Option<TonemapArg>,
+    /// HQ: Chunky's water plane, an unbounded water surface outside the loaded chunks, at
+    /// this sea level (63 when the flag is given without one).
+    #[arg(long, num_args = 0..=1, default_missing_value = "63", value_name = "SEA_LEVEL")]
+    pub water_plane: Option<f64>,
     /// Quick: vanilla brightness option (0 = moody, 0.5 = default, 1 = bright).
     #[arg(long, default_value_t = 0.5)]
     pub brightness: f32,
@@ -299,6 +303,7 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
             prevent_normal_emitter: a.prevent_normal_emitter,
             exposure: a.exposure,
             tonemap: a.tonemap.map(Into::into),
+            water_plane: a.water_plane,
         },
         sky: Sky::Vanilla {
             time: a.time,
