@@ -52,9 +52,22 @@ reads; both modes place the sun at the timeline's `sun_angle`.
 
 Mob geometry lives in Java code in vanilla, not in assets, so it ships as data in
 [`crates/lumenwright/assets/entity_models.json`](../crates/lumenwright/assets/entity_models.json):
-57 mobs in vanilla's own part, cube and box-UV terms, transcribed from 1.21.11. Adding a mob
-needs no Rust changes. Block displays, paintings and mannequin or player skins are built in
-code. Anything else is drawn as a box the size of its hitbox.
+96 models in vanilla's own part, cube and box-UV terms, transcribed from 1.21.11. A model
+the client builds in a layer method and poses in `setupAnim` is transcribed from both: the
+geometry from the layer method (`source` names it), the pose its `setupAnim` gives a fresh
+render state at tick 0. A model can carry the layers its renderer draws over the body
+(a second texture on the same parts, such as the eyes of a spider or the sheep's dyed
+undercoat; its own parts, such as the sheep's fleece; or an equipment slot's item through
+its equipment asset, such as the happy ghast's harness), a baby model where vanilla bakes
+one that is not the adult halved, the parts of another model (the boats of every wood share
+two), the placement of its renderer (a living entity's, a boat's, a minecart's with its
+block, a squid's) and the block light its renderer lights it at. Adding a mob that uses
+these needs no Rust changes; a layer kind, a placement and a pose that reads the entity's
+data (the harness, the goggles) are code, each naming its vanilla class. Block displays,
+paintings, firework rockets (their item) and mannequin or player skins are built in code.
+Anything else is drawn as a box the size of its hitbox.
+
+![entity gallery](renders/entity-gallery.png)
 
 Text displays are drawn in the jar's default font (`assets/minecraft/font/default.json` and
 the bitmap providers it names), placed as the client places them: the `text` component with

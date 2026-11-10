@@ -1308,6 +1308,14 @@ fn any_near(
     })
 }
 
+/// A case, a point of it, the colour it should show there and a test of a pixel for it.
+type ColourProbe<'a> = (
+    &'a str,
+    [f64; 3],
+    &'a str,
+    &'a dyn Fn(f32, f32, f32) -> bool,
+);
+
 #[test]
 fn entity_gallery_draws_in_both_modes() {
     let jar = require_jar!();
@@ -1318,7 +1326,7 @@ fn entity_gallery_draws_in_both_modes() {
     }
     let red = |r: f32, g: f32, b: f32| r > 60.0 && r > 1.6 * g && r > 1.6 * b;
     // The colour each case shows at a point of it: the layers and variants it draws.
-    let colours: [(&str, [f64; 3], &str, &dyn Fn(f32, f32, f32) -> bool); 6] = [
+    let colours: [ColourProbe; 6] = [
         ("sheep (red)", [3.5, 66.0, 10.0], "red fleece", &red),
         (
             "sheep (red, sheared)",

@@ -106,6 +106,21 @@ target/release/lumenwright render -w the-treehouse-camp --mode hq --spp 256 --sk
 target/release/lumenwright demo-world showcase
 target/release/lumenwright render -w showcase --mode hq -o showcase.png
 
+# Every bundled entity model in rows (docs/renders/entity-lineup.png)
+target/release/lumenwright demo-world --lineup lineup
+target/release/lumenwright render -w lineup \
+    --camera 15,82,60 --look-at 15,64,22 --fov 62 --width 1600 --height 900 -o lineup.png
+
+# Entity layers, variants, babies and vehicles (docs/renders/entity-gallery.png)
+target/release/lumenwright demo-world --entity-gallery entities
+target/release/lumenwright render -w entities \
+    --camera 14.5,71,25 --look-at 14.5,65.5,8 --fov 70 --width 1600 --height 900 -o entities.png
+
+# An ocean out to the horizon, with HQ mode's water plane (docs/research/sea-horizon.md)
+target/release/lumenwright demo-world --ocean ocean
+target/release/lumenwright render -w ocean --camera 0.5,70,0.5 --yaw 0 --pitch 0 --fov 50 \
+    --mode hq --spp 64 --width 800 --height 450 --water-plane -o ocean.png
+
 # One of every block entity Lumenwright draws (docs/renders/block-entities-quick-metal.png)
 target/release/lumenwright demo-world --block-entities gallery
 target/release/lumenwright render -w gallery \

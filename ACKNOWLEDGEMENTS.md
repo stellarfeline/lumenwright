@@ -26,6 +26,9 @@ Code, algorithms and constants Lumenwright takes from other works, with their li
     (`PathTracer.sampleEmitter`, `sampleEmitterFace`);
   * the display gamma 2.2 for decoding textures (`ColorUtil.java`) and encoding frames, and
     the gamma, ACES and Hable post-processing filters (`renderer/postprocessing`);
+  * the water plane (`PreviewRayTracer.waterPlaneIntersection` with its chunk clip,
+    `Scene.isInWater`, `Scene.waterPlaneHeight` and `getEffectiveWaterPlaneHeight`;
+    [docs/research/sea-horizon.md](docs/research/sea-horizon.md));
   * one-sided block faces (`Quad.java`, `AABB.java`, `AABBModel.java`), cell bounds computed
     per step (`Octree.enterBlock`), the grass block's overlay over its side
     (`GrassBlockModel.java`), and the unknown biome's climate (`Biomes.java`).

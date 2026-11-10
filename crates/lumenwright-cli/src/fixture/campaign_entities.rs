@@ -53,9 +53,9 @@ pub const ENTITY_CASES: &[EntityCase] = &[
     EntityCase {
         name: "happy_ghast (baby)",
         id: "happy_ghast",
-        pos: [13.5, 65.0, 3.5],
+        pos: [6.0, 65.0, 5.5],
         yaw: 0.0,
-        spot: [13.5, 65.5, 4.0],
+        spot: [6.0, 65.5, 6.0],
         extra: || vec![("Age", Value::Int(-24000))],
     },
     EntityCase {

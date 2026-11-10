@@ -4,6 +4,45 @@ All notable changes to Lumenwright are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Entities a Minecraft adventure map places, each transcribed from its 1.21.11 client
+  model class and posed as its `setupAnim` poses it at rest: the happy ghast (its
+  ghastling, and its harness, which squeezes the body and wears its goggles up unless
+  ridden), boats and chest boats of every wood, the bamboo raft and chest raft, the
+  minecart and its six kinds with their blocks (a chest drawn through the chest model),
+  the warden, the firework rocket (its item turned to the camera), and the ravager, allay,
+  parrot, squid, glow squid, dolphin, turtle, axolotl, camel and wither. The lineup
+  (`demo-world --lineup`) has 96 models.
+- Entity layers, drawn over the body as vanilla's render layers draw them: the sheep's
+  fleece and dyed undercoat (`Color`, `Sheared`), the eyes of spiders, cave spiders and
+  endermen at full brightness, the warden's bioluminescence, and the equipment of a body
+  or saddle slot through its equipment asset (the happy ghast's harness, the camel's
+  saddle).
+- `entity_models.json` describes a model's layers (`layers`), its baby model (`baby`),
+  the model whose parts it shares (`parts_from`), how its renderer places it (`placement`:
+  `living`, `boat`, `minecart`, `squid`), the least block light it is lit at
+  (`block_light`: the allay, glow squid and wither glow in quick mode) and numbered
+  texture variants (`texture_variants.names`: the parrot's and axolotl's `Variant`).
+- HQ mode's water plane, ported from Chunky's *water world*: `HqOptions::water_plane`
+  (`--water-plane [SEA_LEVEL]`) draws an unbounded sea outside the loaded chunks, level
+  with the loaded sea (`water_plane_height`), so a level frame over an ocean shows sea to
+  the horizon (`docs/research/sea-horizon.md`). Off by default.
+- `demo-world --entity-gallery` (every new body, layer and variant) and `demo-world
+  --ocean` (an ocean to the edge of the chunks a render distance of 8 loads).
+
+### Changed
+
+- `PartPose` has a `scale`, which a pose may set; `EntityLight` has a `block_light`;
+  `HqOptions` has a `water_plane`; `ModelDef`, `LayerDef` and `TextureVariants` have the
+  fields above. A struct literal of any of them no longer compiles, so this is a breaking
+  change for 0.3.x.
+- `Params` is 27 vec4s (432 bytes): `water_plane` gives the plane's height and whether it
+  is drawn. With the plane off the path tracer draws as before: a stated sky at no tick
+  still draws 0.2.0's frame byte for byte (`lumenwright-compat`).
+
 ## [0.3.0] - 2026-10-21
 
 ### Added
