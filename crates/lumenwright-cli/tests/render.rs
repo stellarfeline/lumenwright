@@ -569,6 +569,18 @@ fn gpu_matches_cpu_in_hq_mode() {
             &fixture::ITEM_GALLERY_VIEW[..],
             DAY_SUN,
         ),
+        (
+            "entities",
+            entity_world(true),
+            &fixture::ENTITY_GALLERY_VIEW[..],
+            DAY_SUN,
+        ),
+        (
+            "ocean-water-plane",
+            ocean_world(),
+            &OCEAN_PLANE_VIEW[..],
+            DAY_SUN,
+        ),
     ] {
         let args = |b: &'static str| {
             let mut v = vec![
@@ -870,6 +882,18 @@ fn cuda_matches_cpu_in_hq_mode() {
             "items",
             items_world(true),
             &fixture::ITEM_GALLERY_VIEW[..],
+            DAY_SUN,
+        ),
+        (
+            "entities",
+            entity_world(true),
+            &fixture::ENTITY_GALLERY_VIEW[..],
+            DAY_SUN,
+        ),
+        (
+            "ocean-water-plane",
+            ocean_world(),
+            &OCEAN_PLANE_VIEW[..],
             DAY_SUN,
         ),
     ] {
@@ -1249,4 +1273,277 @@ fn every_item_definition_in_the_jar_resolves() {
         defs.len()
     );
     assert_eq!(drawn + undrawn, defs.len(), "{special:?}");
+}
+
+fn entity_world(with: bool) -> &'static Path {
+    static WITH: OnceLock<PathBuf> = OnceLock::new();
+    static WITHOUT: OnceLock<PathBuf> = OnceLock::new();
+    let (cell, name) = if with {
+        (&WITH, "entity-gallery")
+    } else {
+        (&WITHOUT, "entity-gallery-empty")
+    };
+    cell.get_or_init(|| {
+        let d = tmp(name);
+        fixture::entity_gallery(with).write(&d).unwrap();
+        d
+    })
+}
+
+/// Whether some pixel within `radius` of `at` satisfies `pred(r, g, b)`.
+fn any_near(
+    img: &image::RgbaImage,
+    at: (i32, i32),
+    radius: i32,
+    pred: impl Fn(f32, f32, f32) -> bool,
+) -> bool {
+    (at.1 - radius..=at.1 + radius).any(|y| {
+        (at.0 - radius..=at.0 + radius).any(|x| {
+            if x < 0 || y < 0 || x >= img.width() as i32 || y >= img.height() as i32 {
+                return false;
+            }
+            let p = img.get_pixel(x as u32, y as u32).0;
+            pred(p[0] as f32, p[1] as f32, p[2] as f32)
+        })
+    })
+}
+
+#[test]
+fn entity_gallery_draws_in_both_modes() {
+    let jar = require_jar!();
+    let dir = tmp("entity-gallery-modes");
+    let mut expected: std::collections::BTreeMap<&str, usize> = Default::default();
+    for c in fixture::ENTITY_CASES {
+        *expected.entry(c.id).or_default() += 1;
+    }
+    let red = |r: f32, g: f32, b: f32| r > 60.0 && r > 1.6 * g && r > 1.6 * b;
+    // The colour each case shows at a point of it: the layers and variants it draws.
+    let colours: [(&str, [f64; 3], &str, &dyn Fn(f32, f32, f32) -> bool); 6] = [
+        ("sheep (red)", [3.5, 66.0, 10.0], "red fleece", &red),
+        (
+            "sheep (red, sheared)",
+            [5.5, 65.75, 9.9],
+            "red undercoat",
+            &red,
+        ),
+        (
+            "sheep (white)",
+            [1.5, 66.0, 10.0],
+            "white fleece",
+            &|r, g, b| r.min(g).min(b) > 150.0,
+        ),
+        (
+            "happy_ghast (harness)",
+            [9.0, 68.9, 4.0],
+            "red harness",
+            &red,
+        ),
+        (
+            "parrot (green)",
+            [22.5, 65.5, 9.6],
+            "green parrot",
+            &|r, g, b| g > 80.0 && g > 1.3 * r && g > 1.3 * b,
+        ),
+        (
+            "axolotl (gold)",
+            [24.5, 65.15, 9.7],
+            "gold axolotl",
+            &|r, g, b| r > 150.0 && g > 100.0 && b < 0.6 * g,
+        ),
+    ];
+    for mode in ["quick", "hq"] {
+        let mut args = vec![
+            "--mode",
+            mode,
+            "--backend",
+            "cpu",
+            "--spp",
+            "8",
+            "--width",
+            "960",
+            "--height",
+            "540",
+            "--sun-altitude",
+            "60",
+        ];
+        args.extend_from_slice(&fixture::ENTITY_GALLERY_VIEW);
+        let with = dir.join(format!("{mode}-with.png"));
+        let rep = render(entity_world(true), &jar, &with, &args).unwrap();
+        let st = &rep.entity_stats;
+        for (id, n) in &expected {
+            assert_eq!(st.rendered.get(*id), Some(n), "{mode} {id}: {st:?}");
+        }
+        assert!(
+            st.skipped.is_empty() && st.fallback_boxes.is_empty(),
+            "{mode}: {st:?}"
+        );
+        let without = dir.join(format!("{mode}-without.png"));
+        let bare = render(entity_world(false), &jar, &without, &args).unwrap();
+        assert!(bare.entity_stats.rendered.is_empty());
+        let (a, b) = (load(&with), load(&without));
+        let mut blank = Vec::new();
+        for c in fixture::ENTITY_CASES {
+            let at = project(&rep.camera, c.spot, a.width(), a.height())
+                .unwrap_or_else(|| panic!("{} is behind the camera", c.name));
+            let moved = change_near(&a, &b, at, 3);
+            if moved <= 24 {
+                blank.push(format!("{} (pixel {at:?}, largest change {moved})", c.name));
+            }
+        }
+        assert!(blank.is_empty(), "{mode}: nothing drawn at {blank:?}");
+        let mut wrong = Vec::new();
+        for (name, p, what, pred) in &colours {
+            let at = project(&rep.camera, *p, a.width(), a.height()).unwrap();
+            if !any_near(&a, at, 4, pred) {
+                wrong.push(format!("{name}: no {what} near pixel {at:?}"));
+            }
+        }
+        assert!(wrong.is_empty(), "{mode}: {wrong:?}");
+        // The fleece stands out from the body all round: a woolly sheep covers more of
+        // the frame than a sheared one beside it (in quick mode, which casts no shadow).
+        if mode != "quick" {
+            continue;
+        }
+        let area = |name: &str| -> usize {
+            let c = fixture::ENTITY_CASES
+                .iter()
+                .find(|c| c.name == name)
+                .unwrap();
+            let at = project(&rep.camera, c.spot, a.width(), a.height()).unwrap();
+            let r = 30;
+            (at.1 - r..=at.1 + r)
+                .flat_map(|y| (at.0 - r..=at.0 + r).map(move |x| (x, y)))
+                .filter(|&(x, y)| change_near(&a, &b, (x, y), 0) > 24)
+                .count()
+        };
+        let (woolly, sheared) = (area("sheep (red)"), area("sheep (red, sheared)"));
+        assert!(
+            woolly as f32 > 1.15 * sheared as f32,
+            "{mode}: the woolly sheep covers {woolly} pixels, the sheared one {sheared}"
+        );
+    }
+}
+
+/// At midnight a spider's and an enderman's eyes and a glow squid are drawn bright
+/// in quick mode, where the rest of the gallery is dark.
+#[test]
+fn glowing_layers_and_bodies_light_themselves_at_night() {
+    let jar = require_jar!();
+    let dir = tmp("entity-gallery-night");
+    let mut args = vec![
+        "--backend",
+        "cpu",
+        "--width",
+        "960",
+        "--height",
+        "540",
+        "--time",
+        "18000",
+    ];
+    args.extend_from_slice(&fixture::ENTITY_GALLERY_VIEW);
+    let out = dir.join("night.png");
+    let rep = render(entity_world(true), &jar, &out, &args).unwrap();
+    let img = load(&out);
+    let bright = |r: f32, g: f32, b: f32| r.max(g).max(b) > 140.0;
+    let mut dark = Vec::new();
+    for (name, p) in [
+        ("spider eyes", [10.5, 65.45, 9.0]),
+        ("enderman eyes", [13.5, 67.65, 9.75]),
+        ("glow_squid", [21.0, 65.6, 14.5]),
+        ("allay", [20.5, 65.8, 9.5]),
+    ] {
+        let at = project(&rep.camera, p, img.width(), img.height()).unwrap();
+        if !any_near(&img, at, 5, bright) {
+            dark.push(format!("{name} (pixel {at:?})"));
+        }
+    }
+    // The control: a body with no glow is dark there.
+    let at = project(&rep.camera, [24.5, 65.3, 14.5], img.width(), img.height()).unwrap();
+    assert!(
+        !any_near(&img, at, 5, bright),
+        "the dolphin is bright at night"
+    );
+    assert!(dark.is_empty(), "dark at night: {dark:?}");
+}
+
+/// [`fixture::OCEAN_VIEW`] with the water plane at sea level 63.
+const OCEAN_PLANE_VIEW: [&str; 9] = [
+    fixture::OCEAN_VIEW[0],
+    fixture::OCEAN_VIEW[1],
+    fixture::OCEAN_VIEW[2],
+    fixture::OCEAN_VIEW[3],
+    fixture::OCEAN_VIEW[4],
+    fixture::OCEAN_VIEW[5],
+    fixture::OCEAN_VIEW[6],
+    fixture::OCEAN_VIEW[7],
+    "--water-plane",
+];
+
+fn ocean_world() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = tmp("ocean");
+        fixture::ocean().write(&d).unwrap();
+        d
+    })
+}
+
+/// A level frame out to sea: without the water plane the loaded sea ends in a hard
+/// edge below the horizon, the sky showing beneath it; with it the sea runs on to the
+/// horizon and its brightness falls smoothly row by row.
+#[test]
+fn the_water_plane_carries_the_sea_to_the_horizon() {
+    let jar = require_jar!();
+    let dir = tmp("water-plane");
+    let (w, h) = (320, 180);
+    let size = [w.to_string(), h.to_string()];
+    let mut args = vec![
+        "--mode",
+        "hq",
+        "--backend",
+        "cpu",
+        "--spp",
+        "64",
+        "--width",
+        &size[0],
+        "--height",
+        &size[1],
+    ];
+    args.extend_from_slice(&fixture::OCEAN_VIEW);
+    let before = dir.join("before.png");
+    render(ocean_world(), &jar, &before, &args).unwrap();
+    args.push("--water-plane");
+    let after = dir.join("after.png");
+    let rep = render(ocean_world(), &jar, &after, &args).unwrap();
+    // The loaded sea's far edge: the grid's south side (chunk 8 ends at z = 144), at
+    // the water plane's height for sea level 63.
+    let edge = project(
+        &rep.camera,
+        [0.5, lumenwright::water_plane_height(63.0), 144.0],
+        w,
+        h,
+    )
+    .unwrap()
+    .1 as u32;
+    // The largest change of mean row luma from one row to the next about the edge.
+    let jump = |img: &image::RgbaImage| -> f32 {
+        let rows = luma_rows(img, edge - 6..edge + 4);
+        let m: Vec<f32> = rows
+            .iter()
+            .map(|r| r.iter().sum::<f32>() / r.len() as f32)
+            .collect();
+        m.windows(2)
+            .map(|p| (p[1] - p[0]).abs())
+            .fold(0.0, f32::max)
+    };
+    let (jb, ja) = (jump(&load(&before)), jump(&load(&after)));
+    eprintln!("edge row {edge}: largest row step {jb:.2} before, {ja:.2} after");
+    assert!(
+        jb > 8.0,
+        "the test frame should show the loaded sea's edge: {jb:.2}"
+    );
+    assert!(
+        ja < jb / 3.0,
+        "the edge stays with the water plane: {ja:.2} against {jb:.2}"
+    );
 }
