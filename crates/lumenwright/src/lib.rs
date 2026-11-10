@@ -113,5 +113,5 @@ pub mod world;
 pub use request::{
     ChunkRect, EmitterSampling, EntityPolicy, HqOptions, HqSkyModel, QuickOptions, QuickSkyColours,
     Rendered, Request, RequestError, Sky, SkyLook, StatedSky, StatedTick, UnknownEntities,
-    WorldSource, render,
+    WorldSource, render, water_plane_height,
 };

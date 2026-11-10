@@ -15,7 +15,7 @@ use crate::rng::Rng;
 use crate::scene::{
     ALPHA_TRANSLUCENT, EMITTER_GRID_HEADER, EMITTER_SAMPLING_ALL, EMITTER_SAMPLING_NONE,
     EMITTER_SAMPLING_ONE, EMITTER_SAMPLING_ONE_BLOCK, FLAG_ALPHA_MASK, FLAG_WATER, GpuEmitter,
-    GpuQuad, SceneView, unpack_rgba,
+    GpuQuad, Params, SceneView, unpack_rgba,
 };
 use crate::trace::{is_see_through, see_through_hit, trace};
 
@@ -468,6 +468,71 @@ pub(crate) fn sample_emitters(scene: &SceneView, pos: V3, origin: V3, n: V3, rng
     }
 }
 
+/// A ray meeting a water surface at `pos`, whose normal `n` faces the ray (`front`
+/// when the ray comes from outside the water): reflected with Schlick's Fresnel or
+/// refracted. The new direction, origin, and whether the ray is now in water (a
+/// reflected ray stays where it was).
+#[allow(clippy::too_many_arguments)]
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
+fn water_interface(
+    p: &Params,
+    pos: V3,
+    d: V3,
+    n: V3,
+    front: bool,
+    in_water: bool,
+    eps: f32,
+    rng: &mut Rng,
+) -> (V3, V3, bool) {
+    let ior = p.water_color[3];
+    let eta = if front { 1.0 / ior } else { ior };
+    let cos_i = -n.dot(d);
+    let sin2_t = eta * eta * max(1.0 - cos_i * cos_i, 0.0);
+    let r0 = (1.0 - ior) / (1.0 + ior);
+    let r0 = r0 * r0;
+    let m = 1.0 - cos_i;
+    let fresnel = r0 + (1.0 - r0) * m * m * m * m * m;
+    if sin2_t >= 1.0 || rng.next() < fresnel {
+        ((d + n * (2.0 * cos_i)).normalize(), pos + n * eps, in_water)
+    } else {
+        let cos_t = sqrt(1.0 - sin2_t);
+        (
+            (d * eta + n * (eta * cos_i - cos_t)).normalize(),
+            pos - n * eps,
+            front,
+        )
+    }
+}
+
+/// Where a ray meets Chunky's water plane (`PreviewRayTracer.waterPlaneIntersection`
+/// with its chunk clip): the horizontal surface at `water_plane.x`, met at a positive
+/// distance and outside the grid's columns, where no chunk is loaded.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
+pub fn water_plane(scene: &SceneView, o: V3, d: V3) -> Option<f32> {
+    let p = scene.params;
+    if p.water_plane[1] == 0.0 || d.y == 0.0 {
+        return None;
+    }
+    let t = (p.water_plane[0] - o.y) / d.y;
+    if !(t > 0.0 && t < f32::INFINITY) {
+        return None;
+    }
+    let at = o + d * t;
+    let size = scene.grid_size();
+    if at.x >= 0.0 && at.z >= 0.0 && at.x < size.x && at.z < size.z {
+        return None;
+    }
+    Some(t)
+}
+
+/// Whether a ray leaves the grid below the water plane: it starts below the plane and
+/// does not rise.
+#[cfg_attr(target_arch = "nvptx64", inline(always))]
+fn under_water_plane(scene: &SceneView, o: V3, d: V3) -> bool {
+    let p = scene.params;
+    p.water_plane[1] != 0.0 && o.y < p.water_plane[0] && d.y <= 0.0
+}
+
 /// Radiance estimate for one camera sample at pixel (px, py).
 // On CUDA the whole path tracer is one function: see `pt_render` in crates/lumenwright-ptx.
 #[cfg_attr(target_arch = "nvptx64", inline(always))]
@@ -524,9 +589,25 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
                 hit = Some(s);
             }
         }
+        // Chunky's water plane, outside the grid, when it is nearer than the hit.
+        if let Some(tp) = water_plane(scene, o, d)
+            && hit.is_none_or(|h| tp < h.t)
+        {
+            if in_water {
+                beta = beta.mul(sigma.transmittance(tp));
+            }
+            let front = d.y < 0.0;
+            let n = v3(0.0, if front { 1.0 } else { -1.0 }, 0.0);
+            (d, o, in_water) = water_interface(p, o + d * tp, d, n, front, in_water, eps, &mut rng);
+            specular = true;
+            tmin = 0.0;
+            continue;
+        }
         let h = match hit {
             None => {
-                if !in_water {
+                // A ray leaving the grid under the water plane goes on in its water
+                // (Chunky's `Scene.isInWater`: below the plane outside the loaded chunks).
+                if !in_water && !under_water_plane(scene, o, d) {
                     if bounces == 0 {
                         radiance = radiance + beta.mul(sky_lens(scene, d));
                     } else {
@@ -554,24 +635,8 @@ pub fn render_sample(scene: &SceneView, px: u32, py: u32, sample: u32) -> V3 {
         let (n, front) = shading_normal(q, d);
 
         if flags & FLAG_WATER != 0 {
-            // Dielectric interface. Water quads face out of the water volume.
-            let ior = p.water_color[3];
-            let eta = if front { 1.0 / ior } else { ior };
-            let cos_i = -n.dot(d);
-            let sin2_t = eta * eta * max(1.0 - cos_i * cos_i, 0.0);
-            let r0 = (1.0 - ior) / (1.0 + ior);
-            let r0 = r0 * r0;
-            let m = 1.0 - cos_i;
-            let fresnel = r0 + (1.0 - r0) * m * m * m * m * m;
-            if sin2_t >= 1.0 || rng.next() < fresnel {
-                d = (d + n * (2.0 * cos_i)).normalize();
-                o = pos + n * eps;
-            } else {
-                let cos_t = sqrt(1.0 - sin2_t);
-                d = (d * eta + n * (eta * cos_i - cos_t)).normalize();
-                o = pos - n * eps;
-                in_water = front;
-            }
+            // Water quads face out of the water volume.
+            (d, o, in_water) = water_interface(p, pos, d, n, front, in_water, eps, &mut rng);
             specular = true;
             tmin = 0.0;
             continue;

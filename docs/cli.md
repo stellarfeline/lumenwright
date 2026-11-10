@@ -25,6 +25,7 @@
 | `--sun-intensity`, `--sky-intensity` | 1.25, 1 | HQ, Chunky's sky (`chunky`, `auto`): Chunky's sun intensity (irradiance intensity^2.2) and sky light; refused under `--sky game` |
 | `--emitter-intensity` | each look's | HQ: the emitter intensity; an emitting surface emits its texel colour squared times its block's emittance times this (0 turns emitters off). Unstated: 13 (Chunky's) for Chunky's look and 137.9628 for the game's, authored by Lumenwright (fitted to Delvewright's engine's render at dusk), mixed linearly under `auto` |
 | `--emitter-sampling none\|one\|one-block\|all`, `--prevent-normal-emitter` | one | HQ: Chunky's emitter sampling strategies, and its "prevent normal emitter with sampling" |
+| `--water-plane [SEA_LEVEL]` | off; 63 when given alone | HQ: Chunky's water plane, an unbounded sea outside the loaded chunks, level with the loaded sea, so a frame over an ocean shows sea to the horizon ([docs/research/sea-horizon.md](research/sea-horizon.md)) |
 | `--ssaa N` | 1 | quick-mode supersampling |
 | `--mipmap-levels N` | 4 | quick-mode mip levels for block textures, 0 (off) to 4, as the client's option |
 | `--brightness`, `--flat-lighting` | 0.5 | vanilla brightness slider, and smooth lighting off |

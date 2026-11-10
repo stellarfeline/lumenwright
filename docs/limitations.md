@@ -11,7 +11,27 @@ See [docs/SCOPE.md §3](SCOPE.md). The main gaps:
   banners, heads, shulker boxes, decorated pots, the conduit and copper golem statues. They
   are counted in `items_skipped`. A filled map in a frame shows the map item, not its
   picture; armour trims and the elytra are not drawn.
-* Entity layers that need a second texture are missing (sheep wool, glowing eyes).
+* Entity layers drawn: the sheep's fleece and dyed undercoat, the eyes of spiders, cave
+  spiders and endermen, the warden's bioluminescence, the happy ghast's harness and the
+  camel's saddle. Not drawn: other second-texture layers (the drowned's, stray's and
+  bogged's outer layers, the phantom's eyes, horse and llama equipment, the wither's
+  armour, the happy ghast's ropes), and the warden's pulsating spots, heart and tendrils,
+  whose glow is a quarter strength or nothing at tick 0. Glowing eyes and the glow of the
+  allay, glow squid and wither light themselves in quick mode only; HQ mode draws them lit
+  by the scene, as Chunky draws entities.
+* Entities are posed as their models pose them at rest at tick 0 (the ghasts' tentacles
+  at the middle of their swing): a parrot stands, an axolotl rests on the ground, a squid
+  lies where it is placed. Babies draw their own model where vanilla bakes one that is not
+  the adult halved (the ghastling, the baby turtle and camel); others are the adult at half
+  scale. The bat is not drawn: its pose is a keyframe animation.
+* A boat on water shows the water inside its hull; vanilla masks it with the boat's water
+  patch. A minecart is turned by its stored yaw and pitch, which follow its rail; vanilla
+  turns it by the rail itself, a few thousandths of a block off. A firework rocket is its
+  item turned to the camera, with no trail.
+* HQ mode's sea beyond the loaded chunks is Chunky's water plane, off by default
+  (`--water-plane`, [docs/research/sea-horizon.md](research/sea-horizon.md)); without it a
+  level frame over an ocean shows the loaded sea's edge below the horizon. HQ mode draws no
+  render-distance fog.
 * Smooth fluid surfaces, clouds, weather and biome blending are not implemented. In quick
   mode the End's sky box is drawn as its fog colour, the dark disc vanilla draws below the
   horizon for a camera under sea level is not drawn, and the lightmap's daylight still

@@ -414,7 +414,8 @@ pub fn build_mesh(scene: &Scene, p: &MeshParams) -> Mesh {
         let (sky, block) = if el.full_bright {
             (15, 15)
         } else {
-            scene.volume.light(w[0], w[1], w[2])
+            let (sky, block) = scene.volume.light(w[0], w[1], w[2]);
+            (sky, block.max(el.block_light))
         };
         let shade = if el.shade {
             entity_shade(q.normal())

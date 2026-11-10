@@ -743,6 +743,228 @@
      ],
      "children": []
     }
+   ],
+   "layers": [
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.SheepWoolUndercoatLayer, net.minecraft.client.model.animal.sheep.SheepModel#createBodyLayer()",
+     "kind": "sheep_undercoat",
+     "texture": "entity/sheep/sheep_wool_undercoat"
+    },
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.SheepWoolLayer, net.minecraft.client.model.animal.sheep.SheepFurModel#createFurLayer()",
+     "kind": "sheep_wool",
+     "texture": "entity/sheep/sheep_wool",
+     "texture_size": [
+      64,
+      32
+     ],
+     "parts": [
+      {
+       "name": "head",
+       "pivot": [
+        0,
+        6,
+        -8
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -3,
+          -4,
+          -4
+         ],
+         "size": [
+          6,
+          6,
+          6
+         ],
+         "inflate": 0.6,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "body",
+       "pivot": [
+        0,
+        5,
+        2
+       ],
+       "rotation": [
+        1.5707964,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          28,
+          8
+         ],
+         "origin": [
+          -4,
+          -10,
+          -7
+         ],
+         "size": [
+          8,
+          16,
+          6
+         ],
+         "inflate": 1.75,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "right_hind_leg",
+       "pivot": [
+        -3,
+        12,
+        7
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -2,
+          0,
+          -2
+         ],
+         "size": [
+          4,
+          6,
+          4
+         ],
+         "inflate": 0.5,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_hind_leg",
+       "pivot": [
+        3,
+        12,
+        7
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -2,
+          0,
+          -2
+         ],
+         "size": [
+          4,
+          6,
+          4
+         ],
+         "inflate": 0.5,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "right_front_leg",
+       "pivot": [
+        -3,
+        12,
+        -5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -2,
+          0,
+          -2
+         ],
+         "size": [
+          4,
+          6,
+          4
+         ],
+         "inflate": 0.5,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_front_leg",
+       "pivot": [
+        3,
+        12,
+        -5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -2,
+          0,
+          -2
+         ],
+         "size": [
+          4,
+          6,
+          4
+         ],
+         "inflate": 0.5,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
    ]
   },
   "minecraft:chicken": {
@@ -4117,6 +4339,13 @@
      ],
      "children": []
     }
+   ],
+   "layers": [
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.SpiderEyesLayer",
+     "kind": "eyes",
+     "texture": "entity/spider_eyes"
+    }
    ]
   },
   "minecraft:enderman": {
@@ -4369,6 +4598,13 @@
       }
      ],
      "children": []
+    }
+   ],
+   "layers": [
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.EnderEyesLayer",
+     "kind": "eyes",
+     "texture": "entity/enderman/enderman_eyes"
     }
    ]
   },
@@ -10672,6 +10908,13 @@
       }
      ],
      "children": []
+    }
+   ],
+   "layers": [
+    {
+     "source": "net.minecraft.client.renderer.entity.layers.SpiderEyesLayer",
+     "kind": "eyes",
+     "texture": "entity/spider_eyes"
     }
    ]
   },
@@ -19198,6 +19441,7284 @@
         4,
         12,
         4
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:happy_ghast": {
+   "source": "net.minecraft.client.model.animal.ghast.HappyGhastModel#createBodyLayer(false, CubeDeformation.NONE)",
+   "texture": "entity/ghast/happy_ghast",
+   "texture_size": [
+    64,
+    64
+   ],
+   "scale": 4,
+   "hitbox": [
+    4.0,
+    4.0
+   ],
+   "parts": [
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      16,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -8,
+        -8,
+        -8
+       ],
+       "size": [
+        16,
+        16,
+        16
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": [
+      {
+       "name": "tentacle0",
+       "pivot": [
+        -3.75,
+        7,
+        -5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          5,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle1",
+       "pivot": [
+        1.25,
+        7,
+        -5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          7,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle2",
+       "pivot": [
+        6.25,
+        7,
+        -5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          4,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle3",
+       "pivot": [
+        -6.25,
+        7,
+        0
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          5,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle4",
+       "pivot": [
+        -1.25,
+        7,
+        0
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          5,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle5",
+       "pivot": [
+        3.75,
+        7,
+        0
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          7,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle6",
+       "pivot": [
+        -3.75,
+        7,
+        5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          8,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle7",
+       "pivot": [
+        1.25,
+        7,
+        5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          8,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tentacle8",
+       "pivot": [
+        6.25,
+        7,
+        5
+       ],
+       "rotation": [
+        0.4,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -1,
+          0,
+          -1
+         ],
+         "size": [
+          2,
+          5,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
+   ],
+   "layers": [
+    {
+     "source": "SimpleEquipmentLayer(HAPPY_GHAST_BODY), net.minecraft.client.model.animal.ghast.HappyGhastHarnessModel#createHarnessLayer(false)",
+     "kind": "equipment",
+     "equipment": "happy_ghast_body",
+     "texture_size": [
+      64,
+      64
+     ],
+     "parts": [
+      {
+       "name": "harness",
+       "pivot": [
+        0,
+        24,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -8,
+          -16,
+          -8
+         ],
+         "size": [
+          16,
+          16,
+          16
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "goggles",
+       "pivot": [
+        0,
+        14,
+        -5.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          32
+         ],
+         "origin": [
+          -8,
+          -2.5,
+          -2.5
+         ],
+         "size": [
+          16,
+          5,
+          5
+         ],
+         "inflate": 0.15,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
+   ],
+   "baby": {
+    "source": "net.minecraft.client.model.animal.ghast.HappyGhastModel#createBodyLayer(true, CubeDeformation.NONE) with BABY_TRANSFORMER",
+    "texture": "entity/ghast/happy_ghast_baby",
+    "texture_size": [
+     64,
+     64
+    ],
+    "scale": 0.95,
+    "hitbox": [
+     0.95,
+     0.95
+    ],
+    "parts": [
+     {
+      "name": "body",
+      "pivot": [
+       0,
+       16,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "cubes": [
+       {
+        "uv": [
+         0,
+         0
+        ],
+        "origin": [
+         -8,
+         -8,
+         -8
+        ],
+        "size": [
+         16,
+         16,
+         16
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": [
+       {
+        "name": "inner_body",
+        "pivot": [
+         0,
+         8,
+         0
+        ],
+        "rotation": [
+         0,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           32
+          ],
+          "origin": [
+           -8,
+           -16,
+           -8
+          ],
+          "size": [
+           16,
+           16,
+           16
+          ],
+          "inflate": -0.5,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle0",
+        "pivot": [
+         -3.75,
+         7,
+         -5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           5,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle1",
+        "pivot": [
+         1.25,
+         7,
+         -5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           7,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle2",
+        "pivot": [
+         6.25,
+         7,
+         -5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           4,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle3",
+        "pivot": [
+         -6.25,
+         7,
+         0
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           5,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle4",
+        "pivot": [
+         -1.25,
+         7,
+         0
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           5,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle5",
+        "pivot": [
+         3.75,
+         7,
+         0
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           7,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle6",
+        "pivot": [
+         -3.75,
+         7,
+         5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           8,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle7",
+        "pivot": [
+         1.25,
+         7,
+         5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           8,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tentacle8",
+        "pivot": [
+         6.25,
+         7,
+         5
+        ],
+        "rotation": [
+         0.4,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           0,
+           0
+          ],
+          "origin": [
+           -1,
+           0,
+           -1
+          ],
+          "size": [
+           2,
+           5,
+           2
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       }
+      ]
+     }
+    ],
+    "layers": []
+   }
+  },
+  "minecraft:oak_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/oak",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts": [
+    {
+     "name": "bottom",
+     "pivot": [
+      0,
+      3,
+      1
+     ],
+     "rotation": [
+      1.5707964,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -14,
+        -9,
+        -3
+       ],
+       "size": [
+        28,
+        16,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "back",
+     "pivot": [
+      -15,
+      4,
+      4
+     ],
+     "rotation": [
+      0,
+      4.712389,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        19
+       ],
+       "origin": [
+        -13,
+        -7,
+        -1
+       ],
+       "size": [
+        18,
+        6,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "front",
+     "pivot": [
+      15,
+      4,
+      0
+     ],
+     "rotation": [
+      0,
+      1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        27
+       ],
+       "origin": [
+        -8,
+        -7,
+        -1
+       ],
+       "size": [
+        16,
+        6,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right",
+     "pivot": [
+      0,
+      4,
+      -9
+     ],
+     "rotation": [
+      0,
+      3.1415927,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        35
+       ],
+       "origin": [
+        -14,
+        -7,
+        -1
+       ],
+       "size": [
+        28,
+        6,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left",
+     "pivot": [
+      0,
+      4,
+      9
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        43
+       ],
+       "origin": [
+        -14,
+        -7,
+        -1
+       ],
+       "size": [
+        28,
+        6,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_paddle",
+     "pivot": [
+      3,
+      -5,
+      9
+     ],
+     "rotation": [
+      -0.65449846,
+      0.6608744,
+      0.19634955
+     ],
+     "cubes": [
+      {
+       "uv": [
+        62,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -5
+       ],
+       "size": [
+        2,
+        2,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        62,
+        0
+       ],
+       "origin": [
+        -1.001,
+        -3,
+        8
+       ],
+       "size": [
+        1,
+        6,
+        7
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_paddle",
+     "pivot": [
+      3,
+      -5,
+      -9
+     ],
+     "rotation": [
+      -0.65449846,
+      2.4807184,
+      0.19634955
+     ],
+     "cubes": [
+      {
+       "uv": [
+        62,
+        20
+       ],
+       "origin": [
+        -1,
+        0,
+        -5
+       ],
+       "size": [
+        2,
+        2,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        62,
+        20
+       ],
+       "origin": [
+        0.001,
+        -3,
+        8
+       ],
+       "size": [
+        1,
+        6,
+        7
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:spruce_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/spruce",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_boat"
+  },
+  "minecraft:birch_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/birch",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_boat"
+  },
+  "minecraft:jungle_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/jungle",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_boat"
+  },
+  "minecraft:acacia_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/acacia",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_boat"
+  },
+  "minecraft:cherry_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/cherry",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_boat"
+  },
+  "minecraft:dark_oak_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/dark_oak",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_boat"
+  },
+  "minecraft:pale_oak_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/pale_oak",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_boat"
+  },
+  "minecraft:mangrove_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/mangrove",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_boat"
+  },
+  "minecraft:bamboo_raft": {
+   "source": "net.minecraft.client.model.object.boat.RaftModel#createRaftModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/boat/bamboo",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts": [
+    {
+     "name": "bottom",
+     "pivot": [
+      0,
+      -2.1,
+      1
+     ],
+     "rotation": [
+      1.5708,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -14,
+        -11,
+        -4
+       ],
+       "size": [
+        28,
+        20,
+        4
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -14,
+        -9,
+        -8
+       ],
+       "size": [
+        28,
+        16,
+        4
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_paddle",
+     "pivot": [
+      3,
+      -4,
+      9
+     ],
+     "rotation": [
+      -0.65449846,
+      0.6608744,
+      0.19634955
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        24
+       ],
+       "origin": [
+        -1,
+        0,
+        -5
+       ],
+       "size": [
+        2,
+        2,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        0,
+        24
+       ],
+       "origin": [
+        -1.001,
+        -3,
+        8
+       ],
+       "size": [
+        1,
+        6,
+        7
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_paddle",
+     "pivot": [
+      3,
+      -4,
+      -9
+     ],
+     "rotation": [
+      -0.65449846,
+      2.4807184,
+      0.19634955
+     ],
+     "cubes": [
+      {
+       "uv": [
+        40,
+        24
+       ],
+       "origin": [
+        -1,
+        0,
+        -5
+       ],
+       "size": [
+        2,
+        2,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        40,
+        24
+       ],
+       "origin": [
+        0.001,
+        -3,
+        8
+       ],
+       "size": [
+        1,
+        6,
+        7
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:oak_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/oak",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts": [
+    {
+     "name": "bottom",
+     "pivot": [
+      0,
+      3,
+      1
+     ],
+     "rotation": [
+      1.5707964,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -14,
+        -9,
+        -3
+       ],
+       "size": [
+        28,
+        16,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "back",
+     "pivot": [
+      -15,
+      4,
+      4
+     ],
+     "rotation": [
+      0,
+      4.712389,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        19
+       ],
+       "origin": [
+        -13,
+        -7,
+        -1
+       ],
+       "size": [
+        18,
+        6,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "front",
+     "pivot": [
+      15,
+      4,
+      0
+     ],
+     "rotation": [
+      0,
+      1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        27
+       ],
+       "origin": [
+        -8,
+        -7,
+        -1
+       ],
+       "size": [
+        16,
+        6,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right",
+     "pivot": [
+      0,
+      4,
+      -9
+     ],
+     "rotation": [
+      0,
+      3.1415927,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        35
+       ],
+       "origin": [
+        -14,
+        -7,
+        -1
+       ],
+       "size": [
+        28,
+        6,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left",
+     "pivot": [
+      0,
+      4,
+      9
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        43
+       ],
+       "origin": [
+        -14,
+        -7,
+        -1
+       ],
+       "size": [
+        28,
+        6,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_paddle",
+     "pivot": [
+      3,
+      -5,
+      9
+     ],
+     "rotation": [
+      -0.65449846,
+      0.6608744,
+      0.19634955
+     ],
+     "cubes": [
+      {
+       "uv": [
+        62,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -5
+       ],
+       "size": [
+        2,
+        2,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        62,
+        0
+       ],
+       "origin": [
+        -1.001,
+        -3,
+        8
+       ],
+       "size": [
+        1,
+        6,
+        7
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_paddle",
+     "pivot": [
+      3,
+      -5,
+      -9
+     ],
+     "rotation": [
+      -0.65449846,
+      2.4807184,
+      0.19634955
+     ],
+     "cubes": [
+      {
+       "uv": [
+        62,
+        20
+       ],
+       "origin": [
+        -1,
+        0,
+        -5
+       ],
+       "size": [
+        2,
+        2,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        62,
+        20
+       ],
+       "origin": [
+        0.001,
+        -3,
+        8
+       ],
+       "size": [
+        1,
+        6,
+        7
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "chest_bottom",
+     "pivot": [
+      -2,
+      -5,
+      -6
+     ],
+     "rotation": [
+      0,
+      -1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        76
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        12,
+        8,
+        12
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "chest_lid",
+     "pivot": [
+      -2,
+      -9,
+      -6
+     ],
+     "rotation": [
+      0,
+      -1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        59
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        12,
+        4,
+        12
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "chest_lock",
+     "pivot": [
+      -1,
+      -6,
+      -1
+     ],
+     "rotation": [
+      0,
+      -1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        59
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        2,
+        4,
+        1
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:spruce_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/spruce",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_chest_boat"
+  },
+  "minecraft:birch_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/birch",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_chest_boat"
+  },
+  "minecraft:jungle_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/jungle",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_chest_boat"
+  },
+  "minecraft:acacia_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/acacia",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_chest_boat"
+  },
+  "minecraft:cherry_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/cherry",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_chest_boat"
+  },
+  "minecraft:dark_oak_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/dark_oak",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_chest_boat"
+  },
+  "minecraft:pale_oak_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/pale_oak",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_chest_boat"
+  },
+  "minecraft:mangrove_chest_boat": {
+   "source": "net.minecraft.client.model.object.boat.BoatModel#createChestBoatModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/mangrove",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts_from": "minecraft:oak_chest_boat"
+  },
+  "minecraft:bamboo_chest_raft": {
+   "source": "net.minecraft.client.model.object.boat.RaftModel#createChestRaftModel(); paddles at rest as AbstractBoatModel.setupAnim poses them at rowing time 0",
+   "texture": "entity/chest_boat/bamboo",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.375,
+    0.5625
+   ],
+   "placement": "boat",
+   "parts": [
+    {
+     "name": "bottom",
+     "pivot": [
+      0,
+      -2.1,
+      1
+     ],
+     "rotation": [
+      1.5708,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -14,
+        -11,
+        -4
+       ],
+       "size": [
+        28,
+        20,
+        4
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -14,
+        -9,
+        -8
+       ],
+       "size": [
+        28,
+        16,
+        4
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_paddle",
+     "pivot": [
+      3,
+      -4,
+      9
+     ],
+     "rotation": [
+      -0.65449846,
+      0.6608744,
+      0.19634955
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        24
+       ],
+       "origin": [
+        -1,
+        0,
+        -5
+       ],
+       "size": [
+        2,
+        2,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        0,
+        24
+       ],
+       "origin": [
+        -1.001,
+        -3,
+        8
+       ],
+       "size": [
+        1,
+        6,
+        7
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_paddle",
+     "pivot": [
+      3,
+      -4,
+      -9
+     ],
+     "rotation": [
+      -0.65449846,
+      2.4807184,
+      0.19634955
+     ],
+     "cubes": [
+      {
+       "uv": [
+        40,
+        24
+       ],
+       "origin": [
+        -1,
+        0,
+        -5
+       ],
+       "size": [
+        2,
+        2,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        40,
+        24
+       ],
+       "origin": [
+        0.001,
+        -3,
+        8
+       ],
+       "size": [
+        1,
+        6,
+        7
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "chest_bottom",
+     "pivot": [
+      -2,
+      -10.1,
+      -6
+     ],
+     "rotation": [
+      0,
+      -1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        76
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        12,
+        8,
+        12
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "chest_lid",
+     "pivot": [
+      -2,
+      -14.1,
+      -6
+     ],
+     "rotation": [
+      0,
+      -1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        59
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        12,
+        4,
+        12
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "chest_lock",
+     "pivot": [
+      -1,
+      -11.1,
+      -1
+     ],
+     "rotation": [
+      0,
+      -1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        59
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        2,
+        4,
+        1
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:minecart": {
+   "source": "net.minecraft.client.model.object.cart.MinecartModel#createBodyLayer()",
+   "texture": "entity/minecart",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.98,
+    0.7
+   ],
+   "placement": "minecart",
+   "parts": [
+    {
+     "name": "bottom",
+     "pivot": [
+      0,
+      4,
+      0
+     ],
+     "rotation": [
+      1.5707964,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        10
+       ],
+       "origin": [
+        -10,
+        -8,
+        -1
+       ],
+       "size": [
+        20,
+        16,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "front",
+     "pivot": [
+      -9,
+      4,
+      0
+     ],
+     "rotation": [
+      0,
+      4.712389,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -8,
+        -9,
+        -1
+       ],
+       "size": [
+        16,
+        8,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "back",
+     "pivot": [
+      9,
+      4,
+      0
+     ],
+     "rotation": [
+      0,
+      1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -8,
+        -9,
+        -1
+       ],
+       "size": [
+        16,
+        8,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left",
+     "pivot": [
+      0,
+      4,
+      -7
+     ],
+     "rotation": [
+      0,
+      3.1415927,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -8,
+        -9,
+        -1
+       ],
+       "size": [
+        16,
+        8,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right",
+     "pivot": [
+      0,
+      4,
+      7
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -8,
+        -9,
+        -1
+       ],
+       "size": [
+        16,
+        8,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:chest_minecart": {
+   "source": "net.minecraft.client.model.object.cart.MinecartModel#createBodyLayer()",
+   "texture": "entity/minecart",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.98,
+    0.7
+   ],
+   "placement": "minecart",
+   "parts_from": "minecraft:minecart"
+  },
+  "minecraft:furnace_minecart": {
+   "source": "net.minecraft.client.model.object.cart.MinecartModel#createBodyLayer()",
+   "texture": "entity/minecart",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.98,
+    0.7
+   ],
+   "placement": "minecart",
+   "parts_from": "minecraft:minecart"
+  },
+  "minecraft:tnt_minecart": {
+   "source": "net.minecraft.client.model.object.cart.MinecartModel#createBodyLayer()",
+   "texture": "entity/minecart",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.98,
+    0.7
+   ],
+   "placement": "minecart",
+   "parts_from": "minecraft:minecart"
+  },
+  "minecraft:hopper_minecart": {
+   "source": "net.minecraft.client.model.object.cart.MinecartModel#createBodyLayer()",
+   "texture": "entity/minecart",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.98,
+    0.7
+   ],
+   "placement": "minecart",
+   "parts_from": "minecraft:minecart"
+  },
+  "minecraft:spawner_minecart": {
+   "source": "net.minecraft.client.model.object.cart.MinecartModel#createBodyLayer()",
+   "texture": "entity/minecart",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.98,
+    0.7
+   ],
+   "placement": "minecart",
+   "parts_from": "minecraft:minecart"
+  },
+  "minecraft:command_block_minecart": {
+   "source": "net.minecraft.client.model.object.cart.MinecartModel#createBodyLayer()",
+   "texture": "entity/minecart",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.98,
+    0.7
+   ],
+   "placement": "minecart",
+   "parts_from": "minecraft:minecart"
+  },
+  "minecraft:warden": {
+   "source": "net.minecraft.client.model.monster.warden.WardenModel#createBodyLayer(); posed as setupAnim poses it at tick 0, standing",
+   "texture": "entity/warden/warden",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    0.9,
+    2.9
+   ],
+   "parts": [
+    {
+     "name": "bone",
+     "pivot": [
+      0,
+      24,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [],
+     "children": [
+      {
+       "name": "body",
+       "pivot": [
+        0,
+        -21,
+        0
+       ],
+       "rotation": [
+        0.025,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -9,
+          -13,
+          -4
+         ],
+         "size": [
+          18,
+          21,
+          11
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": [
+        {
+         "name": "right_ribcage",
+         "pivot": [
+          -7,
+          -2,
+          -4
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            90,
+            11
+           ],
+           "origin": [
+            -2,
+            -11,
+            -0.1
+           ],
+           "size": [
+            9,
+            21,
+            0
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "left_ribcage",
+         "pivot": [
+          7,
+          -2,
+          -4
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            90,
+            11
+           ],
+           "origin": [
+            -7,
+            -11,
+            -0.1
+           ],
+           "size": [
+            9,
+            21,
+            0
+           ],
+           "inflate": 0,
+           "mirror": true
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "head",
+         "pivot": [
+          0,
+          -13,
+          0
+         ],
+         "rotation": [
+          0,
+          0,
+          0.06
+         ],
+         "cubes": [
+          {
+           "uv": [
+            0,
+            32
+           ],
+           "origin": [
+            -8,
+            -16,
+            -5
+           ],
+           "size": [
+            16,
+            16,
+            10
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": [
+          {
+           "name": "right_tendril",
+           "pivot": [
+            -8,
+            -12,
+            0
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [
+            {
+             "uv": [
+              52,
+              32
+             ],
+             "origin": [
+              -16,
+              -13,
+              0
+             ],
+             "size": [
+              16,
+              16,
+              0
+             ],
+             "inflate": 0,
+             "mirror": false
+            }
+           ],
+           "children": []
+          },
+          {
+           "name": "left_tendril",
+           "pivot": [
+            8,
+            -12,
+            0
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [
+            {
+             "uv": [
+              58,
+              0
+             ],
+             "origin": [
+              0,
+              -13,
+              0
+             ],
+             "size": [
+              16,
+              16,
+              0
+             ],
+             "inflate": 0,
+             "mirror": false
+            }
+           ],
+           "children": []
+          }
+         ]
+        },
+        {
+         "name": "right_arm",
+         "pivot": [
+          -13,
+          -13,
+          1
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            44,
+            50
+           ],
+           "origin": [
+            -4,
+            0,
+            -4
+           ],
+           "size": [
+            8,
+            28,
+            8
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "left_arm",
+         "pivot": [
+          13,
+          -13,
+          1
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            0,
+            58
+           ],
+           "origin": [
+            -4,
+            0,
+            -4
+           ],
+           "size": [
+            8,
+            28,
+            8
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "right_leg",
+       "pivot": [
+        -5.9,
+        -13,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          76,
+          48
+         ],
+         "origin": [
+          -3.1,
+          0,
+          -3
+         ],
+         "size": [
+          6,
+          13,
+          6
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_leg",
+       "pivot": [
+        5.9,
+        -13,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          76,
+          76
+         ],
+         "origin": [
+          -2.9,
+          0,
+          -3
+         ],
+         "size": [
+          6,
+          13,
+          6
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
+   ],
+   "layers": [
+    {
+     "source": "LivingEntityEmissiveLayer (alpha 1), net.minecraft.client.model.monster.warden.WardenModel#createBioluminescentLayer()",
+     "kind": "emissive",
+     "texture": "entity/warden/warden_bioluminescent_layer",
+     "texture_size": [
+      128,
+      128
+     ],
+     "parts": [
+      {
+       "name": "bone",
+       "pivot": [
+        0,
+        24,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [],
+       "children": [
+        {
+         "name": "body",
+         "pivot": [
+          0,
+          -21,
+          0
+         ],
+         "rotation": [
+          0.025,
+          0,
+          0
+         ],
+         "cubes": [],
+         "children": [
+          {
+           "name": "right_ribcage",
+           "pivot": [
+            -7,
+            -2,
+            -4
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [],
+           "children": []
+          },
+          {
+           "name": "left_ribcage",
+           "pivot": [
+            7,
+            -2,
+            -4
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [],
+           "children": []
+          },
+          {
+           "name": "head",
+           "pivot": [
+            0,
+            -13,
+            0
+           ],
+           "rotation": [
+            0,
+            0,
+            0.06
+           ],
+           "cubes": [
+            {
+             "uv": [
+              0,
+              32
+             ],
+             "origin": [
+              -8,
+              -16,
+              -5
+             ],
+             "size": [
+              16,
+              16,
+              10
+             ],
+             "inflate": 0,
+             "mirror": false
+            }
+           ],
+           "children": [
+            {
+             "name": "right_tendril",
+             "pivot": [
+              -8,
+              -12,
+              0
+             ],
+             "rotation": [
+              0,
+              0,
+              0
+             ],
+             "cubes": [],
+             "children": []
+            },
+            {
+             "name": "left_tendril",
+             "pivot": [
+              8,
+              -12,
+              0
+             ],
+             "rotation": [
+              0,
+              0,
+              0
+             ],
+             "cubes": [],
+             "children": []
+            }
+           ]
+          },
+          {
+           "name": "right_arm",
+           "pivot": [
+            -13,
+            -13,
+            1
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [
+            {
+             "uv": [
+              44,
+              50
+             ],
+             "origin": [
+              -4,
+              0,
+              -4
+             ],
+             "size": [
+              8,
+              28,
+              8
+             ],
+             "inflate": 0,
+             "mirror": false
+            }
+           ],
+           "children": []
+          },
+          {
+           "name": "left_arm",
+           "pivot": [
+            13,
+            -13,
+            1
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [
+            {
+             "uv": [
+              0,
+              58
+             ],
+             "origin": [
+              -4,
+              0,
+              -4
+             ],
+             "size": [
+              8,
+              28,
+              8
+             ],
+             "inflate": 0,
+             "mirror": false
+            }
+           ],
+           "children": []
+          }
+         ]
+        },
+        {
+         "name": "right_leg",
+         "pivot": [
+          -5.9,
+          -13,
+          0
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            76,
+            48
+           ],
+           "origin": [
+            -3.1,
+            0,
+            -3
+           ],
+           "size": [
+            6,
+            13,
+            6
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "left_leg",
+         "pivot": [
+          5.9,
+          -13,
+          0
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            76,
+            76
+           ],
+           "origin": [
+            -2.9,
+            0,
+            -3
+           ],
+           "size": [
+            6,
+            13,
+            6
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "minecraft:ravager": {
+   "source": "net.minecraft.client.model.monster.ravager.RavagerModel#createBodyLayer(); posed by setupAnim at rest",
+   "texture": "entity/illager/ravager",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.95,
+    2.2
+   ],
+   "parts": [
+    {
+     "name": "neck",
+     "pivot": [
+      0,
+      -7,
+      5.5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        68,
+        73
+       ],
+       "origin": [
+        -5,
+        -1,
+        -18
+       ],
+       "size": [
+        10,
+        10,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": [
+      {
+       "name": "head",
+       "pivot": [
+        0,
+        16,
+        -17
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -8,
+          -20,
+          -14
+         ],
+         "size": [
+          16,
+          20,
+          16
+         ],
+         "inflate": 0,
+         "mirror": false
+        },
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -2,
+          -6,
+          -18
+         ],
+         "size": [
+          4,
+          8,
+          4
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": [
+        {
+         "name": "right_horn",
+         "pivot": [
+          -10,
+          -14,
+          -8
+         ],
+         "rotation": [
+          1.0995574,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            74,
+            55
+           ],
+           "origin": [
+            0,
+            -14,
+            -2
+           ],
+           "size": [
+            2,
+            14,
+            4
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "left_horn",
+         "pivot": [
+          8,
+          -14,
+          -8
+         ],
+         "rotation": [
+          1.0995574,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            74,
+            55
+           ],
+           "origin": [
+            0,
+            -14,
+            -2
+           ],
+           "size": [
+            2,
+            14,
+            4
+           ],
+           "inflate": 0,
+           "mirror": true
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "mouth",
+         "pivot": [
+          0,
+          -2,
+          2
+         ],
+         "rotation": [
+          0.03141593,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            0,
+            36
+           ],
+           "origin": [
+            -8,
+            0,
+            -16
+           ],
+           "size": [
+            16,
+            3,
+            16
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      1,
+      2
+     ],
+     "rotation": [
+      1.5707964,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        55
+       ],
+       "origin": [
+        -7,
+        -10,
+        -7
+       ],
+       "size": [
+        14,
+        16,
+        20
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        0,
+        91
+       ],
+       "origin": [
+        -6,
+        6,
+        -7
+       ],
+       "size": [
+        12,
+        13,
+        18
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_hind_leg",
+     "pivot": [
+      -8,
+      -13,
+      18
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        96,
+        0
+       ],
+       "origin": [
+        -4,
+        0,
+        -4
+       ],
+       "size": [
+        8,
+        37,
+        8
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_hind_leg",
+     "pivot": [
+      8,
+      -13,
+      18
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        96,
+        0
+       ],
+       "origin": [
+        -4,
+        0,
+        -4
+       ],
+       "size": [
+        8,
+        37,
+        8
+       ],
+       "inflate": 0,
+       "mirror": true
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_front_leg",
+     "pivot": [
+      -8,
+      -13,
+      -5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        64,
+        0
+       ],
+       "origin": [
+        -4,
+        0,
+        -4
+       ],
+       "size": [
+        8,
+        37,
+        8
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_front_leg",
+     "pivot": [
+      8,
+      -13,
+      -5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        64,
+        0
+       ],
+       "origin": [
+        -4,
+        0,
+        -4
+       ],
+       "size": [
+        8,
+        37,
+        8
+       ],
+       "inflate": 0,
+       "mirror": true
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:allay": {
+   "source": "net.minecraft.client.model.animal.allay.AllayModel#createBodyLayer(); posed by setupAnim at rest; AllayRenderer lights it at block light 15",
+   "texture": "entity/allay/allay",
+   "texture_size": [
+    32,
+    32
+   ],
+   "hitbox": [
+    0.35,
+    0.6
+   ],
+   "block_light": 15,
+   "parts": [
+    {
+     "name": "root",
+     "pivot": [
+      0,
+      23.75,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [],
+     "children": [
+      {
+       "name": "head",
+       "pivot": [
+        0,
+        -3.99,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -2.5,
+          -5,
+          -2.5
+         ],
+         "size": [
+          5,
+          5,
+          5
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "body",
+       "pivot": [
+        0,
+        -4,
+        0
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          10
+         ],
+         "origin": [
+          -1.5,
+          0,
+          -1
+         ],
+         "size": [
+          3,
+          4,
+          2
+         ],
+         "inflate": 0,
+         "mirror": false
+        },
+        {
+         "uv": [
+          0,
+          16
+         ],
+         "origin": [
+          -1.5,
+          0,
+          -1
+         ],
+         "size": [
+          3,
+          5,
+          2
+         ],
+         "inflate": -0.2,
+         "mirror": false
+        }
+       ],
+       "children": [
+        {
+         "name": "right_arm",
+         "pivot": [
+          -1.75,
+          0.5,
+          0
+         ],
+         "rotation": [
+          0,
+          0,
+          0.43633232
+         ],
+         "cubes": [
+          {
+           "uv": [
+            23,
+            0
+           ],
+           "origin": [
+            -0.75,
+            -0.5,
+            -1
+           ],
+           "size": [
+            1,
+            4,
+            2
+           ],
+           "inflate": -0.01,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "left_arm",
+         "pivot": [
+          1.75,
+          0.5,
+          0
+         ],
+         "rotation": [
+          0,
+          0,
+          -0.43633232
+         ],
+         "cubes": [
+          {
+           "uv": [
+            23,
+            6
+           ],
+           "origin": [
+            -0.25,
+            -0.5,
+            -1
+           ],
+           "size": [
+            1,
+            4,
+            2
+           ],
+           "inflate": -0.01,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "right_wing",
+         "pivot": [
+          -0.5,
+          0,
+          0.6
+         ],
+         "rotation": [
+          0.43633232,
+          -0.31415924,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            16,
+            14
+           ],
+           "origin": [
+            0,
+            1,
+            0
+           ],
+           "size": [
+            0,
+            5,
+            8
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "left_wing",
+         "pivot": [
+          0.5,
+          0,
+          0.6
+         ],
+         "rotation": [
+          0.43633232,
+          0.31415924,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            16,
+            14
+           ],
+           "origin": [
+            0,
+            1,
+            0
+           ],
+           "size": [
+            0,
+            5,
+            8
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "minecraft:parrot": {
+   "source": "net.minecraft.client.model.animal.parrot.ParrotModel#createBodyLayer(); posed by setupAnim standing",
+   "texture": "entity/parrot/parrot_red_blue",
+   "texture_variants": {
+    "field": "Variant",
+    "pattern": "entity/parrot/parrot_{name}",
+    "names": [
+     "red_blue",
+     "blue",
+     "green",
+     "yellow_blue",
+     "grey"
+    ]
+   },
+   "texture_size": [
+    32,
+    32
+   ],
+   "hitbox": [
+    0.5,
+    0.9
+   ],
+   "parts": [
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      16.5,
+      -3
+     ],
+     "rotation": [
+      0.4937,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        2,
+        8
+       ],
+       "origin": [
+        -1.5,
+        0,
+        -1.5
+       ],
+       "size": [
+        3,
+        6,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tail",
+     "pivot": [
+      0,
+      21.07,
+      1.16
+     ],
+     "rotation": [
+      1.015,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        22,
+        1
+       ],
+       "origin": [
+        -1.5,
+        -1,
+        -1
+       ],
+       "size": [
+        3,
+        4,
+        1
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_wing",
+     "pivot": [
+      1.5,
+      16.94,
+      -2.76
+     ],
+     "rotation": [
+      -0.6981,
+      -3.1415927,
+      -0.0873
+     ],
+     "cubes": [
+      {
+       "uv": [
+        19,
+        8
+       ],
+       "origin": [
+        -0.5,
+        0,
+        -1.5
+       ],
+       "size": [
+        1,
+        5,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_wing",
+     "pivot": [
+      -1.5,
+      16.94,
+      -2.76
+     ],
+     "rotation": [
+      -0.6981,
+      -3.1415927,
+      0.0873
+     ],
+     "cubes": [
+      {
+       "uv": [
+        19,
+        8
+       ],
+       "origin": [
+        -0.5,
+        0,
+        -1.5
+       ],
+       "size": [
+        1,
+        5,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "head",
+     "pivot": [
+      0,
+      15.69,
+      -2.76
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        2,
+        2
+       ],
+       "origin": [
+        -1,
+        -1.5,
+        -1
+       ],
+       "size": [
+        2,
+        3,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": [
+      {
+       "name": "head2",
+       "pivot": [
+        0,
+        -2,
+        -1
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          10,
+          0
+         ],
+         "origin": [
+          -1,
+          -0.5,
+          -2
+         ],
+         "size": [
+          2,
+          1,
+          4
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "beak1",
+       "pivot": [
+        0,
+        -0.5,
+        -1.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          11,
+          7
+         ],
+         "origin": [
+          -0.5,
+          -1,
+          -0.5
+         ],
+         "size": [
+          1,
+          2,
+          1
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "beak2",
+       "pivot": [
+        0,
+        -1.75,
+        -2.45
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          16,
+          7
+         ],
+         "origin": [
+          -0.5,
+          0,
+          -0.5
+         ],
+         "size": [
+          1,
+          2,
+          1
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "feather",
+       "pivot": [
+        0,
+        -2.15,
+        0.15
+       ],
+       "rotation": [
+        -0.2214,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          2,
+          18
+         ],
+         "origin": [
+          0,
+          -4,
+          -2
+         ],
+         "size": [
+          0,
+          5,
+          4
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    },
+    {
+     "name": "left_leg",
+     "pivot": [
+      1,
+      22,
+      -1.05
+     ],
+     "rotation": [
+      -0.0299,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        14,
+        18
+       ],
+       "origin": [
+        -0.5,
+        0,
+        -0.5
+       ],
+       "size": [
+        1,
+        2,
+        1
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_leg",
+     "pivot": [
+      -1,
+      22,
+      -1.05
+     ],
+     "rotation": [
+      -0.0299,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        14,
+        18
+       ],
+       "origin": [
+        -0.5,
+        0,
+        -0.5
+       ],
+       "size": [
+        1,
+        2,
+        1
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:squid": {
+   "source": "net.minecraft.client.model.animal.squid.SquidModel#createBodyLayer(); posed by setupAnim at rest",
+   "texture": "entity/squid/squid",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.8,
+    0.8
+   ],
+   "placement": "squid",
+   "parts": [
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      8,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -6,
+        -8,
+        -6
+       ],
+       "size": [
+        12,
+        16,
+        12
+       ],
+       "inflate": 0.02,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tentacle0",
+     "pivot": [
+      5,
+      15,
+      0
+     ],
+     "rotation": [
+      0,
+      1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        48,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -1
+       ],
+       "size": [
+        2,
+        18,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tentacle1",
+     "pivot": [
+      3.535534,
+      15,
+      3.535534
+     ],
+     "rotation": [
+      0,
+      0.7853982,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        48,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -1
+       ],
+       "size": [
+        2,
+        18,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tentacle2",
+     "pivot": [
+      3.061617e-16,
+      15,
+      5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        48,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -1
+       ],
+       "size": [
+        2,
+        18,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tentacle3",
+     "pivot": [
+      -3.535534,
+      15,
+      3.535534
+     ],
+     "rotation": [
+      0,
+      -0.7853982,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        48,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -1
+       ],
+       "size": [
+        2,
+        18,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tentacle4",
+     "pivot": [
+      -5,
+      15,
+      6.123234e-16
+     ],
+     "rotation": [
+      0,
+      -1.5707964,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        48,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -1
+       ],
+       "size": [
+        2,
+        18,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tentacle5",
+     "pivot": [
+      -3.535534,
+      15,
+      -3.535534
+     ],
+     "rotation": [
+      0,
+      -2.3561945,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        48,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -1
+       ],
+       "size": [
+        2,
+        18,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tentacle6",
+     "pivot": [
+      -9.18485e-16,
+      15,
+      -5
+     ],
+     "rotation": [
+      0,
+      -3.1415927,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        48,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -1
+       ],
+       "size": [
+        2,
+        18,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tentacle7",
+     "pivot": [
+      3.535534,
+      15,
+      -3.535534
+     ],
+     "rotation": [
+      0,
+      -3.9269907,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        48,
+        0
+       ],
+       "origin": [
+        -1,
+        0,
+        -1
+       ],
+       "size": [
+        2,
+        18,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ]
+  },
+  "minecraft:glow_squid": {
+   "source": "net.minecraft.client.model.animal.squid.SquidModel#createBodyLayer(); posed by setupAnim at rest; GlowSquidRenderer lights it at block light 15",
+   "texture": "entity/squid/glow_squid",
+   "texture_size": [
+    64,
+    32
+   ],
+   "hitbox": [
+    0.8,
+    0.8
+   ],
+   "placement": "squid",
+   "block_light": 15,
+   "parts_from": "minecraft:squid"
+  },
+  "minecraft:dolphin": {
+   "source": "net.minecraft.client.model.animal.dolphin.DolphinModel#createBodyLayer(); posed by setupAnim at rest",
+   "texture": "entity/dolphin",
+   "texture_size": [
+    64,
+    64
+   ],
+   "hitbox": [
+    0.9,
+    0.6
+   ],
+   "parts": [
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      22,
+      -5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        22,
+        0
+       ],
+       "origin": [
+        -4,
+        -7,
+        0
+       ],
+       "size": [
+        8,
+        7,
+        13
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": [
+      {
+       "name": "back_fin",
+       "pivot": [
+        0,
+        0,
+        0
+       ],
+       "rotation": [
+        1.0471976,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          51,
+          0
+         ],
+         "origin": [
+          -0.5,
+          0,
+          8
+         ],
+         "size": [
+          1,
+          4,
+          5
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_fin",
+       "pivot": [
+        2,
+        -2,
+        4
+       ],
+       "rotation": [
+        1.0471976,
+        0,
+        2.0943952
+       ],
+       "cubes": [
+        {
+         "uv": [
+          48,
+          20
+         ],
+         "origin": [
+          -0.5,
+          -4,
+          0
+         ],
+         "size": [
+          1,
+          4,
+          7
+         ],
+         "inflate": 0,
+         "mirror": true
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "right_fin",
+       "pivot": [
+        -2,
+        -2,
+        4
+       ],
+       "rotation": [
+        1.0471976,
+        0,
+        -2.0943952
+       ],
+       "cubes": [
+        {
+         "uv": [
+          48,
+          20
+         ],
+         "origin": [
+          -0.5,
+          -4,
+          0
+         ],
+         "size": [
+          1,
+          4,
+          7
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tail",
+       "pivot": [
+        0,
+        -2.5,
+        11
+       ],
+       "rotation": [
+        -0.10471976,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          19
+         ],
+         "origin": [
+          -2,
+          -2.5,
+          0
+         ],
+         "size": [
+          4,
+          5,
+          11
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": [
+        {
+         "name": "tail_fin",
+         "pivot": [
+          0,
+          0,
+          9
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            19,
+            20
+           ],
+           "origin": [
+            -5,
+            -0.5,
+            0
+           ],
+           "size": [
+            10,
+            1,
+            6
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "head",
+       "pivot": [
+        0,
+        -4,
+        -3
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -4,
+          -3,
+          -3
+         ],
+         "size": [
+          8,
+          7,
+          6
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": [
+        {
+         "name": "nose",
+         "pivot": [
+          0,
+          0,
+          0
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            0,
+            13
+           ],
+           "origin": [
+            -1,
+            2,
+            -7
+           ],
+           "size": [
+            2,
+            2,
+            4
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "minecraft:turtle": {
+   "source": "net.minecraft.client.model.animal.turtle.TurtleModel#createBodyLayer(); posed by setupAnim on land",
+   "texture": "entity/turtle/big_sea_turtle",
+   "texture_size": [
+    128,
+    64
+   ],
+   "hitbox": [
+    1.2,
+    0.4
+   ],
+   "parts": [
+    {
+     "name": "head",
+     "pivot": [
+      0,
+      19,
+      -10
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        3,
+        0
+       ],
+       "origin": [
+        -3,
+        -1,
+        -3
+       ],
+       "size": [
+        6,
+        5,
+        6
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      11,
+      -10
+     ],
+     "rotation": [
+      1.5707964,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        7,
+        37
+       ],
+       "origin": [
+        -9.5,
+        3,
+        -10
+       ],
+       "size": [
+        19,
+        20,
+        6
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        31,
+        1
+       ],
+       "origin": [
+        -5.5,
+        3,
+        -13
+       ],
+       "size": [
+        11,
+        18,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_hind_leg",
+     "pivot": [
+      -3.5,
+      22,
+      11
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        1,
+        23
+       ],
+       "origin": [
+        -2,
+        0,
+        0
+       ],
+       "size": [
+        4,
+        1,
+        10
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_hind_leg",
+     "pivot": [
+      3.5,
+      22,
+      11
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        1,
+        12
+       ],
+       "origin": [
+        -2,
+        0,
+        0
+       ],
+       "size": [
+        4,
+        1,
+        10
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_front_leg",
+     "pivot": [
+      -5,
+      21,
+      -4
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        27,
+        30
+       ],
+       "origin": [
+        -13,
+        0,
+        -2
+       ],
+       "size": [
+        13,
+        1,
+        5
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_front_leg",
+     "pivot": [
+      5,
+      21,
+      -4
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        27,
+        24
+       ],
+       "origin": [
+        0,
+        0,
+        -2
+       ],
+       "size": [
+        13,
+        1,
+        5
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ],
+   "baby": {
+    "source": "net.minecraft.client.model.animal.turtle.TurtleModel#createBodyLayer() with BABY_TRANSFORMER; posed on land",
+    "texture": "entity/turtle/big_sea_turtle",
+    "texture_size": [
+     128,
+     64
+    ],
+    "hitbox": [
+     0.36,
+     0.12
+    ],
+    "parts": [
+     {
+      "name": "head",
+      "pivot": [
+       0,
+       23.166668,
+       -1.6666667
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "scale": [
+       0.16666667,
+       0.16666667,
+       0.16666667
+      ],
+      "cubes": [
+       {
+        "uv": [
+         3,
+         0
+        ],
+        "origin": [
+         -3,
+         -1,
+         -3
+        ],
+        "size": [
+         6,
+         5,
+         6
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     },
+     {
+      "name": "body",
+      "pivot": [
+       0,
+       21.833334,
+       -1.6666667
+      ],
+      "rotation": [
+       1.5707964,
+       0,
+       0
+      ],
+      "scale": [
+       0.16666667,
+       0.16666667,
+       0.16666667
+      ],
+      "cubes": [
+       {
+        "uv": [
+         7,
+         37
+        ],
+        "origin": [
+         -9.5,
+         3,
+         -10
+        ],
+        "size": [
+         19,
+         20,
+         6
+        ],
+        "inflate": 0,
+        "mirror": false
+       },
+       {
+        "uv": [
+         31,
+         1
+        ],
+        "origin": [
+         -5.5,
+         3,
+         -13
+        ],
+        "size": [
+         11,
+         18,
+         3
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     },
+     {
+      "name": "right_hind_leg",
+      "pivot": [
+       -0.5833334,
+       23.666668,
+       1.8333334
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "scale": [
+       0.16666667,
+       0.16666667,
+       0.16666667
+      ],
+      "cubes": [
+       {
+        "uv": [
+         1,
+         23
+        ],
+        "origin": [
+         -2,
+         0,
+         0
+        ],
+        "size": [
+         4,
+         1,
+         10
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     },
+     {
+      "name": "left_hind_leg",
+      "pivot": [
+       0.5833334,
+       23.666668,
+       1.8333334
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "scale": [
+       0.16666667,
+       0.16666667,
+       0.16666667
+      ],
+      "cubes": [
+       {
+        "uv": [
+         1,
+         12
+        ],
+        "origin": [
+         -2,
+         0,
+         0
+        ],
+        "size": [
+         4,
+         1,
+         10
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     },
+     {
+      "name": "right_front_leg",
+      "pivot": [
+       -0.8333334,
+       23.5,
+       -0.6666667
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "scale": [
+       0.16666667,
+       0.16666667,
+       0.16666667
+      ],
+      "cubes": [
+       {
+        "uv": [
+         27,
+         30
+        ],
+        "origin": [
+         -13,
+         0,
+         -2
+        ],
+        "size": [
+         13,
+         1,
+         5
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     },
+     {
+      "name": "left_front_leg",
+      "pivot": [
+       0.8333334,
+       23.5,
+       -0.6666667
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "scale": [
+       0.16666667,
+       0.16666667,
+       0.16666667
+      ],
+      "cubes": [
+       {
+        "uv": [
+         27,
+         24
+        ],
+        "origin": [
+         0,
+         0,
+         -2
+        ],
+        "size": [
+         13,
+         1,
+         5
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     }
+    ]
+   }
+  },
+  "minecraft:axolotl": {
+   "source": "net.minecraft.client.model.animal.axolotl.AxolotlModel#createBodyLayer(); posed by setupAnim at rest on the ground",
+   "texture": "entity/axolotl/axolotl_lucy",
+   "texture_variants": {
+    "field": "Variant",
+    "pattern": "entity/axolotl/axolotl_{name}",
+    "names": [
+     "lucy",
+     "wild",
+     "gold",
+     "cyan",
+     "blue"
+    ]
+   },
+   "texture_size": [
+    64,
+    64
+   ],
+   "hitbox": [
+    0.75,
+    0.42
+   ],
+   "parts": [
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      20,
+      5
+     ],
+     "rotation": [
+      -0.075,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        11
+       ],
+       "origin": [
+        -4,
+        -2,
+        -9
+       ],
+       "size": [
+        8,
+        4,
+        10
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        2,
+        17
+       ],
+       "origin": [
+        0,
+        -3,
+        -8
+       ],
+       "size": [
+        0,
+        5,
+        9
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": [
+      {
+       "name": "head",
+       "pivot": [
+        0,
+        0,
+        -9
+       ],
+       "rotation": [
+        0.075,
+        0,
+        -0.2
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          1
+         ],
+         "origin": [
+          -4,
+          -3,
+          -5
+         ],
+         "size": [
+          8,
+          5,
+          5
+         ],
+         "inflate": 0.001,
+         "mirror": false
+        }
+       ],
+       "children": [
+        {
+         "name": "top_gills",
+         "pivot": [
+          0,
+          -3,
+          -1
+         ],
+         "rotation": [
+          0.85,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            3,
+            37
+           ],
+           "origin": [
+            -4,
+            -3,
+            0
+           ],
+           "size": [
+            8,
+            3,
+            0
+           ],
+           "inflate": 0.001,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "left_gills",
+         "pivot": [
+          -4,
+          0,
+          -1
+         ],
+         "rotation": [
+          0,
+          -1.1400001,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            0,
+            40
+           ],
+           "origin": [
+            -3,
+            -5,
+            0
+           ],
+           "size": [
+            3,
+            7,
+            0
+           ],
+           "inflate": 0.001,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "right_gills",
+         "pivot": [
+          4,
+          0,
+          -1
+         ],
+         "rotation": [
+          0,
+          1.1400001,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            11,
+            40
+           ],
+           "origin": [
+            0,
+            -5,
+            0
+           ],
+           "size": [
+            3,
+            7,
+            0
+           ],
+           "inflate": 0.001,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "right_hind_leg",
+       "pivot": [
+        -3.5,
+        1,
+        -1
+       ],
+       "rotation": [
+        3.3461947,
+        -1.471239,
+        -1.7278761
+       ],
+       "cubes": [
+        {
+         "uv": [
+          2,
+          13
+         ],
+         "origin": [
+          -2,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          5,
+          0
+         ],
+         "inflate": 0.001,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_hind_leg",
+       "pivot": [
+        3.5,
+        1,
+        -1
+       ],
+       "rotation": [
+        3.3461947,
+        1.471239,
+        1.7278761
+       ],
+       "cubes": [
+        {
+         "uv": [
+          2,
+          13
+         ],
+         "origin": [
+          -1,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          5,
+          0
+         ],
+         "inflate": 0.001,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "right_front_leg",
+       "pivot": [
+        -3.5,
+        1,
+        -8
+       ],
+       "rotation": [
+        1.3853981,
+        -4.3420353,
+        0.5
+       ],
+       "cubes": [
+        {
+         "uv": [
+          2,
+          13
+         ],
+         "origin": [
+          -2,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          5,
+          0
+         ],
+         "inflate": 0.001,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_front_leg",
+       "pivot": [
+        3.5,
+        1,
+        -8
+       ],
+       "rotation": [
+        1.3853981,
+        4.3420353,
+        -0.5
+       ],
+       "cubes": [
+        {
+         "uv": [
+          2,
+          13
+         ],
+         "origin": [
+          -1,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          5,
+          0
+         ],
+         "inflate": 0.001,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tail",
+       "pivot": [
+        0,
+        0,
+        1
+       ],
+       "rotation": [
+        0,
+        0.4,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          2,
+          19
+         ],
+         "origin": [
+          0,
+          -3,
+          0
+         ],
+         "size": [
+          0,
+          5,
+          12
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
+   ]
+  },
+  "minecraft:camel": {
+   "source": "net.minecraft.client.model.animal.camel.CamelModel#createBodyLayer(); posed by setupAnim standing",
+   "texture": "entity/camel/camel",
+   "texture_size": [
+    128,
+    128
+   ],
+   "hitbox": [
+    1.7,
+    2.375
+   ],
+   "parts": [
+    {
+     "name": "body",
+     "pivot": [
+      0,
+      4,
+      9.5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        25
+       ],
+       "origin": [
+        -7.5,
+        -12,
+        -23.5
+       ],
+       "size": [
+        15,
+        12,
+        27
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": [
+      {
+       "name": "hump",
+       "pivot": [
+        0,
+        -12,
+        -10
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          74,
+          0
+         ],
+         "origin": [
+          -4.5,
+          -5,
+          -5.5
+         ],
+         "size": [
+          9,
+          5,
+          11
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "tail",
+       "pivot": [
+        0,
+        -9,
+        3.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          122,
+          0
+         ],
+         "origin": [
+          -1.5,
+          0,
+          0
+         ],
+         "size": [
+          3,
+          14,
+          0
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "head",
+       "pivot": [
+        0,
+        -3,
+        -19.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          60,
+          24
+         ],
+         "origin": [
+          -3.5,
+          -7,
+          -15
+         ],
+         "size": [
+          7,
+          8,
+          19
+         ],
+         "inflate": 0,
+         "mirror": false
+        },
+        {
+         "uv": [
+          21,
+          0
+         ],
+         "origin": [
+          -3.5,
+          -21,
+          -15
+         ],
+         "size": [
+          7,
+          14,
+          7
+         ],
+         "inflate": 0,
+         "mirror": false
+        },
+        {
+         "uv": [
+          50,
+          0
+         ],
+         "origin": [
+          -2.5,
+          -21,
+          -21
+         ],
+         "size": [
+          5,
+          5,
+          6
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": [
+        {
+         "name": "left_ear",
+         "pivot": [
+          2.5,
+          -21,
+          -9.5
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            45,
+            0
+           ],
+           "origin": [
+            -0.5,
+            0.5,
+            -1
+           ],
+           "size": [
+            3,
+            1,
+            2
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "right_ear",
+         "pivot": [
+          -2.5,
+          -21,
+          -9.5
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            67,
+            0
+           ],
+           "origin": [
+            -2.5,
+            0.5,
+            -1
+           ],
+           "size": [
+            3,
+            1,
+            2
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "left_hind_leg",
+     "pivot": [
+      4.9,
+      1,
+      9.5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        58,
+        16
+       ],
+       "origin": [
+        -2.5,
+        2,
+        -2.5
+       ],
+       "size": [
+        5,
+        21,
+        5
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_hind_leg",
+     "pivot": [
+      -4.9,
+      1,
+      9.5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        94,
+        16
+       ],
+       "origin": [
+        -2.5,
+        2,
+        -2.5
+       ],
+       "size": [
+        5,
+        21,
+        5
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_front_leg",
+     "pivot": [
+      4.9,
+      1,
+      -10.5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -2.5,
+        2,
+        -2.5
+       ],
+       "size": [
+        5,
+        21,
+        5
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_front_leg",
+     "pivot": [
+      -4.9,
+      1,
+      -10.5
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        26
+       ],
+       "origin": [
+        -2.5,
+        2,
+        -2.5
+       ],
+       "size": [
+        5,
+        21,
+        5
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    }
+   ],
+   "layers": [
+    {
+     "source": "SimpleEquipmentLayer(CAMEL_SADDLE), net.minecraft.client.model.animal.camel.CamelSaddleModel#createSaddleLayer()",
+     "kind": "equipment",
+     "equipment": "camel_saddle",
+     "slot": "saddle",
+     "texture_size": [
+      128,
+      128
+     ],
+     "parts": [
+      {
+       "name": "body",
+       "pivot": [
+        0,
+        4,
+        9.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          25
+         ],
+         "origin": [
+          -7.5,
+          -12,
+          -23.5
+         ],
+         "size": [
+          15,
+          12,
+          27
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": [
+        {
+         "name": "hump",
+         "pivot": [
+          0,
+          -12,
+          -10
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            74,
+            0
+           ],
+           "origin": [
+            -4.5,
+            -5,
+            -5.5
+           ],
+           "size": [
+            9,
+            5,
+            11
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "tail",
+         "pivot": [
+          0,
+          -9,
+          3.5
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            122,
+            0
+           ],
+           "origin": [
+            -1.5,
+            0,
+            0
+           ],
+           "size": [
+            3,
+            14,
+            0
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": []
+        },
+        {
+         "name": "head",
+         "pivot": [
+          0,
+          -3,
+          -19.5
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            60,
+            24
+           ],
+           "origin": [
+            -3.5,
+            -7,
+            -15
+           ],
+           "size": [
+            7,
+            8,
+            19
+           ],
+           "inflate": 0,
+           "mirror": false
+          },
+          {
+           "uv": [
+            21,
+            0
+           ],
+           "origin": [
+            -3.5,
+            -21,
+            -15
+           ],
+           "size": [
+            7,
+            14,
+            7
+           ],
+           "inflate": 0,
+           "mirror": false
+          },
+          {
+           "uv": [
+            50,
+            0
+           ],
+           "origin": [
+            -2.5,
+            -21,
+            -21
+           ],
+           "size": [
+            5,
+            5,
+            6
+           ],
+           "inflate": 0,
+           "mirror": false
+          }
+         ],
+         "children": [
+          {
+           "name": "left_ear",
+           "pivot": [
+            2.5,
+            -21,
+            -9.5
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [
+            {
+             "uv": [
+              45,
+              0
+             ],
+             "origin": [
+              -0.5,
+              0.5,
+              -1
+             ],
+             "size": [
+              3,
+              1,
+              2
+             ],
+             "inflate": 0,
+             "mirror": false
+            }
+           ],
+           "children": []
+          },
+          {
+           "name": "right_ear",
+           "pivot": [
+            -2.5,
+            -21,
+            -9.5
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [
+            {
+             "uv": [
+              67,
+              0
+             ],
+             "origin": [
+              -2.5,
+              0.5,
+              -1
+             ],
+             "size": [
+              3,
+              1,
+              2
+             ],
+             "inflate": 0,
+             "mirror": false
+            }
+           ],
+           "children": []
+          },
+          {
+           "name": "bridle",
+           "pivot": [
+            0,
+            0,
+            0
+           ],
+           "rotation": [
+            0,
+            0,
+            0
+           ],
+           "cubes": [
+            {
+             "uv": [
+              60,
+              87
+             ],
+             "origin": [
+              -3.5,
+              -7,
+              -15
+             ],
+             "size": [
+              7,
+              8,
+              19
+             ],
+             "inflate": 0.05,
+             "mirror": false
+            },
+            {
+             "uv": [
+              21,
+              64
+             ],
+             "origin": [
+              -3.5,
+              -21,
+              -15
+             ],
+             "size": [
+              7,
+              14,
+              7
+             ],
+             "inflate": 0.05,
+             "mirror": false
+            },
+            {
+             "uv": [
+              50,
+              64
+             ],
+             "origin": [
+              -2.5,
+              -21,
+              -21
+             ],
+             "size": [
+              5,
+              5,
+              6
+             ],
+             "inflate": 0.05,
+             "mirror": false
+            },
+            {
+             "uv": [
+              74,
+              70
+             ],
+             "origin": [
+              2.5,
+              -19,
+              -18
+             ],
+             "size": [
+              1,
+              2,
+              2
+             ],
+             "inflate": 0,
+             "mirror": false
+            },
+            {
+             "uv": [
+              74,
+              70
+             ],
+             "origin": [
+              -3.5,
+              -19,
+              -18
+             ],
+             "size": [
+              1,
+              2,
+              2
+             ],
+             "inflate": 0,
+             "mirror": true
+            }
+           ],
+           "children": []
+          }
+         ]
+        },
+        {
+         "name": "saddle",
+         "pivot": [
+          0,
+          0,
+          0
+         ],
+         "rotation": [
+          0,
+          0,
+          0
+         ],
+         "cubes": [
+          {
+           "uv": [
+            74,
+            64
+           ],
+           "origin": [
+            -4.5,
+            -17,
+            -15.5
+           ],
+           "size": [
+            9,
+            5,
+            11
+           ],
+           "inflate": 0.05,
+           "mirror": false
+          },
+          {
+           "uv": [
+            92,
+            114
+           ],
+           "origin": [
+            -3.5,
+            -20,
+            -15.5
+           ],
+           "size": [
+            7,
+            3,
+            11
+           ],
+           "inflate": 0.05,
+           "mirror": false
+          },
+          {
+           "uv": [
+            0,
+            89
+           ],
+           "origin": [
+            -7.5,
+            -12,
+            -23.5
+           ],
+           "size": [
+            15,
+            12,
+            27
+           ],
+           "inflate": 0.05,
+           "mirror": false
+          }
+         ],
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "left_hind_leg",
+       "pivot": [
+        4.9,
+        1,
+        9.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          58,
+          16
+         ],
+         "origin": [
+          -2.5,
+          2,
+          -2.5
+         ],
+         "size": [
+          5,
+          21,
+          5
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "right_hind_leg",
+       "pivot": [
+        -4.9,
+        1,
+        9.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          94,
+          16
+         ],
+         "origin": [
+          -2.5,
+          2,
+          -2.5
+         ],
+         "size": [
+          5,
+          21,
+          5
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "left_front_leg",
+       "pivot": [
+        4.9,
+        1,
+        -10.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          0
+         ],
+         "origin": [
+          -2.5,
+          2,
+          -2.5
+         ],
+         "size": [
+          5,
+          21,
+          5
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      },
+      {
+       "name": "right_front_leg",
+       "pivot": [
+        -4.9,
+        1,
+        -10.5
+       ],
+       "rotation": [
+        0,
+        0,
+        0
+       ],
+       "cubes": [
+        {
+         "uv": [
+          0,
+          26
+         ],
+         "origin": [
+          -2.5,
+          2,
+          -2.5
+         ],
+         "size": [
+          5,
+          21,
+          5
+         ],
+         "inflate": 0,
+         "mirror": false
+        }
+       ],
+       "children": []
+      }
+     ]
+    }
+   ],
+   "baby": {
+    "source": "net.minecraft.client.model.animal.camel.CamelModel#createBodyLayer() with BABY_TRANSFORMER (0.45)",
+    "texture": "entity/camel/camel",
+    "texture_size": [
+     128,
+     128
+    ],
+    "scale": 0.45,
+    "hitbox": [
+     0.765,
+     1.06875
+    ],
+    "parts": [
+     {
+      "name": "body",
+      "pivot": [
+       0,
+       4,
+       9.5
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "cubes": [
+       {
+        "uv": [
+         0,
+         25
+        ],
+        "origin": [
+         -7.5,
+         -12,
+         -23.5
+        ],
+        "size": [
+         15,
+         12,
+         27
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": [
+       {
+        "name": "hump",
+        "pivot": [
+         0,
+         -12,
+         -10
+        ],
+        "rotation": [
+         0,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           74,
+           0
+          ],
+          "origin": [
+           -4.5,
+           -5,
+           -5.5
+          ],
+          "size": [
+           9,
+           5,
+           11
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "tail",
+        "pivot": [
+         0,
+         -9,
+         3.5
+        ],
+        "rotation": [
+         0,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           122,
+           0
+          ],
+          "origin": [
+           -1.5,
+           0,
+           0
+          ],
+          "size": [
+           3,
+           14,
+           0
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": []
+       },
+       {
+        "name": "head",
+        "pivot": [
+         0,
+         -3,
+         -19.5
+        ],
+        "rotation": [
+         0,
+         0,
+         0
+        ],
+        "cubes": [
+         {
+          "uv": [
+           60,
+           24
+          ],
+          "origin": [
+           -3.5,
+           -7,
+           -15
+          ],
+          "size": [
+           7,
+           8,
+           19
+          ],
+          "inflate": 0,
+          "mirror": false
+         },
+         {
+          "uv": [
+           21,
+           0
+          ],
+          "origin": [
+           -3.5,
+           -21,
+           -15
+          ],
+          "size": [
+           7,
+           14,
+           7
+          ],
+          "inflate": 0,
+          "mirror": false
+         },
+         {
+          "uv": [
+           50,
+           0
+          ],
+          "origin": [
+           -2.5,
+           -21,
+           -21
+          ],
+          "size": [
+           5,
+           5,
+           6
+          ],
+          "inflate": 0,
+          "mirror": false
+         }
+        ],
+        "children": [
+         {
+          "name": "left_ear",
+          "pivot": [
+           2.5,
+           -21,
+           -9.5
+          ],
+          "rotation": [
+           0,
+           0,
+           0
+          ],
+          "cubes": [
+           {
+            "uv": [
+             45,
+             0
+            ],
+            "origin": [
+             -0.5,
+             0.5,
+             -1
+            ],
+            "size": [
+             3,
+             1,
+             2
+            ],
+            "inflate": 0,
+            "mirror": false
+           }
+          ],
+          "children": []
+         },
+         {
+          "name": "right_ear",
+          "pivot": [
+           -2.5,
+           -21,
+           -9.5
+          ],
+          "rotation": [
+           0,
+           0,
+           0
+          ],
+          "cubes": [
+           {
+            "uv": [
+             67,
+             0
+            ],
+            "origin": [
+             -2.5,
+             0.5,
+             -1
+            ],
+            "size": [
+             3,
+             1,
+             2
+            ],
+            "inflate": 0,
+            "mirror": false
+           }
+          ],
+          "children": []
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "name": "left_hind_leg",
+      "pivot": [
+       4.9,
+       1,
+       9.5
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "cubes": [
+       {
+        "uv": [
+         58,
+         16
+        ],
+        "origin": [
+         -2.5,
+         2,
+         -2.5
+        ],
+        "size": [
+         5,
+         21,
+         5
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     },
+     {
+      "name": "right_hind_leg",
+      "pivot": [
+       -4.9,
+       1,
+       9.5
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "cubes": [
+       {
+        "uv": [
+         94,
+         16
+        ],
+        "origin": [
+         -2.5,
+         2,
+         -2.5
+        ],
+        "size": [
+         5,
+         21,
+         5
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     },
+     {
+      "name": "left_front_leg",
+      "pivot": [
+       4.9,
+       1,
+       -10.5
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "cubes": [
+       {
+        "uv": [
+         0,
+         0
+        ],
+        "origin": [
+         -2.5,
+         2,
+         -2.5
+        ],
+        "size": [
+         5,
+         21,
+         5
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     },
+     {
+      "name": "right_front_leg",
+      "pivot": [
+       -4.9,
+       1,
+       -10.5
+      ],
+      "rotation": [
+       0,
+       0,
+       0
+      ],
+      "cubes": [
+       {
+        "uv": [
+         0,
+         26
+        ],
+        "origin": [
+         -2.5,
+         2,
+         -2.5
+        ],
+        "size": [
+         5,
+         21,
+         5
+        ],
+        "inflate": 0,
+        "mirror": false
+       }
+      ],
+      "children": []
+     }
+    ]
+   }
+  },
+  "minecraft:wither": {
+   "source": "net.minecraft.client.model.monster.wither.WitherBossModel#createBodyLayer(CubeDeformation.NONE); posed by setupAnim at rest; WitherBossRenderer scales it by 2 and lights it at block light 15",
+   "texture": "entity/wither/wither",
+   "texture_size": [
+    64,
+    64
+   ],
+   "scale": 2,
+   "hitbox": [
+    0.9,
+    3.5
+   ],
+   "block_light": 15,
+   "parts": [
+    {
+     "name": "shoulders",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        16
+       ],
+       "origin": [
+        -10,
+        3.9,
+        -0.5
+       ],
+       "size": [
+        20,
+        3,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "ribcage",
+     "pivot": [
+      -2,
+      6.9,
+      -0.5
+     ],
+     "rotation": [
+      0.36128315,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        22
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        3,
+        10,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        24,
+        22
+       ],
+       "origin": [
+        -4,
+        1.5,
+        0.5
+       ],
+       "size": [
+        11,
+        2,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        24,
+        22
+       ],
+       "origin": [
+        -4,
+        4,
+        0.5
+       ],
+       "size": [
+        11,
+        2,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      },
+      {
+       "uv": [
+        24,
+        22
+       ],
+       "origin": [
+        -4,
+        6.5,
+        0.5
+       ],
+       "size": [
+        11,
+        2,
+        2
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "tail",
+     "pivot": [
+      -2,
+      16.254549,
+      3.0344615
+     ],
+     "rotation": [
+      1.1466813,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        12,
+        22
+       ],
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "size": [
+        3,
+        6,
+        3
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "center_head",
+     "pivot": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        0,
+        0
+       ],
+       "origin": [
+        -4,
+        -4,
+        -4
+       ],
+       "size": [
+        8,
+        8,
+        8
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "right_head",
+     "pivot": [
+      -8,
+      4,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        32,
+        0
+       ],
+       "origin": [
+        -4,
+        -4,
+        -4
+       ],
+       "size": [
+        6,
+        6,
+        6
+       ],
+       "inflate": 0,
+       "mirror": false
+      }
+     ],
+     "children": []
+    },
+    {
+     "name": "left_head",
+     "pivot": [
+      10,
+      4,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0
+     ],
+     "cubes": [
+      {
+       "uv": [
+        32,
+        0
+       ],
+       "origin": [
+        -4,
+        -4,
+        -4
+       ],
+       "size": [
+        6,
+        6,
+        6
        ],
        "inflate": 0,
        "mirror": false

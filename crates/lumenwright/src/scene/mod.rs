@@ -183,6 +183,9 @@ pub struct EntityLight {
     pub shade: bool,
     /// Lit at full block and sky light whatever the cell holds (glowing sign text).
     pub full_bright: bool,
+    /// The least block light the quad is lit at, whatever the cell holds: what a
+    /// renderer's `getBlockLightLevel` gives a body that glows (the glow squid's 15).
+    pub block_light: u8,
 }
 
 impl EntityLight {
@@ -192,6 +195,7 @@ impl EntityLight {
             pos,
             shade: true,
             full_bright: false,
+            block_light: 0,
         }
     }
 }
@@ -343,6 +347,7 @@ impl Scene {
         }
         let models_json = entities::EntityModels::load_builtin();
         entities::register_textures(&models_json, entity_list, &mut ab);
+        entities::register_layer_textures(&models_json, entity_list, store, &mut ab);
         let mut item_bakery = items::ItemBakery::new(store);
         if opts.entities {
             entities::register_item_textures(&mut item_bakery, entity_list, &mut ab);

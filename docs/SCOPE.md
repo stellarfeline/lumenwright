@@ -37,8 +37,11 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 * **Tints.** Grass, foliage and water colours per biome, using the jar's colormaps and a
   table of biome temperature and downfall. Fixed tints for birch, spruce and lily pad.
 * **Entities.** Every entity listed in `assets/entity_models.json`, posed by `Pos` and
-  `Rotation`. Variant textures come from the NBT `variant` field. Block displays, paintings
-  and item frames (through their vanilla block models) are built in code. Players from `level.dat` are optional (`--players`). An unknown entity is
+  `Rotation`, with the layers, baby models and placements the file gives (sheep wool,
+  glowing eyes, the warden's glow, the happy ghast's harness, boats, minecarts and their
+  blocks). Variant textures come from an NBT field (`variant`, `Type`, or a numbered
+  `Variant`). Block displays, paintings, firework rockets and item frames (through their
+  vanilla block models and items) are built in code. Players from `level.dat` are optional (`--players`). An unknown entity is
   drawn as a box the size of its hitbox (`--unknown-entities box|skip`).
 * **Items.** Dropped items, item frame contents, item displays, the items in the hands and
   on the head of armour stands, mannequins, players and humanoid mobs, and worn armour.
@@ -167,7 +170,8 @@ and `lumenwright-cli`, the `lumenwright` command, which writes it.
 
 Follow-ups, in priority order:
 1. Run the Vulkan/DX12 parity tests on a Linux or Windows machine with an NVIDIA GPU.
-2. Entity layers with a second texture: sheep wool, drowned outer layer, glowing eyes.
+2. Entity layers with a second texture still missing: the drowned's, stray's and bogged's
+   outer layers, the phantom's eyes, horse and llama equipment, the wither's armour.
 3. Remaining block-entity models: beds, shulker boxes, the conduit.
 4. The Chunky components not yet ported (docs/research/chunky-parity.md), each against a frame that shows it.
 5. Item rendering for item frames and item displays.

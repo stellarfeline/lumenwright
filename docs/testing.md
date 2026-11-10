@@ -22,8 +22,13 @@ cargo test --workspace --release
   worlds and render them end to end. They check terrain
   colours seen from above, entity coverage, block entities in both modes, sign text, items
   in both modes (every holder kind, each item's spot against the same frame with the
-  holders empty), that every item definition in the jar resolves, HQ sanity, CPU-vs-GPU
-  parity in both modes (showcase, block-entity gallery and item gallery) and CPU-vs-CUDA
+  holders empty), the entity gallery in both modes (every body, layer and variant counted
+  and drawn at its spot against the empty platform, the colours its layers and variants
+  show, a woolly sheep larger than a sheared one, and at midnight the glowing eyes and
+  bodies bright beside a dark one), that HQ mode's water plane carries an ocean's sea to
+  the horizon without the loaded sea's edge, that every item definition in the jar resolves, HQ sanity, CPU-vs-GPU
+  parity in both modes (showcase, block-entity gallery and item gallery; in HQ mode also
+  the entity gallery and the ocean under the water plane) and CPU-vs-CUDA
   parity in HQ mode, determinism, and the CLI. The library tests check that the CLI's PNG
   and the library's pixels are byte-equal in both modes, that a missing jar is refused by
   name, that a stated sky is drawn as given, that a stated sky at a tick draws `Sky::Vanilla`'s frame at it byte for byte (quick, and HQ under the game's look and by time), that the vanilla sky's colour at noon, dusk and

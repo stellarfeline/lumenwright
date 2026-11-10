@@ -19,6 +19,10 @@ pub const VERSION_NAME: &str = "1.21.11";
 
 mod emitters;
 pub use emitters::{CANDLE_ROOM_VIEW, FLOOR_Y, TORCH_ROOM_VIEW, candle_room, torch_room};
+mod campaign_entities;
+pub use campaign_entities::{
+    ENTITY_CASES, ENTITY_GALLERY_VIEW, EntityCase, OCEAN_VIEW, entity_gallery, ocean,
+};
 mod chinese;
 mod text_displays;
 pub use chinese::{

@@ -28,6 +28,7 @@ struct Params {
     sun_sv: vec4<f32>,
     sun_sprite: vec4<f32>,
     sky_map: vec4<f32>,
+    water_plane: vec4<f32>,
 }
 
 // Quads are read as raw words: the w lanes of p0/eu carry bit-cast integers
@@ -621,6 +622,51 @@ fn sample_emitters(pos: vec3<f32>, origin: vec3<f32>, n: vec3<f32>) -> vec3<f32>
     return vec3<f32>(0.0);
 }
 
+struct WaterExit {
+    d: vec3<f32>,
+    o: vec3<f32>,
+    in_water: bool,
+}
+
+// integrator::water_interface.
+fn water_interface(pos: vec3<f32>, d: vec3<f32>, n: vec3<f32>, front: bool, in_water: bool, eps: f32) -> WaterExit {
+    let ior = P.water_color.w;
+    let eta = select(ior, 1.0 / ior, front);
+    let cos_i = -dot(n, d);
+    let sin2_t = eta * eta * max(1.0 - cos_i * cos_i, 0.0);
+    var r0 = (1.0 - ior) / (1.0 + ior);
+    r0 = r0 * r0;
+    let m = 1.0 - cos_i;
+    let fresnel = r0 + (1.0 - r0) * m * m * m * m * m;
+    if (sin2_t >= 1.0 || rnd() < fresnel) {
+        return WaterExit(normalize(d + n * (2.0 * cos_i)), pos + n * eps, in_water);
+    }
+    let cos_t = sqrt(1.0 - sin2_t);
+    return WaterExit(normalize(d * eta + n * (eta * cos_i - cos_t)), pos - n * eps, front);
+}
+
+// integrator::under_water_plane.
+fn under_water_plane(o: vec3<f32>, d: vec3<f32>) -> bool {
+    return P.water_plane.y != 0.0 && o.y < P.water_plane.x && d.y <= 0.0;
+}
+
+// integrator::water_plane; a distance of 0 for no hit.
+fn water_plane(o: vec3<f32>, d: vec3<f32>) -> f32 {
+    if (P.water_plane.y == 0.0 || d.y == 0.0) {
+        return 0.0;
+    }
+    let t = (P.water_plane.x - o.y) / d.y;
+    if (!(t > 0.0 && t < INF)) {
+        return 0.0;
+    }
+    let at = o + d * t;
+    let size = vec3<f32>(P.grid_dims.xyz * 16u);
+    if (at.x >= 0.0 && at.z >= 0.0 && at.x < size.x && at.z < size.z) {
+        return 0.0;
+    }
+    return t;
+}
+
 fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
     let width = P.frame.x;
     let height = P.frame.y;
@@ -663,8 +709,24 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
                 }
             }
         }
+        // Chunky's water plane, outside the grid, when it is nearer than the hit.
+        let tp = water_plane(o, d);
+        if (tp > 0.0 && (h.quad == NO_QUAD || tp < h.t)) {
+            if (in_water) {
+                beta = beta * transmittance(sigma, tp);
+            }
+            let wfront = d.y < 0.0;
+            let wn = vec3<f32>(0.0, select(-1.0, 1.0, wfront), 0.0);
+            let w = water_interface(o + d * tp, d, wn, wfront, in_water, eps);
+            d = w.d;
+            o = w.o;
+            in_water = w.in_water;
+            specular = true;
+            tmin = 0.0;
+            continue;
+        }
         if (h.quad == NO_QUAD) {
-            if (!in_water) {
+            if (!in_water && !under_water_plane(o, d)) {
                 if (bounces == 0u) {
                     radiance += beta * sky_lens(d);
                 } else {
@@ -689,23 +751,10 @@ fn render_sample(px: u32, py: u32, sample: u32) -> vec3<f32> {
         if (!front) { n = -n; }
 
         if ((flags & FLAG_WATER) != 0u) {
-            let ior = P.water_color.w;
-            let eta = select(ior, 1.0 / ior, front);
-            let cos_i = -dot(n, d);
-            let sin2_t = eta * eta * max(1.0 - cos_i * cos_i, 0.0);
-            var r0 = (1.0 - ior) / (1.0 + ior);
-            r0 = r0 * r0;
-            let m = 1.0 - cos_i;
-            let fresnel = r0 + (1.0 - r0) * m * m * m * m * m;
-            if (sin2_t >= 1.0 || rnd() < fresnel) {
-                d = normalize(d + n * (2.0 * cos_i));
-                o = pos + n * eps;
-            } else {
-                let cos_t = sqrt(1.0 - sin2_t);
-                d = normalize(d * eta + n * (eta * cos_i - cos_t));
-                o = pos - n * eps;
-                in_water = front;
-            }
+            let w = water_interface(pos, d, n, front, in_water, eps);
+            d = w.d;
+            o = w.o;
+            in_water = w.in_water;
             specular = true;
             tmin = 0.0;
             continue;
