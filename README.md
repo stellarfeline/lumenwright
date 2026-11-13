@@ -123,7 +123,7 @@ The Treehouse Camp save, more commands and generated worlds: [docs/renders.md](d
 
 * [The Treehouse Camp renders](docs/renders.md): each image's command and time, how HQ mode lights it, getting the camp, more commands.
 * [Benchmark](docs/benchmark.md): Lumenwright against Chunky on one machine, the backends against each other, the cost of samples; design, tables and instruments.
-* [The game's sky](docs/research/game-sky.md), [the sea at the horizon](docs/research/sea-horizon.md) and [HQ mode against Chunky](docs/research/chunky-parity.md): what HQ mode ports and how it compares.
+* [The game's sky](docs/research/game-sky.md), [the sea at the horizon](docs/research/sea-horizon.md), [emitters in a clear daytime frame](docs/research/daylight-emitters.md) and [HQ mode against Chunky](docs/research/chunky-parity.md): what HQ mode ports and how it compares.
 * [Command line](docs/cli.md): every `render` flag.
 * [Library](docs/library.md): using the crate and the `render` API.
 * [Textures](docs/textures.md): the client jar, the Unifont and resource packs.

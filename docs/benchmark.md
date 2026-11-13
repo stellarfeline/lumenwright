@@ -38,7 +38,8 @@ a cell that cannot be measured is marked n/a with its reason.
   `rayDepth` 5), Chunky's Preetham sky and a sun at altitude 45° from the south-east (Chunky
   altitude π/4, azimuth π/4), emitters at intensity 13 sampled `ONE`, gamma tone map,
   250 samples per pixel. Lumenwright: `--sky chunky --tonemap gamma --time 4000
-  --sun-altitude 45 --sun-azimuth 135 --spp 250 --max-bounces 4`. Chunky:
+  --sun-altitude 45 --sun-azimuth 135 --emitter-intensity 13 --spp 250 --max-bounces 4`
+  (the scene file turns Chunky's emitters on). Chunky:
   `docs/bench/treehouse-camp-bench.json`. It is the one frame both renderers draw by the same
   algorithm (Chunky cannot draw the game's sky with two maps).
 - **F-game**: the same camera, resolution, chunks and bounces under Lumenwright's defaults
@@ -154,7 +155,7 @@ measured at `0b39f8f`, whose Chunky sky `--sky chunky` draws unchanged.
 ```sh
 # Lumenwright (--backend metal on the M2 Pro, cuda on the 4070)
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
-    --sky chunky --tonemap gamma --time 4000 --sun-altitude 45 --sun-azimuth 135 --mode hq --spp 250 --max-bounces 4 --backend metal -o lw.png
+    --sky chunky --tonemap gamma --time 4000 --sun-altitude 45 --sun-azimuth 135 --emitter-intensity 13 --mode hq --spp 250 --max-bounces 4 --backend metal -o lw.png
 # Chunky: the pinned core on its own classpath, as Delvewright's validation/chunky.sh runs it, without its denoise step
 mkdir -p scenes && cp docs/bench/treehouse-camp-bench.json scenes/
 java -Djava.awt.headless=true -Dchunky.home=$HOME/.chunky -cp "<the pinned core and its libraries>" se.llbit.chunky.main.Chunky \
