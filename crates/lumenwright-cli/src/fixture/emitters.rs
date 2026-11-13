@@ -145,3 +145,39 @@ pub const DAYLIGHT_EMITTERS_VIEW: [&str; 6] = [
     "--fov",
     "55",
 ];
+
+/// A closed 9 × 9 room of stone bricks, 5 high, with no opening to the sky, at noon, lit
+/// only by lanterns: two hanging from the ceiling at (−2, 68, −2) and (2, 68, 2) and one
+/// standing on the floor at (2, 65, −3).
+pub fn lantern_room() -> FixtureWorld {
+    let mut w = FixtureWorld::new();
+    let (lo, hi, top) = (-4, 4, FLOOR_Y + 5);
+    for x in lo - 1..=hi + 1 {
+        for z in lo - 1..=hi + 1 {
+            for y in FLOOR_Y..=top {
+                let shell = y == FLOOR_Y || y == top || x < lo || x > hi || z < lo || z > hi;
+                if shell {
+                    w.set(x, y, z, bs("stone_bricks"));
+                }
+            }
+        }
+    }
+    let lantern =
+        |hanging: &str| props("lantern", &[("hanging", hanging), ("waterlogged", "false")]);
+    w.set(-2, top - 1, -2, lantern("true"));
+    w.set(2, top - 1, 2, lantern("true"));
+    w.set(2, FLOOR_Y + 1, -3, lantern("false"));
+    w.player = Some(([0.5, 67.0, 3.5], 180.0, 15.0));
+    w.day_time = 6000;
+    w
+}
+
+/// Where the lantern room is seen from: inside its south side, looking across the room.
+pub const LANTERN_ROOM_VIEW: [&str; 6] = [
+    "--camera",
+    "0.5,67,4.2",
+    "--look-at",
+    "0.5,65.5,-3",
+    "--fov",
+    "75",
+];

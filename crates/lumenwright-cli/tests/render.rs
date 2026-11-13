@@ -1691,3 +1691,64 @@ fn a_night_emitter_still_lights_its_surroundings() {
         "{by_lit:?} vs {by_unlit:?}"
     );
 }
+
+/// The mean of every channel of every pixel, in display units (0–255).
+fn mean_brightness(img: &image::RgbaImage) -> f64 {
+    img.pixels()
+        .map(|p| (0..3).map(|i| p.0[i] as f64).sum::<f64>())
+        .sum::<f64>()
+        / (img.width() * img.height() * 3) as f64
+}
+
+/// A room with no opening to the sky, lit only by lanterns, at noon under the default sky:
+/// the lanterns light it, so its frame's mean brightness is above 1/255. With the emitters
+/// off (0, the day plateau's default before it took `request::DAY_EMITTER_INTENSITY`) the
+/// same frame is black, below the floor.
+#[test]
+fn a_sealed_room_is_lit_by_its_lanterns_at_noon() {
+    let jar = require_jar!();
+    let world = {
+        static DIR: OnceLock<PathBuf> = OnceLock::new();
+        DIR.get_or_init(|| {
+            let d = tmp("lantern-room");
+            fixture::lantern_room().write(&d).unwrap();
+            d
+        })
+    };
+    let dir = tmp("lantern-room-frames");
+    let frame = |name: &str, extra: &[&str]| {
+        let out = dir.join(format!("{name}.png"));
+        let mut args = vec![
+            "--mode",
+            "hq",
+            "--backend",
+            "cpu",
+            "--spp",
+            "64",
+            "--width",
+            "192",
+            "--height",
+            "108",
+            "--time",
+            "6000",
+        ];
+        args.extend_from_slice(&fixture::LANTERN_ROOM_VIEW);
+        args.extend_from_slice(extra);
+        render(world, &jar, &out, &args).unwrap();
+        mean_brightness(&load(&out))
+    };
+    let noon = frame("noon", &[]);
+    let off = frame("noon-off", &["--emitter-intensity", "0"]);
+    eprintln!(
+        "sealed room at noon: mean brightness {noon:.3}/255 by default, {off:.3}/255 with emitters off"
+    );
+    const FLOOR: f64 = 1.0;
+    assert!(
+        noon > FLOOR,
+        "the lanterns leave the room black: {noon:.3}/255"
+    );
+    assert!(
+        off < FLOOR,
+        "the room is lit without its lanterns: {off:.3}/255"
+    );
+}

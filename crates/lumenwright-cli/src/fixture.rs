@@ -19,8 +19,8 @@ pub const VERSION_NAME: &str = "1.21.11";
 
 mod emitters;
 pub use emitters::{
-    CANDLE_ROOM_VIEW, DAYLIGHT_EMITTERS_VIEW, FLOOR_Y, TORCH_ROOM_VIEW, candle_room,
-    daylight_emitters, torch_room,
+    CANDLE_ROOM_VIEW, DAYLIGHT_EMITTERS_VIEW, FLOOR_Y, LANTERN_ROOM_VIEW, TORCH_ROOM_VIEW,
+    candle_room, daylight_emitters, lantern_room, torch_room,
 };
 mod campaign_entities;
 pub use campaign_entities::{
