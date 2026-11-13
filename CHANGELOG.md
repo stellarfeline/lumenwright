@@ -4,6 +4,22 @@ All notable changes to Lumenwright are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- On the client's day plateau HQ mode's default emitter intensity,
+  `DAY_EMITTER_INTENSITY`, is 0.06: the largest hundredth at which a lit furnace's top in
+  the sun is drawn as the unlit one's beside it, within 3/255. A lantern in full daylight
+  still reads as its texture, and a closed room lit only by lanterns is lit dimly at noon
+  instead of black. Every frame off the plateau is unchanged, byte for byte
+  (`docs/research/daylight-emitters.md`).
+
+### Added
+
+- `fixture::lantern_room`: a closed stone-brick room with no opening to the sky, lit only
+  by lanterns, at noon.
+
 ## [0.4.1] - 2026-11-13
 
 ### Changed
