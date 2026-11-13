@@ -68,6 +68,9 @@ enum Cmd {
         /// Instead of the showcase, an ocean to the edge of 17 × 17 chunks with an island.
         #[arg(long, conflicts_with_all = ["lineup", "block_entities", "items", "torch_room", "candle_room", "entity_gallery"])]
         ocean: bool,
+        /// Instead of the showcase, emitters beside sunlit blocks in an open yard.
+        #[arg(long, conflicts_with_all = ["lineup", "block_entities", "items", "torch_room", "candle_room", "entity_gallery", "ocean"])]
+        daylight_emitters: bool,
     },
 }
 
@@ -154,8 +157,14 @@ fn main() -> Result<()> {
             candle_room,
             entity_gallery,
             ocean,
+            daylight_emitters,
         } => {
-            let (what, world) = if ocean {
+            let (what, world) = if daylight_emitters {
+                (
+                    "daylight emitters",
+                    lumenwright_cli::fixture::daylight_emitters(),
+                )
+            } else if ocean {
                 ("ocean", lumenwright_cli::fixture::ocean())
             } else if entity_gallery {
                 (

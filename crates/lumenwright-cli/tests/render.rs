@@ -787,7 +787,9 @@ fn chunky_scales_are_refused_under_the_game_sky() {
 /// The default sky goes by the time of day: on the client's day plateau it is Chunky's look
 /// byte for byte, on the night plateau the game's, and across the evening ramp of
 /// `visual/sky_light_factor` a frame one tick later differs by as little as one tick
-/// within either look does.
+/// within either look does, with the emitters held at one intensity. The default emitter
+/// intensity steps at the day plateau's edge, from the plateau's 0 to the mixed looks'
+/// (`request::default_emitter_intensity`); the step is printed.
 #[test]
 fn the_default_sky_follows_the_day_without_a_jump() {
     let jar = require_jar!();
@@ -833,14 +835,23 @@ fn the_default_sky_follows_the_day_without_a_jump() {
         frame("night-game", "18000", &["--sky", "game"]).into_raw()
     );
     // Across the edges of the ramp (11270 and 13140), one tick moves a frame no more than
-    // one tick does inside a look.
-    let inside = mean(&frame("a", "11269", &[]), &frame("b", "11270", &[]));
-    let (e0, e1) = (frame("c", "11270", &[]), frame("d", "11271", &[]));
+    // one tick does inside a look. The emitters are held at Chunky's intensity across the
+    // day plateau's edge, where the default intensity steps.
+    let held: &[&str] = &["--emitter-intensity", "13"];
+    let inside = mean(&frame("a", "11269", held), &frame("b", "11270", held));
+    let (e0, e1) = (frame("c", "11270", held), frame("d", "11271", held));
     let (n0, n1) = (frame("e", "13139", &[]), frame("f", "13140", &[]));
     let (day_edge, night_edge) = (mean(&e0, &e1), mean(&n0, &n1));
+    let (d0, d1) = (frame("g", "11270", &[]), frame("h", "11271", &[]));
+    assert_eq!(
+        d0.as_raw(),
+        frame("g-off", "11270", &["--emitter-intensity", "0"]).as_raw()
+    );
+    let emitter_step = mean(&d0, &d1);
     eprintln!(
         "sky by time: one tick moves a frame by {inside:.3}/255 inside Chunky's look, \
-         {day_edge:.3} at the day plateau's edge and {night_edge:.3} at the night's"
+         {day_edge:.3} at the day plateau's edge and {night_edge:.3} at the night's; with \
+         the default emitter intensity {emitter_step:.3} at the day plateau's edge"
     );
     assert!(day_edge <= 2.0 * inside.max(0.05), "{day_edge} vs {inside}");
     assert!(
@@ -1553,5 +1564,130 @@ fn the_water_plane_carries_the_sea_to_the_horizon() {
     assert!(
         ja < jb / 3.0,
         "the edge stays with the water plane: {ja:.2} against {jb:.2}"
+    );
+}
+
+fn daylight_emitters() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = tmp("daylight-emitters");
+        fixture::daylight_emitters().write(&d).unwrap();
+        d
+    })
+}
+
+/// The mean display colour of the `(2 radius + 1)²` pixels around `at`.
+fn mean_near(img: &image::RgbaImage, at: (i32, i32), radius: i32) -> [f64; 3] {
+    let mut sum = [0.0f64; 3];
+    let mut n = 0.0;
+    for y in at.1 - radius..=at.1 + radius {
+        for x in at.0 - radius..=at.0 + radius {
+            let p = img.get_pixel(x as u32, y as u32);
+            for (i, s) in sum.iter_mut().enumerate() {
+                *s += p.0[i] as f64;
+            }
+            n += 1.0;
+        }
+    }
+    sum.map(|s| s / n)
+}
+
+/// The daylight emitters' frame at a tick, HQ on the CPU, with `extra` arguments.
+fn daylight_frame(name: &str, tick: &str, extra: &[&str]) -> image::RgbaImage {
+    let jar = client_jar().unwrap();
+    let dir = tmp(&format!("daylight-{name}"));
+    let out = dir.join("frame.png");
+    let mut args = vec![
+        "--mode",
+        "hq",
+        "--backend",
+        "cpu",
+        "--spp",
+        "64",
+        "--width",
+        "192",
+        "--height",
+        "108",
+        "--time",
+        tick,
+    ];
+    args.extend_from_slice(&fixture::DAYLIGHT_EMITTERS_VIEW);
+    args.extend_from_slice(extra);
+    render(daylight_emitters(), &jar, &out, &args).unwrap();
+    load(&out)
+}
+
+/// Where a world point of the daylight emitters' frame falls (192 × 108).
+fn daylight_pixel(p: [f64; 3]) -> (i32, i32) {
+    use lumenwright::glam::DVec3;
+    use lumenwright::scene::camera::Camera;
+    let pos = DVec3::new(0.5, 72.0, 7.5);
+    let (yaw, pitch) = Camera::look_at(pos, DVec3::new(0.5, 65.0, -0.5));
+    let cam = Camera {
+        pos,
+        yaw,
+        pitch,
+        fov_y: 55.0,
+    };
+    project(&cam, p, 192, 108).unwrap()
+}
+
+/// The most any channel's mean differs between two regions.
+fn channel_gap(a: [f64; 3], b: [f64; 3]) -> f64 {
+    (0..3).map(|i| (a[i] - b[i]).abs()).fold(0.0, f64::max)
+}
+
+/// At noon under the default sky a lit furnace's top, an emitter, is drawn as the unlit
+/// furnace's top beside it in the same sun: the same texture, within 3/255 per channel of
+/// the regions' means. At the intensity the day plateau used to take (Chunky's 13) the
+/// emitter's top is far brighter, so the comparison tells the two apart.
+#[test]
+fn a_daylight_emitter_is_drawn_as_its_sunlit_neighbour() {
+    let _jar = require_jar!();
+    let lit = daylight_pixel([-2.5, 66.0, 0.5]);
+    let unlit = daylight_pixel([3.5, 66.0, 0.5]);
+    let gap =
+        |img: &image::RgbaImage| channel_gap(mean_near(img, lit, 3), mean_near(img, unlit, 3));
+    let noon = daylight_frame("noon", "6000", &[]);
+    let at_13 = daylight_frame("noon-13", "6000", &["--emitter-intensity", "13"]);
+    let (now, then) = (gap(&noon), gap(&at_13));
+    eprintln!(
+        "daylight emitter: lit vs unlit furnace top differ by {now:.2}/255 at noon by default, \
+         {then:.2}/255 at emitter intensity 13; lit {:?} unlit {:?} (default)",
+        mean_near(&noon, lit, 3),
+        mean_near(&noon, unlit, 3)
+    );
+    assert!(
+        now <= 3.0,
+        "the emitter's top differs from its neighbour's by {now:.2}/255"
+    );
+    assert!(
+        then > 3.0 * 4.0,
+        "the comparison does not tell 13 apart: {then:.2}/255"
+    );
+}
+
+/// At midnight the default frame is the one the game look's emitter intensity draws, byte
+/// for byte, and the lit furnace lights the floor in front of it: brighter than the floor
+/// in front of the unlit one by more than 20/255 in some channel.
+#[test]
+fn a_night_emitter_still_lights_its_surroundings() {
+    let _jar = require_jar!();
+    let night = daylight_frame("midnight", "18000", &[]);
+    let stated = daylight_frame(
+        "midnight-stated",
+        "18000",
+        &[
+            "--emitter-intensity",
+            &lumenwright::request::GAME_EMITTER_INTENSITY.to_string(),
+        ],
+    );
+    assert_eq!(night.as_raw(), stated.as_raw());
+    let by_lit = mean_near(&night, daylight_pixel([-2.5, 65.0, 1.5]), 3);
+    let by_unlit = mean_near(&night, daylight_pixel([3.5, 65.0, 1.5]), 3);
+    eprintln!("night emitter: floor by the lit furnace {by_lit:?}, by the unlit one {by_unlit:?}");
+    assert!(
+        (0..3).any(|i| by_lit[i] - by_unlit[i] > 20.0),
+        "{by_lit:?} vs {by_unlit:?}"
     );
 }

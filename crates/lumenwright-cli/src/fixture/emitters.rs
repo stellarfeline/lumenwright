@@ -89,3 +89,59 @@ pub const CANDLE_ROOM_VIEW: [&str; 6] = [
     "--fov",
     "75",
 ];
+
+/// Emitters beside sunlit blocks in the open: on a smooth stone yard 21 × 21 blocks, a lit
+/// furnace at (−3, 65, 0) and an unlit one at (3, 65, 0), whose tops are the same texture;
+/// a lantern on a cobblestone wall block at (0, 66, −3), glowstone beside sandstone at
+/// (−3, 65, −4) and (−2, 65, −4), and a torch at (3, 65, −3). Noon unless rendered at a
+/// stated time.
+pub fn daylight_emitters() -> FixtureWorld {
+    let mut w = FixtureWorld::new();
+    for x in -10..=10 {
+        for z in -10..=10 {
+            w.set(x, FLOOR_Y, z, bs("smooth_stone"));
+        }
+    }
+    let furnace = |lit: &str| props("furnace", &[("facing", "south"), ("lit", lit)]);
+    w.set(-3, FLOOR_Y + 1, 0, furnace("true"));
+    w.set(3, FLOOR_Y + 1, 0, furnace("false"));
+    w.set(
+        0,
+        FLOOR_Y + 1,
+        -3,
+        props(
+            "cobblestone_wall",
+            &[
+                ("up", "true"),
+                ("north", "none"),
+                ("south", "none"),
+                ("east", "none"),
+                ("west", "none"),
+                ("waterlogged", "false"),
+            ],
+        ),
+    );
+    w.set(
+        0,
+        FLOOR_Y + 2,
+        -3,
+        props("lantern", &[("hanging", "false"), ("waterlogged", "false")]),
+    );
+    w.set(-3, FLOOR_Y + 1, -4, bs("glowstone"));
+    w.set(-2, FLOOR_Y + 1, -4, bs("sandstone"));
+    w.set(3, FLOOR_Y + 1, -3, bs("torch"));
+    w.player = Some(([0.5, 72.0, 7.5], 180.0, 40.0));
+    w.day_time = 6000;
+    w
+}
+
+/// Where the daylight emitters are seen from: south of the yard and above it, looking down
+/// on both furnaces' tops.
+pub const DAYLIGHT_EMITTERS_VIEW: [&str; 6] = [
+    "--camera",
+    "0.5,72,7.5",
+    "--look-at",
+    "0.5,65,-0.5",
+    "--fov",
+    "55",
+];

@@ -18,7 +18,10 @@ pub const DATA_VERSION: i32 = 4671;
 pub const VERSION_NAME: &str = "1.21.11";
 
 mod emitters;
-pub use emitters::{CANDLE_ROOM_VIEW, FLOOR_Y, TORCH_ROOM_VIEW, candle_room, torch_room};
+pub use emitters::{
+    CANDLE_ROOM_VIEW, DAYLIGHT_EMITTERS_VIEW, FLOOR_Y, TORCH_ROOM_VIEW, candle_room,
+    daylight_emitters, torch_room,
+};
 mod campaign_entities;
 pub use campaign_entities::{
     ENTITY_CASES, ENTITY_GALLERY_VIEW, EntityCase, OCEAN_VIEW, entity_gallery, ocean,
