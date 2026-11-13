@@ -20,7 +20,7 @@ Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vul
 
 ![The Treehouse Camp by day, path traced](docs/renders/treehouse-camp-day-hq.png)
 
-*hq · `--time 4000` · 4096 spp · 8 bounces · Metal on an Apple M2 Pro · 449 s end to end*
+*hq · `--time 4000` · 4096 spp · 8 bounces · Metal on an Apple M2 Pro · 481 s end to end*
 
 | | quick (vanilla look) | hq (path traced) |
 |---|---|---|
