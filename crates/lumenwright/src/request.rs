@@ -137,11 +137,18 @@ pub const DEFAULT_EMITTER_INTENSITY: f32 = 13.0;
 /// the engine's Chunky render of the frame, 41.993 (`docs/research/game-sky.md`, *Lanterns*).
 pub const GAME_EMITTER_INTENSITY: f32 = 137.9628;
 
-/// The emitter intensity of a frame on the client's day plateau, 0: Chunky's default
-/// scene has its emitters off (`Scene.DEFAULT_EMITTERS_ENABLED = false`,
-/// chunky-dev/chunky 156e2bb), and it is a daylight scene. A lantern in full daylight is
-/// then drawn as its texture lit by the sun and the sky, as a block beside it is.
-pub const DAY_EMITTER_INTENSITY: f32 = 0.0;
+/// The emitter intensity of a frame on the client's day plateau, 0.06: **authored by
+/// Lumenwright**, the level at which a lit emitter in full daylight is drawn as its texture
+/// lit by the sun and the sky, as a block of the same texture beside it is, while a room the
+/// sky cannot reach is still lit by its lamps. Measured on the daylight-emitters yard at
+/// noon (tick 6000; CPU, 64 spp, 192 × 108, the test
+/// `a_daylight_emitter_is_drawn_as_its_sunlit_neighbour`): the largest channel gap between
+/// the 7 × 7 means of the lit and the unlit furnace tops is 2.57/255 at 0, 2.86/255 at 0.06,
+/// 3.00/255 at 0.07 and 3.06/255 at 0.08, against a tolerance of 3/255; 0.06 is the largest
+/// hundredth inside it. Chunky's default scene, a daylight scene, has its emitters off
+/// (`Scene.DEFAULT_EMITTERS_ENABLED = false`, chunky-dev/chunky 156e2bb), and draws a closed
+/// room black (`docs/research/daylight-emitters.md`).
+pub const DAY_EMITTER_INTENSITY: f32 = 0.06;
 
 /// The emitter intensity HQ mode draws a frame at when the request states none.
 ///
@@ -1230,15 +1237,16 @@ mod tests {
 
     /// The default emitter intensity at the camp's dusk is the fitted 115.2423; the night
     /// plateau takes the game look's, a frame of Chunky's look off the day plateau (a stated
-    /// sky at no tick) Chunky's 13, and the day plateau Chunky's emitters off.
+    /// sky at no tick) Chunky's 13, and the day plateau its measured 0.06.
     #[test]
     fn the_lantern_default_is_the_fit_at_dusk() {
         let at = |w: f32| default_emitter_intensity(false, w);
         assert!((at(0.181818) - 115.2423).abs() < 1e-3, "{}", at(0.181818));
         assert_eq!(at(1.0), 13.0);
         assert_eq!(at(0.0), GAME_EMITTER_INTENSITY);
-        assert_eq!(default_emitter_intensity(true, 1.0), 0.0);
+        assert_eq!(default_emitter_intensity(true, 1.0), DAY_EMITTER_INTENSITY);
         assert_eq!(default_emitter_intensity(true, 0.0), DAY_EMITTER_INTENSITY);
+        assert_eq!(DAY_EMITTER_INTENSITY, 0.06);
     }
 
     /// Off the day plateau the default is the mix it was before the day plateau took its

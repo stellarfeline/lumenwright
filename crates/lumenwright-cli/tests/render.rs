@@ -788,7 +788,7 @@ fn chunky_scales_are_refused_under_the_game_sky() {
 /// byte for byte, on the night plateau the game's, and across the evening ramp of
 /// `visual/sky_light_factor` a frame one tick later differs by as little as one tick
 /// within either look does, with the emitters held at one intensity. The default emitter
-/// intensity steps at the day plateau's edge, from the plateau's 0 to the mixed looks'
+/// intensity steps at the day plateau's edge, from the plateau's 0.06 to the mixed looks'
 /// (`request::default_emitter_intensity`); the step is printed.
 #[test]
 fn the_default_sky_follows_the_day_without_a_jump() {
@@ -845,7 +845,15 @@ fn the_default_sky_follows_the_day_without_a_jump() {
     let (d0, d1) = (frame("g", "11270", &[]), frame("h", "11271", &[]));
     assert_eq!(
         d0.as_raw(),
-        frame("g-off", "11270", &["--emitter-intensity", "0"]).as_raw()
+        frame(
+            "g-day",
+            "11270",
+            &[
+                "--emitter-intensity",
+                &lumenwright::request::DAY_EMITTER_INTENSITY.to_string(),
+            ],
+        )
+        .as_raw()
     );
     let emitter_step = mean(&d0, &d1);
     eprintln!(

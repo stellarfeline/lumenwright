@@ -6,8 +6,8 @@
 
 HQ mode runs with its defaults, which go by the time of day. At `--time 4000` the day
 frames are Chunky's look with Chunky's default scene settings: the Preetham sky, a sun of
-intensity 1.25 that lights and shadows, emitters off, so lanterns and campfires are their
-textures in the sun ([docs/research/daylight-emitters.md](research/daylight-emitters.md)),
+intensity 1.25 that lights and shadows, emitters at the day plateau's low intensity, so
+lanterns and campfires are their textures in the sun ([docs/research/daylight-emitters.md](research/daylight-emitters.md)),
 and the display gamma 2.2.
 
 At `--time 12800` the sun stands just below the horizon. Quick mode draws the client's sunset:

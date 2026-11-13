@@ -80,7 +80,7 @@ display values and the intensities (13, 137.9628) linearly. On the day plateau t
 `the_default_sky_follows_the_day_without_a_jump`]. One tick across either edge of the ramp
 moves the camp frame by 0.067/255 (Metal, 64 spp, at `4d1f6bd`), as one tick inside Chunky's look does
 (0.059); a hard switch at the plateau's edge moves it by 28.7 [measured]. The default emitter
-intensity is the exception: on the day plateau it is 0, Chunky's emitters off, and off it the
+intensity is the exception: on the day plateau it is 0.06, measured, and off it the
 mix above, so it steps at the day plateau's edges; the test holds the sky's continuity there
 with the emitters at one intensity ([daylight-emitters.md](daylight-emitters.md)).
 
