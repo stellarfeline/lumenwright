@@ -4,6 +4,24 @@ All notable changes to Lumenwright are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- On the client's day plateau (a vanilla sky, or a stated sky at a tick, whose
+  `visual/sky_light_factor` is at its day value) HQ mode's default emitter intensity is 0,
+  `DAY_EMITTER_INTENSITY`: Chunky's default scene, a daylight scene, has its emitters off.
+  A lantern in full daylight is drawn as its texture lit by the sun and the sky, as the
+  block beside it is, not as a bright point. Every other frame takes the intensity it took
+  before, bit for bit (`default_emitter_intensity`); a stated `--emitter-intensity` is used
+  as given. The default steps at the day plateau's edges
+  (`docs/research/daylight-emitters.md`).
+
+### Added
+
+- `demo-world --daylight-emitters`: a lit and an unlit furnace, a lantern, glowstone beside
+  sandstone and a torch on a sunlit yard.
+
 ## [0.4.0] - 2026-11-10
 
 ### Added

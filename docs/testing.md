@@ -25,7 +25,8 @@ cargo test --workspace --release
   holders empty), the entity gallery in both modes (every body, layer and variant counted
   and drawn at its spot against the empty platform, the colours its layers and variants
   show, a woolly sheep larger than a sheared one, and at midnight the glowing eyes and
-  bodies bright beside a dark one), that HQ mode's water plane carries an ocean's sea to
+  bodies bright beside a dark one), that at noon a lit furnace's top is drawn within 3/255 of an
+  unlit one's beside it while at midnight it lights the floor, that HQ mode's water plane carries an ocean's sea to
   the horizon without the loaded sea's edge, that every item definition in the jar resolves, HQ sanity, CPU-vs-GPU
   parity in both modes (showcase, block-entity gallery and item gallery; in HQ mode also
   the entity gallery and the ocean under the water plane) and CPU-vs-CUDA

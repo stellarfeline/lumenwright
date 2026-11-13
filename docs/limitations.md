@@ -48,5 +48,8 @@ See [docs/SCOPE.md §3](SCOPE.md). The main gaps:
   of the sun's disc is above the horizon; below it, the sky falls to a night's 3% at the end
   of civil twilight (the sun 6° below the horizon), and the sun gives no light from below the
   horizon. Those two rules are Lumenwright's own. The default game sky has none.
+* On the client's day plateau HQ mode's emitters are off unless `--emitter-intensity` states
+  one, as in Chunky's default scene: a room lit only by lanterns is dark at noon
+  ([docs/research/daylight-emitters.md](research/daylight-emitters.md)).
 * The game's sky draws no clouds and no weather, and HQ mode's lanterns are Chunky's emitters,
   not the game's block light ([docs/research/game-sky.md](research/game-sky.md)).

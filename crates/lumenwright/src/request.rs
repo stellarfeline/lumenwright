@@ -137,6 +137,30 @@ pub const DEFAULT_EMITTER_INTENSITY: f32 = 13.0;
 /// the engine's Chunky render of the frame, 41.993 (`docs/research/game-sky.md`, *Lanterns*).
 pub const GAME_EMITTER_INTENSITY: f32 = 137.9628;
 
+/// The emitter intensity of a frame on the client's day plateau, 0: Chunky's default
+/// scene has its emitters off (`Scene.DEFAULT_EMITTERS_ENABLED = false`,
+/// chunky-dev/chunky 156e2bb), and it is a daylight scene. A lantern in full daylight is
+/// then drawn as its texture lit by the sun and the sky, as a block beside it is.
+pub const DAY_EMITTER_INTENSITY: f32 = 0.0;
+
+/// The emitter intensity HQ mode draws a frame at when the request states none.
+///
+/// On the client's day plateau (`on_day_plateau`: the frame stands at a tick where the
+/// client's `visual/sky_light_factor` holds its day value) it is
+/// [`DAY_EMITTER_INTENSITY`]. Everywhere else it is each look's own mixed by the look's
+/// day weight `weight`: `weight × `[`DEFAULT_EMITTER_INTENSITY`]` + (1 − weight) × `
+/// [`GAME_EMITTER_INTENSITY`]; so a frame off the plateau (the evening and morning ramps,
+/// the night) and a stated sky at no tick (Chunky's look, as a rain or thunder frame is
+/// stated) keep the intensity they were tuned at. The step at the plateau's edges (ticks
+/// 730 and 11270 on the 1.21.11 day timeline) is the emitters' alone.
+pub fn default_emitter_intensity(on_day_plateau: bool, weight: f32) -> f32 {
+    if on_day_plateau {
+        DAY_EMITTER_INTENSITY
+    } else {
+        weight * DEFAULT_EMITTER_INTENSITY + (1.0 - weight) * GAME_EMITTER_INTENSITY
+    }
+}
+
 /// Chunky's emitter sampling strategies (`EmitterSamplingStrategy`): which emitters a
 /// diffuse surface samples, among those its emitter-grid cell lists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -161,9 +185,10 @@ pub struct HqOptions {
     /// Random seed; the same seed gives the same image.
     pub seed: u32,
     /// Chunky's emitter intensity: an emitting surface emits its texel colour squared
-    /// times its block's emittance times this. 0 turns emitters off. `None` takes each
-    /// look's own, mixed by the day weight: Chunky's [`DEFAULT_EMITTER_INTENSITY`] and,
-    /// under the game's sky, [`GAME_EMITTER_INTENSITY`].
+    /// times its block's emittance times this. 0 turns emitters off. `None` takes
+    /// [`default_emitter_intensity`]: [`DAY_EMITTER_INTENSITY`] on the client's day
+    /// plateau, elsewhere each look's own, mixed by the day weight: Chunky's
+    /// [`DEFAULT_EMITTER_INTENSITY`] and, under the game's sky, [`GAME_EMITTER_INTENSITY`].
     pub emitter_intensity: Option<f32>,
     /// How emitters are sampled at a diffuse surface (Chunky's emitter sampling
     /// strategy).
@@ -744,9 +769,23 @@ pub fn render(req: &Request) -> Result<Rendered> {
                      `--sky chunky`)"
                 );
             }
-            let emitter_intensity = req.hq.emitter_intensity.unwrap_or(
-                weight * DEFAULT_EMITTER_INTENSITY + (1.0 - weight) * GAME_EMITTER_INTENSITY,
-            );
+            // The frame stands at a clock when the sky is the vanilla one or a stated sky at
+            // a tick; a stated sky at no tick names no time of day.
+            let clocked = match req.sky {
+                Sky::Vanilla { .. } => true,
+                Sky::Stated(s) => s.tick.is_some(),
+            };
+            let on_day_plateau = clocked
+                && match (env.as_ref(), day_range) {
+                    (Some(e), Some((night, day))) => {
+                        day > night && sky::day_weight(e.sky_light_factor, night, day) >= 1.0
+                    }
+                    _ => false,
+                };
+            let emitter_intensity = req
+                .hq
+                .emitter_intensity
+                .unwrap_or_else(|| default_emitter_intensity(on_day_plateau, weight));
             // Chunky's sun and sky, for the Chunky part of the frame.
             let chunky_sky = match req.sky {
                 Sky::Stated(s) => s.hq,
@@ -1189,14 +1228,35 @@ pub fn hq_params(
 mod tests {
     use super::*;
 
-    /// The default emitter intensity at the camp's dusk is the fitted 115.2423, and each
-    /// plateau takes its look's own.
+    /// The default emitter intensity at the camp's dusk is the fitted 115.2423; the night
+    /// plateau takes the game look's, a frame of Chunky's look off the day plateau (a stated
+    /// sky at no tick) Chunky's 13, and the day plateau Chunky's emitters off.
     #[test]
     fn the_lantern_default_is_the_fit_at_dusk() {
-        let at = |w: f32| w * DEFAULT_EMITTER_INTENSITY + (1.0 - w) * GAME_EMITTER_INTENSITY;
+        let at = |w: f32| default_emitter_intensity(false, w);
         assert!((at(0.181818) - 115.2423).abs() < 1e-3, "{}", at(0.181818));
         assert_eq!(at(1.0), 13.0);
         assert_eq!(at(0.0), GAME_EMITTER_INTENSITY);
+        assert_eq!(default_emitter_intensity(true, 1.0), 0.0);
+        assert_eq!(default_emitter_intensity(true, 0.0), DAY_EMITTER_INTENSITY);
+    }
+
+    /// Off the day plateau the default is the mix it was before the day plateau took its
+    /// own, bit for bit, at every weight one of the ramp's 1870 ticks gives.
+    #[test]
+    fn off_the_day_plateau_the_default_is_unchanged() {
+        let before = |w: f32| w * DEFAULT_EMITTER_INTENSITY + (1.0 - w) * GAME_EMITTER_INTENSITY;
+        let mut n = 0;
+        for k in 0..=1870u32 {
+            let w = k as f32 / 1870.0;
+            assert_eq!(
+                default_emitter_intensity(false, w).to_bits(),
+                before(w).to_bits(),
+                "{w}"
+            );
+            n += 1;
+        }
+        assert_eq!(n, 1871);
     }
 
     /// `AtmosphericFogEnvironment.getBaseColor` in the 1.21.11 client lerps the clear colour

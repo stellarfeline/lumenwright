@@ -5,9 +5,10 @@
 ## How they are drawn
 
 HQ mode runs with its defaults, which go by the time of day. At `--time 4000` the day
-frames are Chunky's look: the Preetham sky, a sun of intensity 1.25 that lights and shadows,
-lanterns and campfires as emitters at intensity 13 with one emitter sampled per diffuse
-bounce, and the display gamma 2.2.
+frames are Chunky's look with Chunky's default scene settings: the Preetham sky, a sun of
+intensity 1.25 that lights and shadows, emitters off, so lanterns and campfires are their
+textures in the sun ([docs/research/daylight-emitters.md](research/daylight-emitters.md)),
+and the display gamma 2.2.
 
 At `--time 12800` the sun stands just below the horizon. Quick mode draws the client's sunset:
 the sun, the orange glow and the light the game stored in the save. HQ mode draws mostly the
@@ -17,7 +18,7 @@ intensity 137.96, fitted to Delvewright's engine's render of this frame, and the
 that shows mid-grey as the game does (see [docs/research/game-sky.md](research/game-sky.md)).
 
 Each image's command, run from the repository root with the save from
-[Get the camp](#get-the-camp) in `the-treehouse-camp`. The HQ commands need the CUDA build
+[Get the camp](#get-the-camp) in `the-treehouse-camp`. The dusk HQ commands need the CUDA build
 (see [Backends](backends.md#backends)); on another backend the same flags give the same image within the
 parity the tests hold (`gpu_matches_cpu_in_hq_mode`, `cuda_matches_cpu_in_hq_mode`).
 
@@ -26,7 +27,7 @@ parity the tests hold (`gpu_matches_cpu_in_hq_mode`, `cuda_matches_cpu_in_hq_mod
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
     --time 4000 --backend metal -o treehouse-camp-day-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
-    --time 4000 --backend cuda --mode hq --spp 4096 --max-bounces 8 -o treehouse-camp-day-hq.png
+    --time 4000 --backend metal --mode hq --spp 4096 --max-bounces 8 -o treehouse-camp-day-hq.png
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
     --time 12800 --backend metal -o treehouse-camp-dusk-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --look-at 56,82,58 --fov 60 --render-distance 12 \
@@ -36,7 +37,7 @@ target/release/lumenwright render -w the-treehouse-camp --camera 140,118,14 --lo
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
     --time 4000 --backend metal -o treehouse-bridge-day-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
-    --time 4000 --backend cuda --mode hq --spp 4096 --max-bounces 8 -o treehouse-bridge-day-hq.png
+    --time 4000 --backend metal --mode hq --spp 4096 --max-bounces 8 -o treehouse-bridge-day-hq.png
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
     --time 12800 --backend metal -o treehouse-bridge-dusk-quick.png
 target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look-at 60,80,42 --fov 70 \
@@ -46,15 +47,17 @@ target/release/lumenwright render -w the-treehouse-camp --camera 60,93,22 --look
 | image | Apple M2 Pro, Metal (end to end) | RTX 4070 Ti SUPER, CUDA (end to end / in the kernel) |
 |---|---|---|
 | camp, quick, day / dusk | 0.27 s / 0.27 s | |
-| camp, hq, day (4096 spp) / dusk (16384 spp) | | 91 s / 333 s (90 s / 332 s) |
+| camp, hq, day (4096 spp) | 449 s | |
+| camp, hq, dusk (16384 spp) | | 333 s (332 s) |
 | bridge, quick, day / dusk | 0.23 s / 0.23 s | |
-| bridge, hq, day (4096 spp) / dusk (16384 spp) | | 122 s / 447 s (121 s / 445 s) |
+| bridge, hq, day (4096 spp) | 554 s | |
+| bridge, hq, dusk (16384 spp) | | 447 s (445 s) |
 
 These are the renders' own times at their quality budgets, not a speed comparison (that is
 [benchmark.md](benchmark.md)). The quick times are the second of two runs, measured at `v0.1.0`;
 the quick frames are byte-identical at this revision. The 4070 Ti SUPER runs under WSL2 on a 16-thread PC.
-Each HQ image rendered twice with the same command on the CUDA backend gave byte-identical
-PNGs, as each quick image did on Metal.
+Each dusk HQ image rendered twice with the same command on the CUDA backend gave
+byte-identical PNGs, as each quick image did on Metal.
 
 ### Get the camp
 

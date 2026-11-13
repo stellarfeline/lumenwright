@@ -20,13 +20,13 @@ Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vul
 
 ![The Treehouse Camp by day, path traced](docs/renders/treehouse-camp-day-hq.png)
 
-*hq · `--time 4000` · 4096 spp · 8 bounces · CUDA on an NVIDIA GeForce RTX 4070 Ti SUPER · 91 s end to end*
+*hq · `--time 4000` · 4096 spp · 8 bounces · Metal on an Apple M2 Pro · 449 s end to end*
 
 | | quick (vanilla look) | hq (path traced) |
 |---|---|---|
-| **The whole camp, day** | ![camp, day, quick](docs/renders/treehouse-camp-day-quick.png) quick · `--time 4000` · Metal · Apple M2 Pro | ![camp, day, hq](docs/renders/treehouse-camp-day-hq.png) hq · `--time 4000` · 4096 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+| **The whole camp, day** | ![camp, day, quick](docs/renders/treehouse-camp-day-quick.png) quick · `--time 4000` · Metal · Apple M2 Pro | ![camp, day, hq](docs/renders/treehouse-camp-day-hq.png) hq · `--time 4000` · 4096 spp · 8 bounces · Metal · Apple M2 Pro |
 | **The whole camp, dusk** | ![camp, dusk, quick](docs/renders/treehouse-camp-dusk-quick.png) quick · `--time 12800` · Metal · Apple M2 Pro | ![camp, dusk, hq](docs/renders/treehouse-camp-dusk-hq.png) hq · `--time 12800` · 16384 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
-| **The Long Bridge, day** | ![bridge, day, quick](docs/renders/treehouse-bridge-day-quick.png) quick · `--time 4000` · Metal · Apple M2 Pro | ![bridge, day, hq](docs/renders/treehouse-bridge-day-hq.png) hq · `--time 4000` · 4096 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
+| **The Long Bridge, day** | ![bridge, day, quick](docs/renders/treehouse-bridge-day-quick.png) quick · `--time 4000` · Metal · Apple M2 Pro | ![bridge, day, hq](docs/renders/treehouse-bridge-day-hq.png) hq · `--time 4000` · 4096 spp · 8 bounces · Metal · Apple M2 Pro |
 | **The Long Bridge, dusk** | ![bridge, dusk, quick](docs/renders/treehouse-bridge-dusk-quick.png) quick · `--time 12800` · Metal · Apple M2 Pro | ![bridge, dusk, hq](docs/renders/treehouse-bridge-dusk-hq.png) hq · `--time 12800` · 16384 spp · 8 bounces · CUDA · RTX 4070 Ti SUPER |
 
 *The Treehouse Camp* is a small adventure map: a forest clan's houses on four giant trees,
@@ -123,7 +123,7 @@ The Treehouse Camp save, more commands and generated worlds: [docs/renders.md](d
 
 * [The Treehouse Camp renders](docs/renders.md): each image's command and time, how HQ mode lights it, getting the camp, more commands.
 * [Benchmark](docs/benchmark.md): Lumenwright against Chunky on one machine, the backends against each other, the cost of samples; design, tables and instruments.
-* [The game's sky](docs/research/game-sky.md), [the sea at the horizon](docs/research/sea-horizon.md) and [HQ mode against Chunky](docs/research/chunky-parity.md): what HQ mode ports and how it compares.
+* [The game's sky](docs/research/game-sky.md), [the sea at the horizon](docs/research/sea-horizon.md), [emitters in a clear daytime frame](docs/research/daylight-emitters.md) and [HQ mode against Chunky](docs/research/chunky-parity.md): what HQ mode ports and how it compares.
 * [Command line](docs/cli.md): every `render` flag.
 * [Library](docs/library.md): using the crate and the `render` API.
 * [Textures](docs/textures.md): the client jar, the Unifont and resource packs.

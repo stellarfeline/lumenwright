@@ -93,8 +93,9 @@ pub struct RenderArgs {
     #[arg(long)]
     pub sky_intensity: Option<f32>,
     /// HQ: the emitter intensity (an emitting surface emits its texel colour squared times
-    /// its block's emittance times this; 0 turns emitters off). Default: each look's own,
-    /// mixed as the sky is: Chunky's 13, and the game's look's, authored by Lumenwright.
+    /// its block's emittance times this; 0 turns emitters off). Default: 0 on the client's
+    /// day plateau (Chunky's default scene has its emitters off); elsewhere each look's
+    /// own, mixed as the sky is: Chunky's 13, and the game's look's, authored by Lumenwright.
     #[arg(long)]
     pub emitter_intensity: Option<f32>,
     /// HQ: how a diffuse surface samples the emitters near it (Chunky's strategies).
