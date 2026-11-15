@@ -48,14 +48,17 @@ mirror! {
 mirror! {
     /// `--backend`.
     BackendArg => BackendKind {
-        /// Best available: Metal/Vulkan/DX12 GPU, then CPU.
+        /// The first that opens: HQ tries CUDA, then the best wgpu adapter, then the CPU;
+        /// quick tries the best wgpu adapter, then the CPU.
         Auto,
         Cpu,
-        /// Any native GPU API wgpu can find.
+        /// The best hardware adapter on Metal, Vulkan, DX12 or GL.
         Gpu,
         Metal,
         Vulkan,
         Dx12,
+        /// OpenGL / OpenGL ES (EGL or WGL).
+        Gl,
         Cuda,
     }
 }

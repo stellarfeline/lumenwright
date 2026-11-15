@@ -423,7 +423,8 @@ pub struct Request<'a> {
     pub camera: Camera,
     /// Quick (rasterized, vanilla look) or HQ (path traced).
     pub mode: Mode,
-    /// The backend to draw with; [`BackendKind::Auto`] takes a GPU if one is available, else the CPU.
+    /// The backend to draw with; [`BackendKind::Auto`] takes the first of
+    /// [`render::auto_order`] that opens.
     pub backend: BackendKind,
     /// Image width in pixels.
     pub width: u32,
@@ -451,7 +452,7 @@ pub struct Rendered {
     pub hdr: Option<Vec<[f32; 3]>>,
     /// The backend that drew the frame, e.g. `cpu (10 threads)`.
     pub backend: String,
-    /// Set when [`BackendKind::Auto`] took the CPU: why no GPU was used.
+    /// Set when [`BackendKind::Auto`] passed over a backend: each one and why, in order.
     pub backend_fallback: Option<String>,
     /// Seconds per stage, in order.
     pub timings: Vec<(&'static str, f64)>,
@@ -635,7 +636,7 @@ pub fn render(req: &Request) -> Result<Rendered> {
     let render::OpenedBackend {
         backend: mut be,
         fallback,
-    } = render::open_backend(req.backend)?;
+    } = render::open_backend(req.backend, req.mode)?;
     log::info!("backend: {}", be.name());
     let eye = Vec3::new(
         (cam.pos.x - scene.origin[0] as f64) as f32,

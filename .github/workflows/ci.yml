@@ -1,7 +1,7 @@
 # Lumenwright CI: every pull request and every push to main.
 #
 # No GPU jobs: GitHub-hosted runners have no GPU. The GPU parity tests therefore skip
-# on their "no GPU adapter" branch; the test job prints that skip count in its log
+# on their "no GPU adapter" and "no CUDA device" branches; the test job prints that skip count in its log
 # instead of letting it pass unseen. GPU behaviour is verified on a developer machine.
 #
 # Toolchain: the repository carries no rust-toolchain.toml; each crate's rust-version is the
@@ -47,6 +47,27 @@ jobs:
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component clippy
       - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy -p lumenwright -p lumenwright-cli --all-targets --no-default-features -- -D warnings
+      - run: cargo clippy -p lumenwright -p lumenwright-cli --all-targets --no-default-features --features gpu -- -D warnings
+      - run: cargo clippy -p lumenwright -p lumenwright-cli --all-targets --no-default-features --features cuda -- -D warnings
+
+  # The `cuda` feature embeds crates/lumenwright/ptx/lumenwright.ptx, which is committed and
+  # packaged. Rebuild it twice from a clean target with the pinned nightly: the first build must
+  # equal the committed file (it is the kernel source's PTX), the second the first (the build is
+  # deterministic).
+  ptx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rebuild the PTX and refuse a difference from the committed file
+        run: |
+          set -euo pipefail
+          scripts/build-ptx.sh
+          git diff --exit-code --stat -- crates/lumenwright/ptx/lumenwright.ptx
+          cp crates/lumenwright/ptx/lumenwright.ptx "$RUNNER_TEMP/first.ptx"
+          rm -rf crates/lumenwright-ptx/target
+          scripts/build-ptx.sh
+          cmp "$RUNNER_TEMP/first.ptx" crates/lumenwright/ptx/lumenwright.ptx
 
   test:
     runs-on: ubuntu-latest
@@ -79,8 +100,9 @@ jobs:
           cargo test --workspace --no-fail-fast -- --nocapture 2>&1 | tee test.log
           jar_skips=$(grep -c 'skipping: no Minecraft' test.log || true)
           gpu_skips=$(grep -c 'skipping: no GPU adapter' test.log || true)
+          cuda_skips=$(grep -c 'skipping: no CUDA device' test.log || true)
           ran=$(grep -E '^test result:' test.log | sed -E 's/.* ([0-9]+) passed.*/\1/' | paste -sd+ - | bc)
-          echo "::notice::tests passed: $ran; skipped for lack of the client jar: $jar_skips; skipped for lack of a GPU adapter: $gpu_skips"
+          echo "::notice::tests passed: $ran; skipped for lack of the client jar: $jar_skips; skipped for lack of a GPU adapter: $gpu_skips; skipped for lack of a CUDA device: $cuda_skips"
           if [ "$jar_skips" -ne 0 ]; then
             echo "the client jar was provided yet $jar_skips tests skipped for lack of it"
             exit 1

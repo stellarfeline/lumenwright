@@ -201,25 +201,43 @@ fn main() -> Result<()> {
 }
 
 fn backends() {
+    use lumenwright::render::{BackendKind, Mode, auto_order, backend_name, open_backend};
     println!("cpu: available ({} threads)", rayon::current_num_threads());
     #[cfg(feature = "gpu")]
-    for (name, kind) in [
-        ("metal", lumenwright::render::BackendKind::Metal),
-        ("vulkan", lumenwright::render::BackendKind::Vulkan),
-        ("dx12", lumenwright::render::BackendKind::Dx12),
+    for kind in [
+        BackendKind::Metal,
+        BackendKind::Vulkan,
+        BackendKind::Dx12,
+        BackendKind::Gl,
     ] {
         match lumenwright::render::gpu::probe(kind) {
-            Ok(desc) => println!("{name}: available ({desc})"),
-            Err(e) => println!("{name}: unavailable ({e})"),
+            Ok(desc) => println!("{}: available ({desc})", backend_name(kind)),
+            Err(e) => println!("{}: unavailable ({e:#})", backend_name(kind)),
         }
     }
+    #[cfg(not(feature = "gpu"))]
+    println!("metal, vulkan, dx12, gl: not compiled in (cargo feature `gpu`)");
     #[cfg(feature = "cuda")]
     match lumenwright::render::cuda::probe() {
         Ok(desc) => println!("cuda: available ({desc})"),
         Err(e) => println!("cuda: unavailable ({e:#})"),
     }
     #[cfg(not(feature = "cuda"))]
-    println!("cuda: not compiled in (build with --features cuda)");
+    println!("cuda: not compiled in (cargo feature `cuda`)");
+    for (mode, name) in [(Mode::Hq, "hq"), (Mode::Quick, "quick")] {
+        let order: Vec<_> = auto_order(mode).iter().map(|&k| backend_name(k)).collect();
+        match open_backend(BackendKind::Auto, mode) {
+            Ok(o) => println!(
+                "auto, {name} ({}): {}{}",
+                order.join(", "),
+                o.backend.name(),
+                o.fallback
+                    .map(|f| format!(", passing over {f}"))
+                    .unwrap_or_default()
+            ),
+            Err(e) => println!("auto, {name}: {e:#}"),
+        }
+    }
 }
 
 fn info(

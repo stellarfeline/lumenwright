@@ -316,7 +316,7 @@ pub fn run(a: &RenderArgs) -> Result<RenderReport> {
     };
     let out = lumenwright::render(&req)?;
     if let Some(why) = &out.backend_fallback {
-        log::warn!("{why}; falling back to the CPU backend");
+        log::warn!("auto passed over {why}; drawing on {}", out.backend);
     }
     let mut timings = vec![("open world", opening)];
     timings.extend(out.timings);

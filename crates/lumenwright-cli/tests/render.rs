@@ -205,7 +205,11 @@ fn fraction(img: &image::RgbaImage, pred: impl Fn(f32, f32, f32) -> bool) -> f32
 }
 
 fn gpu_available() -> bool {
-    lumenwright::render::create_backend(lumenwright::render::BackendKind::Gpu).is_ok()
+    lumenwright::render::create_backend(
+        lumenwright::render::BackendKind::Gpu,
+        lumenwright::render::Mode::Hq,
+    )
+    .is_ok()
 }
 
 #[test]
@@ -876,7 +880,10 @@ fn the_default_sky_follows_the_day_without_a_jump() {
 #[test]
 fn cuda_matches_cpu_in_hq_mode() {
     let jar = require_jar!();
-    if let Err(e) = lumenwright::render::create_backend(lumenwright::render::BackendKind::Cuda) {
+    if let Err(e) = lumenwright::render::create_backend(
+        lumenwright::render::BackendKind::Cuda,
+        lumenwright::render::Mode::Hq,
+    ) {
         eprintln!("skipping: no CUDA device ({e:#})");
         return;
     }

@@ -1,5 +1,6 @@
-//! GPU backend over wgpu: native Metal (macOS), Vulkan (Linux/Windows/NVIDIA/AMD)
-//! or DX12 (Windows). WGSL shaders are translated by naga to MSL / SPIR-V / HLSL.
+//! GPU backend over wgpu: Metal (macOS), Vulkan (Linux, Windows), DX12 (Windows) or
+//! OpenGL / OpenGL ES (Linux, Windows). WGSL shaders are translated by naga to MSL,
+//! SPIR-V, HLSL or GLSL.
 
 mod pathtrace;
 mod quick;
@@ -9,7 +10,7 @@ use wgpu::util::DeviceExt;
 
 use super::{Backend, BackendKind, HqFrame, QuickFrame};
 
-/// The wgpu backend: Metal, Vulkan or DX12, chosen by the [`BackendKind`] it
+/// The wgpu backend: Metal, Vulkan, DX12 or GL, chosen by the [`BackendKind`] it
 /// is opened with. Quick mode runs a render pipeline; HQ mode runs the
 /// path tracer as a WGSL compute shader.
 pub struct GpuBackend {
@@ -23,9 +24,30 @@ fn backends_for(kind: BackendKind) -> Result<wgpu::Backends> {
         BackendKind::Metal => wgpu::Backends::METAL,
         BackendKind::Vulkan => wgpu::Backends::VULKAN,
         BackendKind::Dx12 => wgpu::Backends::DX12,
-        BackendKind::Gpu | BackendKind::Auto => wgpu::Backends::PRIMARY,
+        BackendKind::Gl => wgpu::Backends::GL,
+        BackendKind::Gpu => wgpu::Backends::PRIMARY | wgpu::Backends::GL,
         other => bail!("{other:?} is not a wgpu backend"),
     })
+}
+
+/// The order adapters are preferred in: a discrete GPU, then an integrated one, then any
+/// other hardware device; among equals, Metal, Vulkan, DX12, then GL.
+fn rank(info: &wgpu::AdapterInfo) -> (u8, u8) {
+    let device = match info.device_type {
+        wgpu::DeviceType::DiscreteGpu => 0,
+        wgpu::DeviceType::IntegratedGpu => 1,
+        wgpu::DeviceType::VirtualGpu => 2,
+        wgpu::DeviceType::Other => 3,
+        wgpu::DeviceType::Cpu => 4,
+    };
+    let api = match info.backend {
+        wgpu::Backend::Metal => 0,
+        wgpu::Backend::Vulkan => 1,
+        wgpu::Backend::Dx12 => 2,
+        wgpu::Backend::Gl => 3,
+        _ => 4,
+    };
+    (device, api)
 }
 
 fn request_adapter(kind: BackendKind) -> Result<wgpu::Adapter> {
@@ -35,17 +57,27 @@ fn request_adapter(kind: BackendKind) -> Result<wgpu::Adapter> {
     let mut desc = wgpu::InstanceDescriptor::new_without_display_handle_from_env();
     desc.backends = backends;
     let instance = wgpu::Instance::new(desc);
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::HighPerformance,
-        force_fallback_adapter: false,
-        compatible_surface: None,
-        apply_limit_buckets: false,
-    }))
-    .map_err(|e| anyhow!("no {kind:?} adapter: {e}"))?;
-    if adapter.get_info().device_type == wgpu::DeviceType::Cpu {
-        bail!("only a software {kind:?} adapter is available");
+    let mut adapters = pollster::block_on(instance.enumerate_adapters(backends));
+    adapters.sort_by_key(|a| rank(&a.get_info()));
+    let software: Vec<String> = adapters
+        .iter()
+        .map(|a| a.get_info())
+        .filter(|i| i.device_type == wgpu::DeviceType::Cpu)
+        .map(|i| format!("{} via {:?}", i.name, i.backend))
+        .collect();
+    match adapters
+        .into_iter()
+        .find(|a| a.get_info().device_type != wgpu::DeviceType::Cpu)
+    {
+        Some(a) => Ok(a),
+        None if software.is_empty() => bail!("no {} adapter", super::backend_name(kind)),
+        // A software rasterizer (llvmpipe, lavapipe, WARP) is refused: the CPU backend is the software path.
+        None => bail!(
+            "only a software {} adapter ({})",
+            super::backend_name(kind),
+            software.join(", ")
+        ),
     }
-    Ok(adapter)
 }
 
 /// Describes the adapter a backend kind would use.
@@ -57,9 +89,8 @@ pub fn probe(kind: BackendKind) -> Result<String> {
 
 impl GpuBackend {
     /// Opens a GPU device for `kind` ([`BackendKind::Metal`], [`BackendKind::Vulkan`],
-    /// [`BackendKind::Dx12`], or [`BackendKind::Gpu`] / [`BackendKind::Auto`] for any
-    /// primary API). Fails when no hardware adapter is found; a software adapter
-    /// is refused.
+    /// [`BackendKind::Dx12`], [`BackendKind::Gl`], or [`BackendKind::Gpu`] for the best
+    /// of them). Fails when no hardware adapter is found; a software adapter is refused.
     pub fn new(kind: BackendKind) -> Result<GpuBackend> {
         let adapter = request_adapter(kind)?;
         let info = adapter.get_info();

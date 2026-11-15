@@ -9,7 +9,7 @@
 | `-w, --world` | required | save directory (contains `level.dat`) |
 | `-o, --output` | render.png | the PNG to write |
 | `--mode quick\|hq` | quick | vanilla raster or path tracing |
-| `--backend auto\|cpu\|gpu\|metal\|vulkan\|dx12\|cuda` | auto | `auto` uses the GPU if one is available, otherwise the CPU |
+| `--backend auto\|cpu\|gpu\|metal\|vulkan\|dx12\|gl\|cuda` | auto | `auto` takes the first that opens: in HQ mode CUDA, then the best wgpu adapter (`gpu`), then the CPU; in quick mode the best wgpu adapter, then the CPU. `gpu` is the best hardware adapter on Metal, Vulkan, DX12 or GL |
 | `--camera x,y,z` | player eye, else spawn | eye position |
 | `--yaw`, `--pitch` | player's | Minecraft convention: yaw 0 = south, 90 = west; pitch > 0 looks down |
 | `--look-at x,y,z` | | overrides yaw and pitch |

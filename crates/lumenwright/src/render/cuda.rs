@@ -14,8 +14,9 @@ use cudarc::nvrtc::Ptx;
 
 use super::{Backend, HqFrame, QuickFrame};
 
-// The path is resolved by build.rs (`LUMENWRIGHT_PTX`, or the clone's target/ptx).
-const PTX: &str = include_str!(env!("LUMENWRIGHT_PTX_FILE"));
+// Written by scripts/build-ptx.sh and packaged with the crate; CI rebuilds it and refuses
+// any difference, so it is the kernel source's PTX.
+pub(crate) const PTX: &str = include_str!("../../ptx/lumenwright.ptx");
 const TARGET_LAUNCH: Duration = Duration::from_millis(150);
 
 /// The CUDA backend: HQ mode runs the Rust kernel compiled to PTX through the
@@ -27,17 +28,43 @@ pub struct CudaBackend {
 }
 
 fn open() -> Result<Arc<CudaContext>> {
-    // CudaContext::new panics rather than erroring when libcuda is missing;
-    // catch it quietly and report a normal error instead.
-    let prev_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let r = std::panic::catch_unwind(|| CudaContext::new(0));
-    std::panic::set_hook(prev_hook);
-    match r {
-        Ok(Ok(ctx)) => Ok(ctx),
-        Ok(Err(e)) => Err(anyhow!("CUDA driver error: {e:?}")),
-        Err(_) => Err(anyhow!("CUDA driver library (libcuda) not found")),
+    // cudarc loads libcuda on first use and panics when it is missing; ask first, so a
+    // machine without the driver gets an error (and a panic = "abort" build does not abort).
+    // SAFETY: loading the driver library runs its initialisers, as any CUDA program does.
+    if !unsafe { sys::is_culib_present() } {
+        return Err(anyhow!("CUDA driver library (libcuda) not found"));
     }
+    CudaContext::new(0).map_err(|e| {
+        let why = anyhow!("CUDA driver error: {e:?}");
+        match wsl_shadowed_driver() {
+            Some(hint) => why.context(hint),
+            None => why,
+        }
+    })
+}
+
+/// Under WSL the GPU's driver library is `/usr/lib/wsl/lib/libcuda.so`. A Linux NVIDIA
+/// driver package installed inside WSL puts a native `libcuda.so` in the system library
+/// directory, which the loader finds first and which sees no device. Names the library that
+/// was loaded and the remedy when that is the case.
+fn wsl_shadowed_driver() -> Option<String> {
+    const WSL: &str = "/usr/lib/wsl/lib/";
+    if !cfg!(target_os = "linux") || !std::path::Path::new(WSL).join("libcuda.so.1").exists() {
+        return None;
+    }
+    let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    let loaded = maps
+        .lines()
+        .filter_map(|l| l.split_whitespace().nth(5))
+        .find(|p| p.contains("/libcuda.so"))?;
+    (!loaded.starts_with(WSL)).then(|| {
+        format!(
+            "the CUDA driver library loaded is {loaded}, not WSL's {WSL}libcuda.so: a Linux NVIDIA \
+             driver package installed inside WSL shadows it; run with LD_LIBRARY_PATH={} or remove \
+             that package",
+            WSL.trim_end_matches('/')
+        )
+    })
 }
 
 /// Describes device 0 and its compute capability, or says why CUDA is unavailable.

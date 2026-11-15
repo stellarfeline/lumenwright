@@ -9,15 +9,15 @@ The library is on crates.io as `lumenwright`, with its kernel `lumenwright-kerne
 
 ```toml
 [dependencies]
-lumenwright = "0.4.1"                                                         # CPU, Metal, Vulkan, DX12
+lumenwright = "0.4.1"                                                         # CPU, Metal, Vulkan, DX12, GL, CUDA
 # lumenwright = { version = "0.4.1", default-features = false }              # CPU only
 # lumenwright = { version = "0.4.1", default-features = false, features = ["gpu"] }
 ```
 
-The `cuda` feature embeds the kernel's PTX, which `scripts/build-ptx.sh` builds in a clone of
-this repository (nightly Rust and the `nvptx64-nvidia-cuda` target). In a clone it is found in
-`target/ptx/`; from crates.io, set `LUMENWRIGHT_PTX` to the file the script wrote. Without it
-the build stops and says so; nothing is downloaded. See [Library](#library) for the API.
+The `cuda` feature embeds the kernel's PTX, which is packaged with the crate
+(`ptx/lumenwright.ptx`), and loads `libcuda` at run time, so it builds from crates.io with
+the stable toolchain, no CUDA toolkit and nothing downloaded; without the driver the backend
+reports itself unavailable. See [Library](#library) for the API.
 
 ## Library
 
@@ -73,7 +73,7 @@ error holds a `RequestError` you can match with `err.downcast_ref::<RequestError
 CPU backend the same request gives the same bytes whatever the thread count.
 
 The library crate holds no command-line code, no jar resolver and no downloader. Its default
-feature, `gpu`, adds the Metal, Vulkan and DX12 backends; `cuda` adds the CUDA backend. With
+features are `gpu`, the Metal, Vulkan, DX12 and GL backends, and `cuda`, the CUDA backend. With
 the default features it compiles no C code, so it cross-checks for Linux, macOS and Windows
 targets without a cross C compiler. The `lumenwright render` command calls the same
 function, so the command and the library draw the same pixels.

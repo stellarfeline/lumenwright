@@ -39,8 +39,8 @@ ureq = "3.4.2"
 zip = { version = "9.0.3", default-features = false, features = ["deflate-flate2"] }
 
 [features]
-default = ["gpu"]
-# Metal / Vulkan / DX12 backends via wgpu.
+default = ["gpu", "cuda"]
+# Metal, Vulkan, DX12 and GL backends via wgpu.
 gpu = ["lumenwright/gpu"]
-# CUDA backend: needs the PTX from scripts/build-ptx.sh.
+# CUDA backend (libcuda loaded at run time).
 cuda = ["lumenwright/cuda"]

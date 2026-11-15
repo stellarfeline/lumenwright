@@ -13,8 +13,9 @@ pixels to your program (see [Library](docs/library.md#library)). It has two look
   and `--sky game` force either (what was ported and how the result compares with Chunky:
   [docs/research/chunky-parity.md](docs/research/chunky-parity.md)).
 
-Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vulkan** and
-**DX12** (through wgpu), and **CUDA** (the Rust path-tracing kernel compiled to PTX).
+Both modes run on several native backends: **CPU** (all cores), **Metal**, **Vulkan**,
+**DX12** and **GL** (through wgpu), and **CUDA** (the Rust path-tracing kernel compiled to
+PTX). `--backend auto` takes the best one the machine has.
 
 ## The Treehouse Camp, by day and at dusk
 
@@ -68,12 +69,12 @@ library, with or without its default features, compiles none.
 What each backend needs to run:
 
 * **CPU**: any Linux, macOS or Windows machine. It uses every core.
-* **Metal, Vulkan, DX12**: a GPU and its driver: Metal on macOS, Vulkan on Linux or Windows,
-  DX12 on Windows. wgpu's environment flags apply. Under WSL2 on the PC the benchmark runs on,
-  wgpu finds only a software Vulkan adapter, with or without
-  `WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1`; use CUDA there.
-* **CUDA**: an NVIDIA GPU and its driver, and the kernel's PTX built from a clone of this
-  repository (see [Backends](docs/backends.md#backends)).
+* **Metal, Vulkan, DX12, GL**: a GPU and its driver: Metal on macOS, Vulkan on Linux or
+  Windows, DX12 on Windows, OpenGL (EGL or WGL) on Linux or Windows. wgpu's environment flags
+  apply. A software adapter (llvmpipe, lavapipe, WARP) is refused. Under WSL2 on the PC the
+  benchmark runs on, wgpu finds only software Vulkan and GL adapters; CUDA draws there.
+* **CUDA**: an NVIDIA GPU and its driver. The kernel's PTX is packaged in the crate, and
+  `libcuda` is loaded at run time (see [Backends](docs/backends.md#backends)).
 
 Every render also needs the Minecraft Java Edition client jar, which Lumenwright reads its
 textures and models from. The command finds it or downloads it from Mojang (see
@@ -128,7 +129,7 @@ The Treehouse Camp save, more commands and generated worlds: [docs/renders.md](d
 * [Library](docs/library.md): using the crate and the `render` API.
 * [Textures](docs/textures.md): the client jar, the Unifont and resource packs.
 * [Architecture](docs/architecture.md): the crates, the scene, and what each mode draws.
-* [Backends](docs/backends.md): CPU, Metal, Vulkan, DX12 and CUDA, and building the PTX.
+* [Backends](docs/backends.md): CPU, Metal, Vulkan, DX12, GL and CUDA, the order `auto` tries them in, and building the PTX.
 * [Testing](docs/testing.md), [Known limitations](docs/limitations.md), [Releasing](docs/releasing.md), [Scope](docs/SCOPE.md).
 
 ## License
