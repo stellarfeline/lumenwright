@@ -34,7 +34,37 @@ fn open() -> Result<Arc<CudaContext>> {
     if !unsafe { sys::is_culib_present() } {
         return Err(anyhow!("CUDA driver library (libcuda) not found"));
     }
-    CudaContext::new(0).map_err(|e| anyhow!("CUDA driver error: {e:?}"))
+    CudaContext::new(0).map_err(|e| {
+        let why = anyhow!("CUDA driver error: {e:?}");
+        match wsl_shadowed_driver() {
+            Some(hint) => why.context(hint),
+            None => why,
+        }
+    })
+}
+
+/// Under WSL the GPU's driver library is `/usr/lib/wsl/lib/libcuda.so`. A Linux NVIDIA
+/// driver package installed inside WSL puts a native `libcuda.so` in the system library
+/// directory, which the loader finds first and which sees no device. Names the library that
+/// was loaded and the remedy when that is the case.
+fn wsl_shadowed_driver() -> Option<String> {
+    const WSL: &str = "/usr/lib/wsl/lib/";
+    if !cfg!(target_os = "linux") || !std::path::Path::new(WSL).join("libcuda.so.1").exists() {
+        return None;
+    }
+    let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    let loaded = maps
+        .lines()
+        .filter_map(|l| l.split_whitespace().nth(5))
+        .find(|p| p.contains("/libcuda.so"))?;
+    (!loaded.starts_with(WSL)).then(|| {
+        format!(
+            "the CUDA driver library loaded is {loaded}, not WSL's {WSL}libcuda.so: a Linux NVIDIA \
+             driver package installed inside WSL shadows it; run with LD_LIBRARY_PATH={} or remove \
+             that package",
+            WSL.trim_end_matches('/')
+        )
+    })
 }
 
 /// Describes device 0 and its compute capability, or says why CUDA is unavailable.
