@@ -10,7 +10,7 @@ readme = "../../README.md"
 documentation = "https://docs.rs/lumenwright"
 keywords = ["minecraft", "renderer", "path-tracing", "voxel", "wgpu"]
 categories = ["rendering", "graphics", "game-development"]
-include = ["/src", "/assets", "/build.rs", "/LICENSE"]
+include = ["/src", "/assets", "/ptx", "/LICENSE"]
 
 [dependencies]
 anyhow = "1.0.104"
@@ -33,8 +33,9 @@ wgpu = { version = "30.0.1", optional = true }
 zip = { version = "9.0.3", default-features = false, features = ["deflate-flate2"] }
 
 [features]
-default = ["gpu"]
-# Metal / Vulkan / DX12 backends via wgpu.
+default = ["gpu", "cuda"]
+# Metal, Vulkan, DX12 and GL backends via wgpu.
 gpu = ["dep:wgpu", "dep:pollster"]
-# CUDA backend: runs the lumenwright-kernel crate compiled to PTX (scripts/build-ptx.sh).
+# CUDA backend: lumenwright-kernel compiled to PTX (ptx/, written by scripts/build-ptx.sh),
+# with libcuda loaded at run time.
 cuda = ["dep:cudarc"]

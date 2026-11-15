@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Compiles lumenwright-kernel to PTX for the CUDA backend.
-# Output: target/ptx/lumenwright.ptx (embedded by `cargo build --features cuda`).
+# Output: crates/lumenwright/ptx/lumenwright.ptx, the file the `cuda` feature embeds. It is
+# committed and packaged into the crate, so building the backend needs neither nightly Rust nor
+# this script; CI rebuilds it from a clean target and refuses any difference from the committed
+# file, so the packaged PTX is the kernel source's.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
+# The PTX crate uses `#![feature(abi_ptx)]`, so it needs nightly; the nightly is pinned so the
+# PTX is a function of the kernel source (a different nightly is a different LLVM).
+toolchain=nightly-2026-10-15
 cd "$root/crates/lumenwright-ptx"
-# The PTX crate uses `#![feature(abi_ptx)]`, so it builds with nightly whatever the default toolchain is.
-rustup toolchain list | grep -q '^nightly' || rustup toolchain install nightly --profile minimal >/dev/null
-rustup target add --toolchain nightly nvptx64-nvidia-cuda >/dev/null
-rustup component add --toolchain nightly llvm-bitcode-linker llvm-tools >/dev/null
-cargo +nightly build --release
-mkdir -p "$root/target/ptx"
+rustup toolchain list | grep -q "^$toolchain" || rustup toolchain install "$toolchain" --profile minimal >/dev/null
+rustup target add --toolchain "$toolchain" nvptx64-nvidia-cuda >/dev/null
+rustup component add --toolchain "$toolchain" llvm-bitcode-linker llvm-tools >/dev/null
+cargo "+$toolchain" build --release --locked
 ptx="$root/crates/lumenwright-ptx/target/nvptx64-nvidia-cuda/release/lumenwright_ptx.ptx"
 # Consumer NVIDIA GPUs run f64 at a small fraction of f32 speed: refuse a kernel that carries
 # any f64 instruction (an opcode with a .f64 type; `.reg .f64` declarations are not counted).
@@ -26,5 +30,8 @@ if [ "$calls" -ne 0 ]; then
     echo "refused: $ptx makes $calls calls to functions other than panics; keep the kernel inlined whole" >&2
     exit 1
 fi
-cp "$ptx" "$root/target/ptx/lumenwright.ptx"
-echo "wrote $root/target/ptx/lumenwright.ptx ($(grep -c '' "$root/target/ptx/lumenwright.ptx") lines, 0 f64 instructions, no calls but panics)"
+out="$root/crates/lumenwright/ptx/lumenwright.ptx"
+mkdir -p "$(dirname "$out")"
+cp "$ptx" "$out"
+sum=$( (command -v sha256sum >/dev/null && sha256sum "$out" || shasum -a 256 "$out") | cut -d' ' -f1)
+echo "wrote $out ($(grep -c '' "$out") lines, sha256 $sum, 0 f64 instructions, no calls but panics)"

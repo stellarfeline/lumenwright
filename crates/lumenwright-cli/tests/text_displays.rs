@@ -563,7 +563,7 @@ fn assert_parity(other: BackendKind, mode: Mode, spp: u32) {
 #[test]
 fn gpu_matches_cpu_on_text_displays() {
     let _jar = require_jar!();
-    if lumenwright::render::create_backend(BackendKind::Gpu).is_err() {
+    if lumenwright::render::create_backend(BackendKind::Gpu, Mode::Hq).is_err() {
         eprintln!("skipping: no GPU adapter");
         return;
     }
@@ -575,7 +575,7 @@ fn gpu_matches_cpu_on_text_displays() {
 #[test]
 fn cuda_matches_cpu_on_text_displays() {
     let _jar = require_jar!();
-    if lumenwright::render::create_backend(BackendKind::Cuda).is_err() {
+    if lumenwright::render::create_backend(BackendKind::Cuda, Mode::Hq).is_err() {
         eprintln!("skipping: no CUDA device");
         return;
     }

@@ -14,8 +14,9 @@ use cudarc::nvrtc::Ptx;
 
 use super::{Backend, HqFrame, QuickFrame};
 
-// The path is resolved by build.rs (`LUMENWRIGHT_PTX`, or the clone's target/ptx).
-const PTX: &str = include_str!(env!("LUMENWRIGHT_PTX_FILE"));
+// Written by scripts/build-ptx.sh and packaged with the crate; CI rebuilds it and refuses
+// any difference, so it is the kernel source's PTX.
+pub(crate) const PTX: &str = include_str!("../../ptx/lumenwright.ptx");
 const TARGET_LAUNCH: Duration = Duration::from_millis(150);
 
 /// The CUDA backend: HQ mode runs the Rust kernel compiled to PTX through the
@@ -27,17 +28,13 @@ pub struct CudaBackend {
 }
 
 fn open() -> Result<Arc<CudaContext>> {
-    // CudaContext::new panics rather than erroring when libcuda is missing;
-    // catch it quietly and report a normal error instead.
-    let prev_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let r = std::panic::catch_unwind(|| CudaContext::new(0));
-    std::panic::set_hook(prev_hook);
-    match r {
-        Ok(Ok(ctx)) => Ok(ctx),
-        Ok(Err(e)) => Err(anyhow!("CUDA driver error: {e:?}")),
-        Err(_) => Err(anyhow!("CUDA driver library (libcuda) not found")),
+    // cudarc loads libcuda on first use and panics when it is missing; ask first, so a
+    // machine without the driver gets an error (and a panic = "abort" build does not abort).
+    // SAFETY: loading the driver library runs its initialisers, as any CUDA program does.
+    if !unsafe { sys::is_culib_present() } {
+        return Err(anyhow!("CUDA driver library (libcuda) not found"));
     }
+    CudaContext::new(0).map_err(|e| anyhow!("CUDA driver error: {e:?}"))
 }
 
 /// Describes device 0 and its compute capability, or says why CUDA is unavailable.
