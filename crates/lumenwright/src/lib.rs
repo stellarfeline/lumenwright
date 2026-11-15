@@ -27,15 +27,18 @@
 //! | backend | quick | hq | cargo feature |
 //! |---|---|---|---|
 //! | CPU, all cores | software rasterizer | [`lumenwright_kernel`] on rayon | always |
-//! | Metal, Vulkan, DX12 (wgpu) | raster pipeline | WGSL compute port of the kernel | `gpu` (default) |
-//! | CUDA | falls back to the CPU rasterizer | the kernel compiled to PTX | `cuda` |
+//! | Metal, Vulkan, DX12, GL (wgpu) | raster pipeline | WGSL compute port of the kernel | `gpu` (default) |
+//! | CUDA | falls back to the CPU rasterizer | the kernel compiled to PTX | `cuda` (default) |
 //!
-//! [`render::BackendKind::Auto`] takes a GPU when one is available and the CPU
-//! otherwise, and says why in [`Rendered::backend_fallback`]. On the CPU backend a
-//! request gives byte-identical pixels for any rayon thread count.
+//! [`render::BackendKind::Auto`] takes the first backend of [`render::auto_order`] that
+//! opens (HQ: CUDA, the best wgpu adapter, the CPU; quick: the best wgpu adapter, the CPU)
+//! and names each one it passed over, with why, in [`Rendered::backend_fallback`]. On the
+//! CPU backend a request gives byte-identical pixels for any rayon thread count.
 //!
-//! The `cuda` feature embeds a PTX file that is built from the source repository
-//! (`scripts/build-ptx.sh`), so it builds only from a checkout of the repository.
+//! The `cuda` feature embeds the kernel's PTX, which is packaged with the crate
+//! (`ptx/lumenwright.ptx`, written by `scripts/build-ptx.sh` and checked against a fresh
+//! build in CI), and loads `libcuda` at run time: it builds anywhere, with no CUDA toolkit
+//! and no nightly Rust, and a machine without the driver reports the backend unavailable.
 //! With the default features no C code is compiled.
 //!
 //! # Example

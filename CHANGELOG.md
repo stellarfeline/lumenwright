@@ -4,6 +4,36 @@ All notable changes to Lumenwright are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- The GL backend (`BackendKind::Gl`, `--backend gl`): OpenGL / OpenGL ES through wgpu, on
+  Linux and Windows.
+- `render::auto_order(mode)`, the order `BackendKind::Auto` tries backends in, and
+  `render::backend_name`, each backend's `--backend` spelling.
+- `lumenwright backends` prints GL and what `auto` takes in each mode, with what it passed
+  over.
+
+### Changed
+
+- The CUDA backend builds from the published crate: the kernel's PTX is packaged in it
+  (`crates/lumenwright/ptx/lumenwright.ptx`), written by `scripts/build-ptx.sh` with a
+  pinned nightly (`nightly-2026-10-15`). CI's `ptx` job rebuilds it twice from a clean target
+  and refuses a difference from the committed file or between the builds. `build.rs` and
+  `LUMENWRIGHT_PTX` are gone.
+- `cuda` is a default feature of `lumenwright` and `lumenwright-cli`. `libcuda` is loaded at
+  run time and its absence is checked before a context is made, so a machine without the
+  driver gets an error rather than a panic (also under `panic = "abort"`).
+- `BackendKind::Auto` in HQ mode tries CUDA, then the best wgpu adapter, then the CPU; in
+  quick mode the best wgpu adapter, then the CPU (CUDA has no rasterizer).
+  `Rendered::backend_fallback` is set whenever `Auto` passed over a backend, naming each
+  one and why (`cuda: ...; gpu: ...`), not only when it took the CPU.
+- `BackendKind::Gpu` ranks every hardware adapter on Metal, Vulkan, DX12 and GL (discrete,
+  then integrated, then any other; among equals that API order) and names the software
+  adapters it refused.
+- `render::open_backend` and `render::create_backend` take the frame's `Mode`.
+
 ## [0.4.1] - 2026-11-13
 
 ### Changed
