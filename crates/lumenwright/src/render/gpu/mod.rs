@@ -70,9 +70,13 @@ fn request_adapter(kind: BackendKind) -> Result<wgpu::Adapter> {
         .find(|a| a.get_info().device_type != wgpu::DeviceType::Cpu)
     {
         Some(a) => Ok(a),
-        None if software.is_empty() => bail!("no {kind:?} adapter"),
-        // A software rasterizer (llvmpipe, lavapipe, WARP) is slower than the CPU backend.
-        None => bail!("only a software {kind:?} adapter ({})", software.join(", ")),
+        None if software.is_empty() => bail!("no {} adapter", super::backend_name(kind)),
+        // A software rasterizer (llvmpipe, lavapipe, WARP) is refused: the CPU backend is the software path.
+        None => bail!(
+            "only a software {} adapter ({})",
+            super::backend_name(kind),
+            software.join(", ")
+        ),
     }
 }
 
